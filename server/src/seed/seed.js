@@ -39,13 +39,6 @@ if (env.isProd) {
  */
 const SEED_PASSWORD = process.env.SEED_PASSWORD || 'Admin@1234';
 
-const ADMIN = {
-  name: 'Super Admin',
-  email: 'superadmin@angelzperfume.com',
-  password: SEED_PASSWORD,
-  role: 'superadmin',
-};
-
 const BRANCHES = [
   {
     name: 'Angelz Perfume — Flagship Store',
