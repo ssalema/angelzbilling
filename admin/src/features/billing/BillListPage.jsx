@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -17,6 +17,7 @@ import {
   AddCardOutlined,
   VisibilityOutlined,
   PrintOutlined,
+  DownloadOutlined,
   ReceiptLongOutlined,
 } from '@mui/icons-material';
 
@@ -41,6 +42,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { formatCurrency, formatDate, formatNumber } from '../../utils/format.js';
+import { downloadBillPdf } from '../../utils/downloadBill.js';
 import { formatContactNumber } from '../../utils/countries.js';
 import {
   BILL_STATUSES,
@@ -61,6 +63,12 @@ const BillListPage = () => {
   // off-screen and sent straight to the printer.
   const [printBill, setPrintBill] = useState(null);
   const [printingId, setPrintingId] = useState(null);
+
+  // Downloading works the same way, only the mounted slip is serialised to a
+  // file instead of being handed to the printer.
+  const [downloadBill, setDownloadBill] = useState(null);
+  const [downloadingId, setDownloadingId] = useState(null);
+  const downloadRef = useRef(null);
 
   const [range, setRange] = useState(DEFAULT_DATE_RANGE);
   const [filters, setFilters] = useState({
@@ -125,6 +133,38 @@ const BillListPage = () => {
     }, 300);
     return () => clearTimeout(timer);
   }, [printBill]);
+
+  // The slip must be painted before it can be rasterised into the PDF.
+  useEffect(() => {
+    if (!downloadBill) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        await downloadBillPdf(downloadRef.current, downloadBill);
+      } catch (err) {
+        if (!cancelled) snackbar.error(err.message);
+      } finally {
+        if (!cancelled) {
+          setDownloadBill(null);
+          setDownloadingId(null);
+        }
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [downloadBill, snackbar]);
+
+  const handleDownload = async (id) => {
+    setDownloadingId(id);
+    try {
+      setDownloadBill(await billApi.get(id));
+    } catch (err) {
+      snackbar.error(err.message);
+      setDownloadingId(null);
+    }
+  };
 
   const handlePrint = async (id) => {
     setPrintingId(id);
@@ -260,6 +300,21 @@ const BillListPage = () => {
             <IconButton size="small" onClick={() => navigate(`/billing/${row.id}`)}>
               <VisibilityOutlined sx={{ fontSize: ICON.action }} />
             </IconButton>
+          </Tooltip>
+          <Tooltip title="Download bill">
+            <span>
+              <IconButton
+                size="small"
+                disabled={downloadingId === row.id}
+                onClick={() => handleDownload(row.id)}
+              >
+                {downloadingId === row.id ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <DownloadOutlined sx={{ fontSize: ICON.action }} />
+                )}
+              </IconButton>
+            </span>
           </Tooltip>
           <Tooltip title="Print bill">
             <span>
@@ -439,6 +494,17 @@ const BillListPage = () => {
       {printBill && (
         <Box sx={{ display: 'none', '@media print': { display: 'block' } }}>
           <BillPrintView bill={printBill} store={printBill.store} />
+        </Box>
+      )}
+
+      {/* Off-screen slip — mounted only long enough to serialise it to a file. */}
+      {downloadBill && (
+        <Box
+          className="no-print"
+          aria-hidden
+          sx={{ position: 'absolute', top: 0, left: -10000, width: 360, pointerEvents: 'none' }}
+        >
+          <BillPrintView ref={downloadRef} bill={downloadBill} store={downloadBill.store} />
         </Box>
       )}
     </>

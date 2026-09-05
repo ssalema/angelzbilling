@@ -8,6 +8,7 @@ import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess, sendCreated } from '../../utils/ApiResponse.js';
 import { getPagination, getSort, escapeRegex, resolveDateRange, buildDateMatch, round2 } from '../../utils/query.js';
 import { resolveBranchScope, assertBranchAccess } from '../../middlewares/authorize.js';
+import { branchesOn } from '../../utils/featureFlags.js';
 import {
   generateBillNumber,
   buildBillItems,
@@ -140,7 +141,7 @@ export const previewBill = asyncHandler(async (req, res) => {
 });
 
 export const createBill = asyncHandler(async (req, res) => {
-  const branch = await resolveBillBranch(req.user, req.body.branch);
+  const branch = await resolveBillBranch(req.user, req.body.branch, { enabled: branchesOn(req) });
   const settings = await Settings.getSingleton();
 
   const limits = discountLimits(req, settings);
@@ -151,10 +152,7 @@ export const createBill = asyncHandler(async (req, res) => {
     ...limits,
   });
 
-  const billNumber = await generateBillNumber({
-    prefix: settings.billing?.billPrefix || 'AP',
-    branchCode: branch.code,
-  });
+  const billNumber = await generateBillNumber({ prefix: settings.billing?.billPrefix || 'AP' });
 
   const payload = {
     billNumber,
@@ -168,7 +166,9 @@ export const createBill = asyncHandler(async (req, res) => {
     amountPaid: req.body.amountPaid !== undefined ? req.body.amountPaid : totals.grandTotal,
     paymentMethod: req.body.paymentMethod,
     status: 'paid',
-    branch,
+    // Left off entirely when branches are switched off, so the slip and every
+    // report read as a single-location store.
+    ...(branch ? { branch } : {}),
     // "Bill By" is always the signed-in admin — never taken from the request body.
     billedBy: { id: req.user._id, name: req.user.name, email: req.user.email },
     notes: req.body.notes || '',

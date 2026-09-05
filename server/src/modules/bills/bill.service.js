@@ -6,16 +6,29 @@ import { round2 } from '../../utils/query.js';
 import { resolveSizeGrams, gramsForQuantity, unitsFromGrams, formatGrams } from '../../utils/grams.js';
 
 /**
- * Bill numbers look like AP-MUM-2609-0042.
- * The counter is per prefix + branch + month, so the sequence resets monthly and
- * every branch keeps its own readable run of numbers.
+ * Bill numbers look like AP260900001 — the store's bill prefix from Settings,
+ * then YY + MM + a 5 digit serial.
+ *
+ * The serial is keyed to the Indian financial year (1 April – 31 March), not to
+ * the month printed in the number, so it runs unbroken from April through March
+ * and starts again at 00001 on 1 April. The counter is deliberately NOT per
+ * branch: the number carries no branch code, so branches sharing a financial
+ * year must share one sequence or two of them would mint the same number.
  */
-export const generateBillNumber = async ({ prefix = 'AP', branchCode = 'HQ' } = {}) => {
-  const now = new Date();
-  const stamp = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const key = `BILL-${prefix}-${branchCode}-${stamp}`;
+export const financialYearKey = (date = new Date()) => {
+  // getMonth() is 0-based, so 3 is April — the first month of the financial year.
+  const startYear = date.getMonth() >= 3 ? date.getFullYear() : date.getFullYear() - 1;
+  return `${startYear}-${String((startYear + 1) % 100).padStart(2, '0')}`;
+};
+
+export const generateBillNumber = async ({ prefix = 'AP', at = new Date() } = {}) => {
+  const stamp = `${String(at.getFullYear()).slice(-2)}${String(at.getMonth() + 1).padStart(2, '0')}`;
+  // The prefix is left out of the counter key on purpose: renaming the prefix
+  // mid-year is a cosmetic change, and keying on it would drop the serial back
+  // to 00001 halfway through the financial year.
+  const key = `BILL-FY${financialYearKey(at)}`;
   const seq = await Counter.next(key);
-  return `${prefix}-${branchCode}-${stamp}-${String(seq).padStart(4, '0')}`;
+  return `${prefix}${stamp}${String(seq).padStart(5, '0')}`;
 };
 
 /**
@@ -174,8 +187,16 @@ export const calculateTotals = (
   };
 };
 
-/** Resolves which branch this bill belongs to, honouring role scoping. */
-export const resolveBillBranch = async (user, requestedBranchId) => {
+/**
+ * Resolves which branch this bill belongs to, honouring role scoping.
+ *
+ * Returns `null` when the store runs with branches switched off: the bill then
+ * carries no branch snapshot at all and prints under the store identity, rather
+ * than failing because there is no active branch left to attach it to.
+ */
+export const resolveBillBranch = async (user, requestedBranchId, { enabled = true } = {}) => {
+  if (!enabled) return null;
+
   let branchId = null;
 
   if (user.role === 'superadmin') {

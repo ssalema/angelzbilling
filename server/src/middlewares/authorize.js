@@ -1,4 +1,5 @@
 import ApiError from '../utils/ApiError.js';
+import { branchesOn } from '../utils/featureFlags.js';
 
 /**
  * Role gate. `authorize('superadmin')` or `authorize('superadmin', 'admin')`.
@@ -40,6 +41,10 @@ export const resolveBranchScope = (req) => {
   const user = req.user;
   if (!user) return null;
 
+  // A single-location store has no branch dimension at all: nothing is scoped,
+  // and an account without a branch is normal rather than a misconfiguration.
+  if (!branchesOn(req)) return null;
+
   if (isSuperAdmin(user)) {
     const requested = req.query.branch || req.body?.branch;
     if (!requested || requested === 'all') return null;
@@ -62,6 +67,7 @@ export const resolveBranchScope = (req) => {
 /** Guard for reading/writing one specific branch's data. */
 export const assertBranchAccess = (req, branchId) => {
   if (!branchId) return;
+  if (!branchesOn(req)) return;
   if (isSuperAdmin(req.user)) return;
 
   // Same fail-closed rule: no branch means no access, never unchecked access.

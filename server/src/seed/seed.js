@@ -298,7 +298,10 @@ const seedBills = async (perfumes, users, branches, count = 90) => {
     const customer = pick(CUSTOMERS);
     const status = Math.random() > 0.94 ? 'refunded' : 'paid';
 
-    const billNumber = await generateBillNumber({ prefix: 'AP', branchCode: branchDoc.code });
+    // Seeded bills are backdated, so the number must be stamped from the bill's
+    // own date — otherwise a March bill would print today's month and land in
+    // the wrong financial year's sequence.
+    const billNumber = await generateBillNumber({ prefix: 'AP', at: createdAt });
 
     await Bill.create({
       billNumber,

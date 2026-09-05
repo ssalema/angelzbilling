@@ -32,7 +32,7 @@ const passwordRule = z
   .regex(/[A-Z]/, 'Include an uppercase letter')
   .regex(/[0-9]/, 'Include a number');
 
-const buildSchema = (isEdit) =>
+const buildSchema = (isEdit, branchesEnabled = true) =>
   z
     .object({
       name: z.string().trim().min(2, 'Name must be at least 2 characters').max(80),
@@ -45,8 +45,9 @@ const buildSchema = (isEdit) =>
       password: isEdit ? z.string().optional() : passwordRule,
     })
     .superRefine((data, ctx) => {
-      // A scoped role without a branch would have access to nothing at all.
-      if (data.role !== 'superadmin' && !data.branch) {
+      // A scoped role without a branch would have access to nothing at all —
+      // unless branches are switched off, when there is nothing to scope to.
+      if (branchesEnabled && data.role !== 'superadmin' && !data.branch) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['branch'],
@@ -67,7 +68,7 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
   const isEdit = Boolean(user);
 
   const methods = useForm({
-    resolver: zodResolver(buildSchema(isEdit)),
+    resolver: zodResolver(buildSchema(isEdit, branchesEnabled)),
     defaultValues: {
       name: '',
       email: '',
@@ -172,15 +173,10 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
                 />
               </Grid>
 
+              {/* Branches off: the field disappears entirely — an account simply
+                  has no branch, and nothing on screen mentions one. */}
+              {branchesEnabled && (
               <Grid item xs={12}>
-                {!branchesEnabled ? (
-                  role !== 'superadmin' && (
-                    <Alert severity="warning">
-                      Branch management is off, so there is no branch to assign. Turn it back on in Settings →
-                      Branches, or make this account a Super Admin.
-                    </Alert>
-                  )
-                ) : (
                 <RHFSelect
                   name="branch"
                   label={role === 'superadmin' ? 'Branch (not applicable)' : 'Assigned branch *'}
@@ -196,8 +192,8 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
                       : 'They will only see data belonging to this branch'
                   }
                 />
-                )}
               </Grid>
+              )}
 
               {!isEdit && (
                 <Grid item xs={12}>

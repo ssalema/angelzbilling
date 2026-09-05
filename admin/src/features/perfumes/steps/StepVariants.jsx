@@ -3,6 +3,7 @@ import { useFormContext, useFieldArray, useWatch, Controller } from 'react-hook-
 import {
   Card,
   Box,
+  Grid,
   Typography,
   Stack,
   Switch,
@@ -32,13 +33,13 @@ import {
   SearchRounded,
 } from '@mui/icons-material';
 
-import { RHFTextField, RHFSelect, RHFChipInput } from '../../../components/form/RHFControls.jsx';
+import { RHFTextField, RHFSelect, RHFChipInput, RHFNumberField } from '../../../components/form/RHFControls.jsx';
 import { EmptyState } from '../../../components/common/StateViews.jsx';
 import SectionTitle from '../../../components/common/SectionTitle.jsx';
 import { PERFUME_SIZES, SELECTOR_STYLES } from '../../../utils/constants.js';
 import { formatCurrency, formatGrams, formatNumber, unitsFromGrams } from '../../../utils/format.js';
 import { computeFinalPrice, sizeGramsFor } from '../perfumeSchema.js';
-import { FONT, CARD_HEAD_PAD, CARD_PAD, ICON, brand, surface } from '../../../theme/index.js';
+import { FONT, CARD_HEAD_PAD, CARD_PAD, ICON, brand, numericText, surface } from '../../../theme/index.js';
 
 /** Cartesian perfume of every attribute's values — {Size:'50gm'} × {Colour:'Gold'}. */
 const buildCombinations = (attributes) => {
@@ -218,6 +219,78 @@ const VariantRow = ({ index, attributeNames, onRemove, onOpenDetail, expanded, p
   );
 };
 
+/* ───────────────────── Price for a perfume with no variants ───────────────────── */
+
+/**
+ * Pricing belongs to the variants: each combination carries its own MRP and
+ * discount in the table below. A perfume sold in one size has no such row, so
+ * this is where its single price is entered — the same two fields, once.
+ */
+const BasePricing = () => {
+  const { control } = useFormContext();
+  const [mrp, discountPercent] = useWatch({ control, name: ['mrp', 'discountPercent'] });
+
+  const finalPrice = computeFinalPrice(mrp, discountPercent);
+  const saving = (Number(mrp) || 0) - finalPrice;
+
+  return (
+    <Card sx={{ p: CARD_PAD, mt: 2.5 }}>
+      <SectionTitle
+        title="Price"
+        description="This perfume sells in one size, so it has a single price. Turn variants on above to price each fill size separately."
+      />
+      <Grid container spacing={2.25} alignItems="stretch">
+        <Grid item xs={12} sm={6} md={4}>
+          <RHFNumberField
+            name="mrp"
+            label="MRP / Price *"
+            prefix="₹"
+            inputProps={{ min: 0, step: '0.01' }}
+            helperText="Before any discount"
+          />
+        </Grid>
+        <Grid item xs={12} sm={6} md={4}>
+          <RHFNumberField
+            name="discountPercent"
+            label="Discount"
+            suffix="%"
+            inputProps={{ min: 0, max: 100, step: '0.01' }}
+            helperText="Leave at 0 for no discount"
+          />
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <Box
+            sx={{
+              height: '100%',
+              border: 1.5,
+              borderColor: 'primary.main',
+              borderRadius: 2.5,
+              px: 2,
+              py: 1.5,
+              bgcolor: surface.plumFaint,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+            }}
+          >
+            <Typography variant="caption" color="text.secondary">
+              Final price (auto-calculated)
+            </Typography>
+            <Typography variant="h5" sx={{ ...numericText, color: 'primary.main', fontSize: FONT.figureMd, mt: 0.25 }}>
+              {formatCurrency(finalPrice, { precise: true })}
+            </Typography>
+            {saving > 0 && (
+              <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 700 }}>
+                Customer saves {formatCurrency(saving, { precise: true })}
+              </Typography>
+            )}
+          </Box>
+        </Grid>
+      </Grid>
+    </Card>
+  );
+};
+
 /* ─────────────────────────── The step itself ─────────────────────────── */
 
 const StepVariants = () => {
@@ -248,6 +321,8 @@ const StepVariants = () => {
    */
   const generateCombinations = () => {
     const baseSku = getValues('sku');
+    // Seeds each new row so a perfume that already had a single price does not
+    // start over at zero when it gains sizes; every row stays editable.
     const baseMrp = Number(getValues('mrp')) || 0;
     const baseDiscount = Number(getValues('discountPercent')) || 0;
     const existing = getValues('variants') || [];
@@ -273,7 +348,7 @@ const StepVariants = () => {
 
   const addSizeAttribute = () => {
     if (attributes.some((a) => a.name?.toLowerCase() === 'size')) return;
-    attributeArray.append({ name: 'Size', selectorStyle: 'chip', values: [...PERFUME_SIZES] });
+    attributeArray.append({ name: 'Size', selectorStyle: 'automatic', values: [...PERFUME_SIZES] });
   };
 
   const visible = useMemo(() => {
@@ -340,13 +415,16 @@ const StepVariants = () => {
       </Card>
 
       {!hasVariants ? (
-        <Card sx={{ p: 2 }}>
-          <EmptyState
-            icon={AutoAwesome}
-            title="Selling one size only"
-            description="This perfume uses the single price and pack size you set in step 1, drawn from the same gram stock. Turn variants on above if you sell it in 25gm, 50gm, 100gm and other fills."
-          />
-        </Card>
+        <>
+          <Card sx={{ p: 2 }}>
+            <EmptyState
+              icon={AutoAwesome}
+              title="Selling one size only"
+              description="One price for the whole perfume, drawn from the gram stock set in step 1. Turn variants on above if you sell it in 25gm, 50gm, 100gm and other fills — then each size carries its own price."
+            />
+          </Card>
+          <BasePricing />
+        </>
       ) : (
         <>
           {variantsError && (
@@ -521,7 +599,8 @@ const StepVariants = () => {
                   severity="info"
                   sx={{ mx: CARD_PAD, mb: 2, bgcolor: surface.plumFaint, color: 'text.primary' }}
                 >
-                  Each row sets a fill size, its price and its SKU. Every size is poured from the
+                  Each row sets a fill size, its price and discount, and its SKU — this is the only place a
+                  perfume with variants is priced. Every size is poured from the
                   perfume&apos;s single bulk weight of <strong>{formatGrams(perfumeStock)}</strong>, set under
                   Inventory in step 1. Selling one 50gm bottle removes 50 gm from that total, and the low stock alert
                   watches the same figure.

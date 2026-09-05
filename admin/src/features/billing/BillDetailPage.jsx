@@ -32,6 +32,7 @@ import BillPrintView from './BillPrintView.jsx';
 import { billApi } from '../../api/endpoints.js';
 import useApiResource from '../../hooks/useApiResource.js';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { useSettings } from '../../context/SettingsContext.jsx';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { formatCurrency, formatDate } from '../../utils/format.js';
 import { PAYMENT_METHOD_LABELS } from '../../utils/constants.js';
@@ -42,6 +43,7 @@ const BillDetailPage = () => {
   const { id } = useParams();
   const snackbar = useSnackbar();
   const { isAdmin } = useAuth();
+  const { branchesEnabled } = useSettings();
   const [searchParams] = useSearchParams();
 
   const [menuAnchor, setMenuAnchor] = useState(null);
@@ -230,14 +232,16 @@ const BillDetailPage = () => {
                 <SectionTitle title="Bill details" sx={{ mb: 0 }} />
                 <Box sx={{ mt: 0.5 }}>
                   <SummaryRow label="Bill number" value={bill.billNumber} />
-                  <SummaryRow
-                    label="Branch"
-                    value={
-                      bill.branch?.name
-                        ? `${bill.branch.name}${bill.branch.code ? ` (${bill.branch.code})` : ''}`
-                        : '—'
-                    }
-                  />
+                  {branchesEnabled && (
+                    <SummaryRow
+                      label="Branch"
+                      value={
+                        bill.branch?.name
+                          ? `${bill.branch.name}${bill.branch.code ? ` (${bill.branch.code})` : ''}`
+                          : '—'
+                      }
+                    />
+                  )}
                   <SummaryRow label="Billed by" value={bill.billedBy?.name || '—'} />
                   <SummaryRow label="Date" value={formatDate(bill.createdAt, 'time')} />
                   {bill.transactionId && <SummaryRow label="Transaction ID" value={bill.transactionId} />}

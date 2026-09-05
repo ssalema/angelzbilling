@@ -2,6 +2,7 @@ import User from '../../models/User.js';
 import Branch from '../../models/Branch.js';
 import Bill from '../../models/Bill.js';
 import ApiError from '../../utils/ApiError.js';
+import { branchesOn } from '../../utils/featureFlags.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess, sendCreated, sendPaginated } from '../../utils/ApiResponse.js';
 import { getPagination, getSort, escapeRegex, round2 } from '../../utils/query.js';
@@ -82,7 +83,9 @@ export const createUser = asyncHandler(async (req, res) => {
     ]);
   }
 
-  if (role !== 'superadmin') {
+  // With branches switched off there is nothing to pin an account to, so the
+  // branch is neither asked for nor required.
+  if (role !== 'superadmin' && branchesOn(req)) {
     const branchDoc = await Branch.findById(branch);
     if (!branchDoc) throw ApiError.badRequest('The selected branch does not exist', [
       { field: 'branch', message: 'Select a valid branch' },
@@ -91,7 +94,7 @@ export const createUser = asyncHandler(async (req, res) => {
 
   const user = await User.create({
     ...req.body,
-    branch: role === 'superadmin' ? null : branch,
+    branch: role === 'superadmin' || !branchesOn(req) ? null : branch,
     createdBy: req.user._id,
   });
 
@@ -126,7 +129,11 @@ export const updateUser = asyncHandler(async (req, res) => {
 
   const nextRole = req.body.role || user.role;
   Object.assign(user, req.body);
-  user.branch = nextRole === 'superadmin' ? null : req.body.branch ?? user.branch;
+  // With branches off, leave whatever the account already had untouched, so
+  // flipping the switch back on restores the old scoping rather than orphaning
+  // every account that happened to be edited while it was off.
+  if (nextRole === 'superadmin') user.branch = null;
+  else if (branchesOn(req)) user.branch = req.body.branch ?? user.branch;
   await user.save();
   await user.populate('branch', 'name code');
 

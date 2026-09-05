@@ -22,9 +22,10 @@ export const SIDEBAR_WIDTH = 264;
 
 const SidebarContent = ({ onNavigate }) => {
   const { user } = useAuth();
-  const { siteName, logo: storeLogo } = useSettings();
-  // Staff of a branch that carries its own logo work under that logo.
-  const branch = user?.branch;
+  const { siteName, logo: storeLogo, branchesEnabled } = useSettings();
+  // Staff of a branch that carries its own logo work under that logo — unless
+  // branches are switched off, when only the store's own logo exists.
+  const branch = branchesEnabled ? user?.branch : null;
   const logo = (branch?.hasOwnLogo ? branch.logo?.url : '') || storeLogo;
   const location = useLocation();
   const sections = visibleSections(user?.role || 'staff');
@@ -159,19 +160,22 @@ const SidebarContent = ({ onNavigate }) => {
           </Box>
         </Stack>
 
-        <Chip
-          size="small"
-          label={user?.branch?.name || 'All branches'}
-          sx={{
-            mt: 1.25,
-            width: '100%',
-            justifyContent: 'flex-start',
-            bgcolor: onPlum.hover,
-            color: brand.goldLight,
-            fontSize: FONT.micro,
-            '& .MuiChip-label': { px: 1 },
-          }}
-        />
+        {/* A single-location store has no branch scope to report. */}
+        {branchesEnabled && (
+          <Chip
+            size="small"
+            label={user?.branch?.name || 'All branches'}
+            sx={{
+              mt: 1.25,
+              width: '100%',
+              justifyContent: 'flex-start',
+              bgcolor: onPlum.hover,
+              color: brand.goldLight,
+              fontSize: FONT.micro,
+              '& .MuiChip-label': { px: 1 },
+            }}
+          />
+        )}
       </Box>
     </Box>
   );

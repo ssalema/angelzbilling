@@ -32,6 +32,7 @@ import PageHeader from '../../components/common/PageHeader.jsx';
 import { RHFTextField } from '../../components/form/RHFControls.jsx';
 import RHFContactNumber from '../../components/form/RHFContactNumber.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { useSettings } from '../../context/SettingsContext.jsx';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { authApi } from '../../api/endpoints.js';
 import { applyServerErrors } from '../../api/client.js';
@@ -78,6 +79,7 @@ const passwordSchema = z
 
 const ProfilePage = () => {
   const { user, setUser, logout } = useAuth();
+  const { branchesEnabled } = useSettings();
   const snackbar = useSnackbar();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -162,7 +164,9 @@ const ProfilePage = () => {
 
             <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1.5, flexWrap: 'wrap' }} useFlexGap>
               <Chip size="small" color="secondary" label={ROLE_LABELS[user?.role]} sx={{ color: brand.ink }} />
-              <Chip size="small" variant="outlined" label={user?.branch?.name || 'All branches'} />
+              {branchesEnabled && (
+                <Chip size="small" variant="outlined" label={user?.branch?.name || 'All branches'} />
+              )}
             </Stack>
 
             <Divider sx={{ my: 2.5 }} />

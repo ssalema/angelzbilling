@@ -336,7 +336,7 @@ const SettingsPage = () => {
                           name="billing.billPrefix"
                           label="Bill number prefix"
                           disabled={!isSuperAdmin}
-                          helperText="e.g. AP-MUM-2609-0001"
+                          helperText="e.g. AP260900001"
                           inputProps={{ style: { textTransform: 'uppercase' }, maxLength: 6 }}
                         />
                       </Grid>

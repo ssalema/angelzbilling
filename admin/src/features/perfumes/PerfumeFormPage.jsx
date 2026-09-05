@@ -36,7 +36,7 @@ import StepMedia from './steps/StepMedia.jsx';
 import StepVariants from './steps/StepVariants.jsx';
 import StepPreview from './steps/StepPreview.jsx';
 
-import { perfumeSchema, emptyPerfume, stepFields } from './perfumeSchema.js';
+import { perfumeSchema, emptyPerfume, stepFields, basePricingFor } from './perfumeSchema.js';
 import { FONT, SHADOW } from '../../theme/index.js';
 import { perfumeApi } from '../../api/endpoints.js';
 import useApiResource from '../../hooks/useApiResource.js';
@@ -164,11 +164,15 @@ const PerfumeFormPage = () => {
 
   const save = async (values, statusOverride) => {
     setPendingAction(statusOverride === 'draft' ? 'draft' : 'publish');
+    // The API still stores one price per perfume, but nobody types it any more:
+    // with variants it is the cheapest active row, otherwise the base price
+    // from the variants step.
+    const pricing = basePricingFor(values);
     const payload = {
       ...values,
       status: statusOverride || values.status,
-      mrp: Number(values.mrp) || 0,
-      discountPercent: Number(values.discountPercent) || 0,
+      mrp: pricing.mrp,
+      discountPercent: pricing.discountPercent,
       // The perfume's single stock and its alert weight, both in grams.
       // sizeGrams is the pack size used only when there are no variants.
       sizeGrams: Number(values.sizeGrams) || 0,
@@ -206,9 +210,9 @@ const PerfumeFormPage = () => {
     async () => {
       // A draft should save even when publish-only rules fail — check the
       // essentials only, then submit what we have.
-      const valid = await trigger(['name', 'sku', 'mrp']);
+      const valid = await trigger(['name', 'sku']);
       if (!valid) {
-        snackbar.warning('A name, SKU and price are needed even for a draft');
+        snackbar.warning('A name and SKU are needed even for a draft');
         setActiveStep(0);
         return;
       }

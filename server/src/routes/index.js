@@ -9,6 +9,7 @@ import dashboardRoutes from '../modules/dashboard/dashboard.routes.js';
 import settingsRoutes from '../modules/settings/settings.routes.js';
 import uploadRoutes from '../modules/uploads/upload.routes.js';
 import geoRoutes from '../modules/geo/geo.routes.js';
+import { attachFeatures } from '../utils/featureFlags.js';
 
 const router = Router();
 
@@ -35,6 +36,10 @@ router.get('/health', (_req, res) => {
     },
   });
 });
+
+// Every route below may need to know whether branches are switched on, and the
+// scoping helpers that ask are synchronous — so the flag is resolved up front.
+router.use(attachFeatures);
 
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);

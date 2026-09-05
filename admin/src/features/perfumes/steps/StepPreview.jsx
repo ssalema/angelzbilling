@@ -30,7 +30,7 @@ import {
   CheckRounded,
 } from '@mui/icons-material';
 import { formatCurrency, formatGrams, formatNumber, unitsFromGrams } from '../../../utils/format.js';
-import { computeFinalPrice, sizeGramsFor } from '../perfumeSchema.js';
+import { basePricingFor, computeFinalPrice, sizeGramsFor } from '../perfumeSchema.js';
 import { CARD_PAD, DISCOUNT_COLOR, ICON, brand, numericText, surface } from '../../../theme/index.js';
 
 const Row = ({ label, value }) => (
@@ -53,8 +53,11 @@ const StepPreview = () => {
   const { control } = useFormContext();
   const data = useWatch({ control });
 
-  const finalPrice = computeFinalPrice(data.mrp, data.discountPercent);
   const variants = data.variants || [];
+  // Prices are entered per variant, so the perfume's headline price is the
+  // cheapest active one — or the base price when it sells in a single size.
+  const pricing = basePricingFor(data);
+  const finalPrice = computeFinalPrice(pricing.mrp, pricing.discountPercent);
 
   const prices = variants.length
     ? variants.map((v) => computeFinalPrice(v.mrp, v.discountPercent))
@@ -68,7 +71,7 @@ const StepPreview = () => {
   // Publish readiness — same rules the server enforces, explained up front.
   const blockers = [];
   if (!data.images?.length) blockers.push('At least one perfume image is required');
-  if (!Number(data.mrp)) blockers.push('A price must be set');
+  if (!Number(pricing.mrp)) blockers.push(data.hasVariants ? 'Price at least one active variant' : 'A price must be set');
   if (data.hasVariants && !variants.length) blockers.push('Generate at least one variant combination');
 
   const warnings = [];
@@ -149,14 +152,14 @@ const StepPreview = () => {
                     ? formatCurrency(priceFrom)
                     : `${formatCurrency(priceFrom)} – ${formatCurrency(priceTo)}`}
                 </Typography>
-                {Number(data.discountPercent) > 0 && (
+                {Number(pricing.discountPercent) > 0 && (
                   <>
                     <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.secondary' }}>
-                      {formatCurrency(data.mrp)}
+                      {formatCurrency(pricing.mrp)}
                     </Typography>
                     <Chip
                       size="small"
-                      label={`${data.discountPercent}% off`}
+                      label={`${pricing.discountPercent}% off`}
                       sx={{ color: DISCOUNT_COLOR, bgcolor: surface.successSoft, fontWeight: 700 }}
                     />
                   </>
@@ -266,9 +269,12 @@ const StepPreview = () => {
             <Row label="Fragrance family" value={data.fragranceFamily} />
             <Row label="Concentration" value={data.concentration} />
             <Divider sx={{ my: 1 }} />
-            <Row label="MRP" value={formatCurrency(data.mrp, { precise: true })} />
-            <Row label="Discount" value={data.discountPercent ? `${data.discountPercent}%` : 'None'} />
-            <Row label="Final price" value={formatCurrency(finalPrice, { precise: true })} />
+            <Row label={data.hasVariants ? 'MRP (from)' : 'MRP'} value={formatCurrency(pricing.mrp, { precise: true })} />
+            <Row label="Discount" value={pricing.discountPercent ? `${pricing.discountPercent}%` : 'None'} />
+            <Row
+              label={data.hasVariants ? 'Final price (from)' : 'Final price'}
+              value={formatCurrency(finalPrice, { precise: true })}
+            />
             <Divider sx={{ my: 1 }} />
             <Row label="Total stock" value={formatGrams(totalStock)} />
             <Row label="Low stock alert at" value={formatGrams(data.lowStockThreshold)} />

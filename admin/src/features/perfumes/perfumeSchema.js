@@ -50,7 +50,10 @@ export const perfumeSchema = z
     concentration: z.string().trim().max(80).default(''),
     shortDescription: z.string().trim().max(300, 'Keep this under 300 characters').default(''),
     description: z.string().trim().max(8000).default(''),
-    mrp: z.coerce.number({ invalid_type_error: 'Enter a price' }).min(0, 'Price cannot be negative'),
+    // Pricing is not typed on this step any more: it belongs to the variants
+    // step. With one size only, that step's base price fills these in; with
+    // variants on, they are derived from the cheapest active row on save.
+    mrp: z.coerce.number({ invalid_type_error: 'Enter a price' }).min(0, 'Price cannot be negative').default(0),
     discountPercent: z.coerce.number().min(0, 'Cannot be negative').max(100, 'Cannot exceed 100%').default(0),
     // Stock is bulk weight in grams throughout, so decimals are allowed. This is
     // the perfume's ONE inventory figure — variants draw down this same pool.
@@ -131,6 +134,18 @@ export const perfumeSchema = z
           message: 'Keep at least one variant active',
         });
       }
+
+      // Variants are now the only place a price is entered, so an active row
+      // left at zero would leave the perfume unsellable at that size.
+      data.variants.forEach((variant, index) => {
+        if (variant.isActive && !(Number(variant.mrp) > 0)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['variants', index, 'mrp'],
+            message: 'Set a price for this variant',
+          });
+        }
+      });
     }
 
     if (data.status === 'published' && !data.images.length) {
@@ -144,10 +159,10 @@ export const perfumeSchema = z
 
 /** Which fields each wizard step is responsible for, used by "Continue". */
 export const stepFields = {
-  0: ['name', 'sku', 'brand', 'category', 'subCategory', 'fragranceFamily', 'concentration', 'shortDescription', 'description', 'mrp', 'discountPercent', 'sizeGrams', 'stock', 'lowStockThreshold', 'tags'],
+  0: ['name', 'sku', 'brand', 'category', 'subCategory', 'fragranceFamily', 'concentration', 'shortDescription', 'description', 'sizeGrams', 'stock', 'lowStockThreshold', 'tags'],
   1: ['features', 'faqs'],
   2: ['images', 'videos'],
-  3: ['hasVariants', 'variantAttributes', 'variants'],
+  3: ['hasVariants', 'variantAttributes', 'variants', 'mrp', 'discountPercent'],
   4: ['status'],
 };
 
@@ -215,6 +230,27 @@ export const smallestFillGramsFor = (data) => {
   const sizes = (active.length ? active : variants).map((v) => sizeGramsFor(v));
   if (data?.hasVariants && sizes.length) return Math.min(...sizes);
   return sizeGramsFor(data);
+};
+
+/**
+ * The perfume-level price the API and every listing still expect. Pricing is
+ * entered per variant now, so with variants on this is the cheapest active row
+ * (what a storefront shows as "from ..."); without them it is the single base
+ * price typed on the variants step.
+ */
+export const basePricingFor = (data) => {
+  const variants = data?.variants || [];
+  const active = variants.filter((v) => v?.isActive !== false);
+  const priced = (active.length ? active : variants).filter((v) => Number(v?.mrp) > 0);
+
+  if (data?.hasVariants && priced.length) {
+    const cheapest = priced.reduce((best, v) =>
+      computeFinalPrice(v.mrp, v.discountPercent) < computeFinalPrice(best.mrp, best.discountPercent) ? v : best
+    );
+    return { mrp: Number(cheapest.mrp) || 0, discountPercent: Number(cheapest.discountPercent) || 0 };
+  }
+
+  return { mrp: Number(data?.mrp) || 0, discountPercent: Number(data?.discountPercent) || 0 };
 };
 
 export const computeFinalPrice = (mrp, discountPercent) => {

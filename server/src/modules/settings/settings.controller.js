@@ -6,6 +6,7 @@ import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/ApiResponse.js';
 import { uploadBuffer, destroyAsset } from '../../config/cloudinary.js';
+import { refreshFeatures } from '../../utils/featureFlags.js';
 
 const urlOrEmpty = (host) =>
   z
@@ -140,6 +141,10 @@ export const updateSettings = asyncHandler(async (req, res) => {
   applyPatch(settings, req.body);
   settings.updatedBy = req.user._id;
   await settings.save();
+
+  // Branch scoping is decided from a cached copy of this flag; drop it now so
+  // the very next request already sees the switch in its new position.
+  refreshFeatures();
 
   return sendSuccess(res, { message: 'Settings saved', data: settings });
 });

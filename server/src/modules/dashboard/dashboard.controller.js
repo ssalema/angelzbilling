@@ -12,6 +12,7 @@ import {
   round2,
 } from '../../utils/query.js';
 import { resolveBranchScope } from '../../middlewares/authorize.js';
+import { branchesOn } from '../../utils/featureFlags.js';
 
 /** Every figure on this page is computed here — nothing is hardcoded. */
 
@@ -379,6 +380,10 @@ export const getLowStock = asyncHandler(async (req, res) => {
 /* ─────────────────────────── Branch comparison ─────────────────────────── */
 
 export const getBranchPerformance = asyncHandler(async (req, res) => {
+  // Nothing to compare in a single-location store — every bill would land in
+  // one "Unassigned" row.
+  if (!branchesOn(req)) return sendSuccess(res, { message: 'Branch performance loaded', data: [] });
+
   const window = windowFromQuery(req);
 
   const rows = await Bill.aggregate([

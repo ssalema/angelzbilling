@@ -32,6 +32,7 @@ import {
   DeleteOutline,
   ReceiptLongOutlined,
   PrintOutlined,
+  DownloadOutlined,
   VisibilityOutlined,
   SearchRounded,
   PersonOutline,
@@ -59,6 +60,7 @@ import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { applyServerErrors } from '../../api/client.js';
 import { formatCurrency, formatGrams, formatNumber, unitsFromGrams } from '../../utils/format.js';
 import { PAYMENT_METHODS } from '../../utils/constants.js';
+import { downloadBillPdf } from '../../utils/downloadBill.js';
 import { FONT, CARD_HEAD_PAD, CARD_PAD, ICON, brand, numericText, surface } from '../../theme/index.js';
 
 const CreateBillPage = () => {
@@ -70,6 +72,10 @@ const CreateBillPage = () => {
   const [perfumeQuery, setPerfumeQuery] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
   const [savedBill, setSavedBill] = useState(null);
+
+  // The saved slip is already on screen, so the PDF is rendered straight from it.
+  const savedSlipRef = useRef(null);
+  const [downloading, setDownloading] = useState(false);
 
   const debouncedQuery = useDebounce(perfumeQuery, 300);
 
@@ -243,6 +249,17 @@ const CreateBillPage = () => {
     setPerfumeQuery('');
   };
 
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      await downloadBillPdf(savedSlipRef.current, savedBill);
+    } catch (err) {
+      snackbar.error(err.message);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   /* ── Success state: the bill is saved, offer print / next actions ── */
   if (savedBill) {
     return (
@@ -261,6 +278,14 @@ const CreateBillPage = () => {
           <Button variant="contained" startIcon={<PrintOutlined />} onClick={() => window.print()}>
             Print bill
           </Button>
+          <Button
+            variant="outlined"
+            startIcon={downloading ? <CircularProgress size={16} /> : <DownloadOutlined />}
+            disabled={downloading}
+            onClick={handleDownload}
+          >
+            Download bill
+          </Button>
           <Button variant="outlined" startIcon={<AddShoppingCartOutlined />} onClick={startNewBill}>
             Create another bill
           </Button>
@@ -270,7 +295,7 @@ const CreateBillPage = () => {
         </Stack>
 
         <Card sx={{ overflow: 'hidden', bgcolor: 'transparent', border: 'none', py: 3 }}>
-          <BillPrintView bill={savedBill} store={{ ...settings, currencySymbol: '₹' }} />
+          <BillPrintView ref={savedSlipRef} bill={savedBill} store={{ ...settings, currencySymbol: '₹' }} />
         </Card>
       </Box>
     );
@@ -682,13 +707,17 @@ const CreateBillPage = () => {
               grandTotal: totals.grandTotal,
               paymentMethod: watched.paymentMethod,
               notes: watched.notes,
-              branch: {
-                name: user?.branch?.name || 'Default branch',
-                code: user?.branch?.code || '',
-                address: '',
-                phone: user?.branch?.phone || '',
-                phoneCountryCode: user?.branch?.phoneCountryCode || '+91',
-              },
+              // Branches off: no branch identity at all, so the slip prints
+              // under the store's own name, address and logo.
+              branch: branchesEnabled
+                ? {
+                    name: user?.branch?.name || 'Default branch',
+                    code: user?.branch?.code || '',
+                    address: '',
+                    phone: user?.branch?.phone || '',
+                    phoneCountryCode: user?.branch?.phoneCountryCode || '+91',
+                  }
+                : {},
               billedBy: { name: user?.name },
             }}
             store={settings}
