@@ -93,6 +93,8 @@ const PerfumeFormPage = () => {
       ...emptyPerfume,
       ...perfume,
       mrp: perfume.mrp ?? '',
+      // New perfumes start with variants on; an existing one keeps its own answer.
+      hasVariants: Boolean(perfume.hasVariants),
       tags: perfume.tags || [],
       features: perfume.features || [],
       faqs: perfume.faqs || [],

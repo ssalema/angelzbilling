@@ -188,8 +188,16 @@ export const emptyPerfume = {
   faqs: [],
   images: [],
   videos: [],
-  hasVariants: false,
-  variantAttributes: [],
+  hasVariants: true,
+  // Perfume is nearly always sold by fill size, so the usual ladder is
+  // pre-filled — values can still be removed or added before generating.
+  variantAttributes: [
+    {
+      name: 'Size',
+      selectorStyle: 'automatic',
+      values: ['25gm', '50gm', '100gm', '250gm', '500gm', '1000gm'],
+    },
+  ],
   variants: [],
   status: 'draft',
 };
