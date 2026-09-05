@@ -1,0 +1,87 @@
+/** Shared option lists. Keeping them here stops labels drifting between screens. */
+
+export const ROLES = [
+  { value: 'superadmin', label: 'Super Admin', description: 'Full access to every branch, user and setting' },
+  { value: 'admin', label: 'Branch Admin', description: 'Manages perfumes, billing and reports for one branch' },
+  { value: 'staff', label: 'Billing Staff', description: 'Creates bills and views the catalogue for one branch' },
+];
+
+export const ROLE_LABELS = Object.fromEntries(ROLES.map((r) => [r.value, r.label]));
+
+export const PAYMENT_METHODS = [
+  { value: 'cash', label: 'Cash', icon: 'payments' },
+  { value: 'upi', label: 'UPI', icon: 'qr_code' },
+  { value: 'card', label: 'Card', icon: 'credit_card' },
+  { value: 'bank_transfer', label: 'Bank Transfer', icon: 'account_balance' },
+];
+
+export const PAYMENT_METHOD_LABELS = Object.fromEntries(PAYMENT_METHODS.map((p) => [p.value, p.label]));
+
+export const BILL_STATUSES = [
+  { value: 'paid', label: 'Paid' },
+  { value: 'refunded', label: 'Refunded' },
+];
+
+export const PERFUME_STATUSES = [
+  { value: 'draft', label: 'Draft' },
+  { value: 'published', label: 'Published' },
+  { value: 'archived', label: 'Archived' },
+];
+
+/** Standard perfume fill sizes, offered as one-click presets in the wizard. */
+export const PERFUME_SIZES = ['25gm', '50gm', '100gm', '250gm', '500gm', '1000gm'];
+
+export const FRAGRANCE_FAMILIES = [
+  'Floral',
+  'Woody',
+  'Oriental',
+  'Fresh',
+  'Citrus',
+  'Musky',
+  'Smoky',
+  'Spicy',
+  'Gourmand',
+];
+
+export const CONCENTRATIONS = [
+  'Pure Attar',
+  'Perfume Oil',
+  'EDP — Eau de Parfum',
+  'EDT — Eau de Toilette',
+  'EDC — Eau de Cologne',
+  'Roll On',
+  'Body Mist',
+  'Incense',
+];
+
+export const DATE_RANGES = [
+  { value: 'month', label: 'Month' },
+  { value: 'year', label: 'Year' },
+  { value: 'all', label: 'All time' },
+  { value: 'custom', label: 'Custom' },
+];
+
+export const CHART_METRICS = [
+  { value: 'revenue', label: 'Revenue' },
+  { value: 'bills', label: 'Bills' },
+  { value: 'customers', label: 'Customers' },
+  { value: 'aov', label: 'AOV' },
+];
+
+export const SELECTOR_STYLES = [
+  { value: 'automatic', label: 'Automatic' },
+  { value: 'chip', label: 'Chip' },
+  { value: 'dropdown', label: 'Dropdown' },
+  { value: 'swatch', label: 'Swatch' },
+];
+
+export const ROWS_PER_PAGE = [10, 25, 50, 100];
+
+/**
+ * What every uploader accepts. `.jfif` is served as image/jpeg, so the
+ * extension is listed for pickers that match on it.
+ */
+export const IMAGE_TYPES = 'image/jpeg,image/jpg,image/pjpeg,.jfif,image/png,image/gif,image/webp';
+
+/** Cloudinary and the server both cap a single upload here. */
+export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;

@@ -1,0 +1,31 @@
+{
+  "name": "angelzperfume-admin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Angelz Perfume — Billing Admin Panel (React + Vite + MUI)",
+  "scripts": {
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "dev": "vite"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.13.5",
+    "@emotion/styled": "^11.13.5",
+    "@hookform/resolvers": "^3.9.1",
+    "@mui/icons-material": "^6.1.9",
+    "@mui/material": "^6.1.9",
+    "axios": "^1.7.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.54.0",
+    "react-router-dom": "^7.18.3",
+    "recharts": "^2.13.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  }
+}

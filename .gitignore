@@ -1,0 +1,95 @@
+# Dependencies
+node_modules/
+
+# Docs
+docs/
+
+# Build Output
+dist/
+build/
+coverage/
+.next/
+out/
+.cache/
+.turbo/
+
+# Environment Variables
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime Files
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Secrets
+*.pem
+*.key
+*.crt
+config.env
+
+# Uploads & Runtime Storage
+tmp/
+temp/
+*.sqlite
+*.sqlite3
+
+# Deploy Platforms
+.vercel
+.netlify
+
+# IDE & Editors
+.idea/
+*.swp
+*.swo
+*~
+
+# VS Code: keep shared workspace config, ignore personal state
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+
+# Claude
+.claude/
+CLAUDE.md
+
+# Operating System
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Scratch Files
+scratch/
+scratch_*
+
+# Patch / Diff Files
+*.patch
+*.diff
+*_diff.txt
+
+# Package Managers
+.pnpm-store/
+.npm/
+.yarn/cache/
+.yarn/unplugged/
+*.tgz
+
+# TypeScript
+*.tsbuildinfo
+
+# Misc
+.eslintcache
+
+# Test
+tests/
