@@ -29,7 +29,7 @@ import {
   FilterBar,
   FilterSearch,
   FilterSelect,
-  FilterRefresh,
+  FilterReset,
 } from '../../components/common/FilterBar.jsx';
 
 import { perfumeApi } from '../../api/endpoints.js';
@@ -97,6 +97,9 @@ const PerfumeListPage = () => {
     // is the classic way to show a user an empty table for no reason.
     setFilters((prev) => ({ ...prev, ...changes, page: changes.page ?? 1 }));
   }, []);
+
+  const resetFilters = () =>
+    setFilters((prev) => ({ ...prev, search: '', category: '', status: 'all', stock: 'all', page: 1 }));
 
   const handleDelete = async () => {
     try {
@@ -353,12 +356,7 @@ const PerfumeListPage = () => {
             ))}
           </FilterSelect>
 
-          <FilterRefresh
-            onClick={() => {
-              perfumes.reload();
-              facets.reload();
-            }}
-          />
+          <FilterReset onClick={resetFilters} disabled={!isFiltered} />
         </FilterBar>
 
         <DataTable

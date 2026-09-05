@@ -260,32 +260,6 @@ export const getSeries = asyncHandler(async (req, res) => {
 
 /* ─────────────────────────── Donut / pie charts ─────────────────────────── */
 
-export const getStatusBreakdown = asyncHandler(async (req, res) => {
-  const window = windowFromQuery(req);
-
-  const rows = await Bill.aggregate([
-    { $match: { ...branchMatch(req), ...buildDateMatch(window) } },
-    { $group: { _id: '$status', count: { $sum: 1 }, amount: { $sum: '$grandTotal' } } },
-    { $sort: { count: -1 } },
-  ]);
-
-  const total = rows.reduce((sum, r) => sum + r.count, 0);
-
-  return sendSuccess(res, {
-    message: 'Bill status analytics loaded',
-    data: {
-      total,
-      segments: rows.map((r) => ({
-        key: r._id,
-        label: { paid: 'Paid', refunded: 'Refunded' }[r._id] || r._id,
-        count: r.count,
-        amount: round2(r.amount),
-        percentage: total ? round2((r.count / total) * 100) : 0,
-      })),
-    },
-  });
-});
-
 export const getPaymentBreakdown = asyncHandler(async (req, res) => {
   const window = windowFromQuery(req);
   const labels = {

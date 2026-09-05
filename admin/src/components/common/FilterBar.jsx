@@ -1,5 +1,5 @@
 import { Stack, TextField, InputAdornment, IconButton, Tooltip } from '@mui/material';
-import { SearchRounded, RefreshRounded } from '@mui/icons-material';
+import { SearchRounded, RestartAltRounded } from '@mui/icons-material';
 import { ICON } from '../../theme/index.js';
 
 
@@ -59,20 +59,30 @@ export const FilterSelect = ({ width = 160, sx, children, SelectProps, ...props 
 );
 
 /**
- * Refresh is one affordance everywhere: a bordered icon button labelled
- * "Refresh". It matches the one DateRangeControl carries, so a filter bar and a
- * chart header reload the same way.
+ * Reset is one affordance everywhere: a bordered icon button carrying the
+ * RestartAlt glyph. It is disabled while there is nothing to reset, which is
+ * what keeps it from reading as a reload.
  */
-export const FilterRefresh = ({ onClick }) => (
-  <Tooltip title="Refresh">
-    <IconButton
-      size="small"
-      onClick={onClick}
-      sx={{ border: 1, borderColor: 'divider', borderRadius: 2, flexShrink: 0 }}
-    >
-      <RefreshRounded sx={{ fontSize: ICON.action }} />
-    </IconButton>
+export const ResetIconButton = ({ onClick, disabled = false, title, disabledTitle }) => (
+  <Tooltip title={disabled ? disabledTitle : title}>
+    {/* A disabled button fires no events, so the tooltip needs a live wrapper. */}
+    <span style={{ display: 'inline-flex', flexShrink: 0 }}>
+      <IconButton
+        size="small"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={title}
+        sx={{ border: 1, borderColor: 'divider', borderRadius: 2 }}
+      >
+        <RestartAltRounded sx={{ fontSize: ICON.action }} />
+      </IconButton>
+    </span>
   </Tooltip>
+);
+
+/** The filter-bar and chart-header flavour: clears filters back to defaults. */
+export const FilterReset = (props) => (
+  <ResetIconButton title="Reset filters" disabledTitle="No filters applied" {...props} />
 );
 
 export default FilterBar;

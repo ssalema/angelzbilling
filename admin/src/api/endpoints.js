@@ -19,7 +19,6 @@ export const authApi = {
 export const dashboardApi = {
   summary: (params) => api.get('/dashboard/summary', { params }).then(unwrap),
   series: (params) => api.get('/dashboard/revenue-series', { params }).then(unwrap),
-  billStatus: (params) => api.get('/dashboard/bill-status', { params }).then(unwrap),
   paymentMethods: (params) => api.get('/dashboard/payment-methods', { params }).then(unwrap),
   topPerfumes: (params) => api.get('/dashboard/top-perfumes', { params }).then(unwrap),
   recentBills: (params) => api.get('/dashboard/recent-bills', { params }).then(unwrap),

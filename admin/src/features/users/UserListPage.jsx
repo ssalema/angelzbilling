@@ -28,7 +28,7 @@ import {
   FilterBar,
   FilterSearch,
   FilterSelect,
-  FilterRefresh,
+  FilterReset,
 } from '../../components/common/FilterBar.jsx';
 import UserFormDialog from './UserFormDialog.jsx';
 import ResetPasswordDialog from './ResetPasswordDialog.jsx';
@@ -87,6 +87,9 @@ const UserListPage = () => {
   const patch = useCallback((changes) => {
     setFilters((prev) => ({ ...prev, ...changes, page: changes.page ?? 1 }));
   }, []);
+
+  const resetFilters = () =>
+    setFilters((prev) => ({ ...prev, search: '', role: 'all', status: 'all', branch: '', page: 1 }));
 
   const run = async (action, successReload = true) => {
     try {
@@ -323,7 +326,7 @@ const UserListPage = () => {
             <MenuItem value="inactive">Inactive</MenuItem>
           </FilterSelect>
 
-          <FilterRefresh onClick={users.reload} />
+          <FilterReset onClick={resetFilters} disabled={!isFiltered} />
         </FilterBar>
 
         <DataTable

@@ -1,12 +1,11 @@
 import { useRef, useState } from 'react';
-import { Card, Box, Typography, Stack, Button, IconButton, CircularProgress, Tooltip, Divider } from '@mui/material';
-import { AddPhotoAlternateOutlined, DeleteOutline, RefreshRounded } from '@mui/icons-material';
+import { Card, Box, Typography, Stack, IconButton, Tooltip, Divider } from '@mui/material';
+import { RefreshRounded } from '@mui/icons-material';
 import { settingsApi } from '../../api/endpoints.js';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import SectionTitle from '../../components/common/SectionTitle.jsx';
-import Dropzone from '../../components/common/Dropzone.jsx';
-import { IMAGE_TYPES } from '../../utils/constants.js';
-import { CARD_PAD, ICON, surface } from '../../theme/index.js';
+import LogoDropzone from '../../components/common/LogoDropzone.jsx';
+import { CARD_PAD, ICON } from '../../theme/index.js';
 
 /**
  * Logo and favicon upload. Both go to Cloudinary; MongoDB stores only the
@@ -15,7 +14,7 @@ import { CARD_PAD, ICON, surface } from '../../theme/index.js';
  * The label/hint row mirrors the `FieldRow` of the General information card so
  * both columns of the settings grid read as one form.
  */
-const BrandingSlot = ({ kind, label, hint, aspect, current, onChanged, disabled }) => {
+const BrandingSlot = ({ kind, label, hint, current, onChanged, disabled }) => {
   const inputRef = useRef(null);
   const snackbar = useSnackbar();
   const [busy, setBusy] = useState(false);
@@ -65,51 +64,18 @@ const BrandingSlot = ({ kind, label, hint, aspect, current, onChanged, disabled 
         </Typography>
       </Stack>
 
-      <Dropzone
+      <LogoDropzone
         openRef={inputRef}
-        disabled={busy || disabled}
-        accept={IMAGE_TYPES}
-        label={current?.url ? `Replace the ${label.toLowerCase()}` : `Upload a ${label.toLowerCase()}`}
+        value={current?.url}
+        alt={label}
+        busy={busy}
+        disabled={disabled}
+        fill
         onFiles={(files) => upload(files?.[0])}
-        sx={{
-          bgcolor: surface.ivoryWash,
-          minHeight: aspect === 'square' ? 132 : 108,
-          flex: 1,
-          display: 'grid',
-          placeItems: 'center',
-          position: 'relative',
-          overflow: 'hidden',
-        }}
-      >
-        {busy ? (
-          <CircularProgress size={26} />
-        ) : current?.url ? (
-          <Box
-            component="img"
-            src={current.url}
-            alt={label}
-            sx={{ maxWidth: '82%', maxHeight: '78%', objectFit: 'contain' }}
-          />
-        ) : (
-          <Stack alignItems="center" spacing={0.5} sx={{ color: 'text.secondary' }}>
-            <AddPhotoAlternateOutlined />
-            <Typography variant="caption">Upload</Typography>
-          </Stack>
-        )}
-      </Dropzone>
-
-      {current?.url && !disabled && (
-        <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.5 }}>
-          <Button size="small" onClick={() => inputRef.current?.()} disabled={busy}>
-            Replace
-          </Button>
-          <Tooltip title="Remove">
-            <IconButton size="small" color="error" onClick={remove} disabled={busy}>
-              <DeleteOutline sx={{ fontSize: ICON.action }} />
-            </IconButton>
-          </Tooltip>
-        </Stack>
-      )}
+        onRemove={remove}
+        replaceLabel={`Replace the ${label.toLowerCase()}`}
+        removeLabel={`Remove the ${label.toLowerCase()}`}
+      />
     </Box>
   );
 };
@@ -119,6 +85,7 @@ const BrandingPanel = ({ settings, onChanged, onRefresh, canEdit }) => (
     <SectionTitle
       title="Branding"
       description="Your logo appears in the sidebar, on the sign-in screen and at the top of every printed bill. A branch with its own logo prints that one instead."
+      descriptionAs="tooltip"
       sx={{ mb: 0 }}
       action={
         <Tooltip title="Refresh">
@@ -146,7 +113,6 @@ const BrandingPanel = ({ settings, onChanged, onRefresh, canEdit }) => (
       kind="favicon"
       label="Favicon"
       hint="Square PNG, 64×64px or larger"
-      aspect="square"
       current={settings?.branding?.favicon}
       onChanged={onChanged}
       disabled={!canEdit}

@@ -10,7 +10,7 @@ import {
   TextField,
   Tooltip,
 } from '@mui/material';
-import { RefreshRounded } from '@mui/icons-material';
+import { RestartAltRounded } from '@mui/icons-material';
 import { DATE_RANGES } from '../../utils/constants.js';
 import { FONT, ICON } from '../../theme/index.js';
 
@@ -26,7 +26,9 @@ import { FONT, ICON } from '../../theme/index.js';
 const DateRangeControl = ({
   value,
   onChange,
-  onRefresh,
+  onReset,
+  // Greys the reset button out while the card is already showing its defaults.
+  canReset = true,
   width = 165,
   label,
   // Custom is offered everywhere by default; a caller can opt out deliberately.
@@ -99,15 +101,19 @@ const DateRangeControl = ({
         </Select>
       )}
 
-      {onRefresh && (
-        <Tooltip title="Refresh">
-          <IconButton
-            size="small"
-            onClick={onRefresh}
-            sx={{ border: 1, borderColor: 'divider', borderRadius: 2, flexShrink: 0 }}
-          >
-            <RefreshRounded sx={{ fontSize: ICON.action }} />
-          </IconButton>
+      {onReset && (
+        <Tooltip title={canReset ? 'Reset filters' : 'No filters applied'}>
+          <span style={{ display: 'inline-flex', flexShrink: 0 }}>
+            <IconButton
+              size="small"
+              onClick={onReset}
+              disabled={!canReset}
+              aria-label="Reset filters"
+              sx={{ border: 1, borderColor: 'divider', borderRadius: 2 }}
+            >
+              <RestartAltRounded sx={{ fontSize: ICON.action }} />
+            </IconButton>
+          </span>
         </Tooltip>
       )}
 

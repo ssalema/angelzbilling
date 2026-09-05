@@ -23,6 +23,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
 import { formatCurrency, formatNumber } from '../../utils/format.js';
 import { brand } from '../../theme/index.js';
+import { DEFAULT_DATE_RANGE, isDefaultRange } from '../../utils/constants.js';
 
 /**
  * Every widget is fed by its own aggregation endpoint and owns its own range,
@@ -33,10 +34,16 @@ const DashboardPage = () => {
   const { branchesEnabled } = useSettings();
 
   // The main range drives the summary cards and the revenue chart together.
-  const [mainRange, setMainRange] = useState({ range: 'month' });
-  const [paymentRange, setPaymentRange] = useState({ range: 'month' });
-  const [topRange, setTopRange] = useState({ range: 'month' });
+  const [mainRange, setMainRange] = useState(DEFAULT_DATE_RANGE);
+  const [paymentRange, setPaymentRange] = useState(DEFAULT_DATE_RANGE);
+  const [topRange, setTopRange] = useState(DEFAULT_DATE_RANGE);
   const [topBy, setTopBy] = useState('units');
+
+  // Each card resets only its own filters — that is the point of owning them.
+  const resetTop = () => {
+    setTopRange(DEFAULT_DATE_RANGE);
+    setTopBy('units');
+  };
 
   const params = useCallback((range) => ({ range: range.range, from: range.from, to: range.to }), []);
 
@@ -161,25 +168,25 @@ const DashboardPage = () => {
       </Box>
 
       {/* ── Payment breakdown ── */}
-      <Grid container spacing={2.25} sx={{ mb: 2.5 }}>
-        <Grid item xs={12}>
-          <BreakdownChart
-            title="Payment preference"
-            data={payments.data}
-            loading={payments.loading}
-            error={payments.error}
-            onRetry={payments.reload}
-            range={paymentRange}
-            onRangeChange={setPaymentRange}
-            donut={false}
-            emptyMessage="No payments recorded in this period."
-            insight={(segments) => {
-              const top = segments[0];
-              return top ? `Customers prefer ${top.label} for payments.` : null;
-            }}
-          />
-        </Grid>
-      </Grid>
+      <Box sx={{ mb: 2.5 }}>
+        <BreakdownChart
+          title="Payment preference"
+          data={payments.data}
+          loading={payments.loading}
+          error={payments.error}
+          onRetry={payments.reload}
+          range={paymentRange}
+          onRangeChange={setPaymentRange}
+          onReset={() => setPaymentRange(DEFAULT_DATE_RANGE)}
+          canReset={!isDefaultRange(paymentRange)}
+          donut={false}
+          emptyMessage="No payments recorded in this period."
+          insight={(segments) => {
+            const top = segments[0];
+            return top ? `Customers prefer ${top.label} for payments.` : null;
+          }}
+        />
+      </Box>
 
       {/* ── Top sellers ── */}
       <Box sx={{ mb: 2.5 }}>
@@ -190,6 +197,8 @@ const DashboardPage = () => {
           onRetry={topPerfumes.reload}
           range={topRange}
           onRangeChange={setTopRange}
+          onReset={resetTop}
+          canReset={!isDefaultRange(topRange) || topBy !== 'units'}
           by={topBy}
           onByChange={setTopBy}
         />

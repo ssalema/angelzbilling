@@ -33,7 +33,7 @@ const BarTooltip = ({ active, payload }) => {
 };
 
 /** Horizontal bar chart of best sellers, switchable between units and revenue. */
-const TopPerfumes = ({ data, loading, error, onRetry, range, onRangeChange, by, onByChange }) => {
+const TopPerfumes = ({ data, loading, error, onRetry, range, onRangeChange, onReset, canReset, by, onByChange }) => {
   const rows = (data || []).map((row) => ({ ...row, shortName: truncate(row.name, 30) }));
   const hasData = rows.length > 0;
 
@@ -66,7 +66,7 @@ const TopPerfumes = ({ data, loading, error, onRetry, range, onRangeChange, by, 
             <ToggleButton value="units">Units</ToggleButton>
             <ToggleButton value="revenue">Revenue</ToggleButton>
           </ToggleButtonGroup>
-          <DateRangeControl value={range} onChange={onRangeChange} onRefresh={onRetry} width={130} />
+          <DateRangeControl value={range} onChange={onRangeChange} onReset={onReset} canReset={canReset} width={130} />
         </Stack>
       </Stack>
 

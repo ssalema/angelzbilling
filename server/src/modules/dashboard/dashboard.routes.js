@@ -6,7 +6,6 @@ import { cacheResponse } from '../../middlewares/cache.js';
 import {
   getSummary,
   getSeries,
-  getStatusBreakdown,
   getPaymentBreakdown,
   getTopPerfumes,
   getRecentBills,
@@ -39,7 +38,6 @@ const cached = [validate({ query: rangeQuery }), cacheResponse()];
 
 router.get('/summary', cached, getSummary);
 router.get('/revenue-series', cached, getSeries);
-router.get('/bill-status', cached, getStatusBreakdown);
 router.get('/payment-methods', cached, getPaymentBreakdown);
 router.get('/top-perfumes', cached, getTopPerfumes);
 router.get('/recent-bills', cached, getRecentBills);

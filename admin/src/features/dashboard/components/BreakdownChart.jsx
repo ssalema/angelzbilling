@@ -34,6 +34,8 @@ const BreakdownChart = ({
   onRetry,
   range,
   onRangeChange,
+  onReset,
+  canReset,
   donut = true,
   insight,
   emptyMessage = 'No bills in this period yet.',
@@ -51,7 +53,7 @@ const BreakdownChart = ({
         sx={CARD_HEAD_PAD}
       >
         <SectionTitle title={title} sx={{ mb: 0 }} />
-        <DateRangeControl value={range} onChange={onRangeChange} onRefresh={onRetry} width={130} />
+        <DateRangeControl value={range} onChange={onRangeChange} onReset={onReset} canReset={canReset} width={130} />
       </Stack>
 
       <Divider />

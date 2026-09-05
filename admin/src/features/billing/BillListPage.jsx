@@ -30,7 +30,7 @@ import {
   FilterBar,
   FilterSearch,
   FilterSelect,
-  FilterRefresh,
+  FilterReset,
 } from '../../components/common/FilterBar.jsx';
 import DateRangeControl from '../../components/common/DateRangeControl.jsx';
 
@@ -42,7 +42,13 @@ import { useSettings } from '../../context/SettingsContext.jsx';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { formatCurrency, formatDate, formatNumber } from '../../utils/format.js';
 import { formatContactNumber } from '../../utils/countries.js';
-import { BILL_STATUSES, PAYMENT_METHODS, PAYMENT_METHOD_LABELS } from '../../utils/constants.js';
+import {
+  BILL_STATUSES,
+  PAYMENT_METHODS,
+  PAYMENT_METHOD_LABELS,
+  DEFAULT_DATE_RANGE,
+  isDefaultRange,
+} from '../../utils/constants.js';
 import { ICON, brand } from '../../theme/index.js';
 
 const BillListPage = () => {
@@ -56,7 +62,7 @@ const BillListPage = () => {
   const [printBill, setPrintBill] = useState(null);
   const [printingId, setPrintingId] = useState(null);
 
-  const [range, setRange] = useState({ range: 'month' });
+  const [range, setRange] = useState(DEFAULT_DATE_RANGE);
   const [filters, setFilters] = useState({
     search: '',
     status: 'all',
@@ -131,6 +137,11 @@ const BillListPage = () => {
     }
   };
 
+  const resetFilters = () => {
+    setFilters((prev) => ({ ...prev, search: '', status: 'all', paymentMethod: 'all', branch: '', page: 1 }));
+    setRange(DEFAULT_DATE_RANGE);
+  };
+
   const refreshAll = () => {
     bills.reload();
     stats.reload();
@@ -139,7 +150,11 @@ const BillListPage = () => {
   const items = bills.data?.items || [];
   const meta = bills.data?.meta || {};
   const isFiltered =
-    Boolean(debouncedSearch) || filters.status !== 'all' || filters.paymentMethod !== 'all' || filters.branch;
+    Boolean(debouncedSearch) ||
+    filters.status !== 'all' ||
+    filters.paymentMethod !== 'all' ||
+    Boolean(filters.branch) ||
+    !isDefaultRange(range);
 
   const columns = [
     {
@@ -371,7 +386,7 @@ const BillListPage = () => {
 
             <DateRangeControl label="Date" value={range} onChange={setRange} />
 
-            <FilterRefresh onClick={refreshAll} />
+            <FilterReset onClick={resetFilters} disabled={!isFiltered} />
           </FilterBar>
 
           <DataTable

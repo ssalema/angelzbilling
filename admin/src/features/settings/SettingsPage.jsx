@@ -34,7 +34,7 @@ import PageHeader from '../../components/common/PageHeader.jsx';
 import { RHFTextField, RHFNumberField } from '../../components/form/RHFControls.jsx';
 import RHFContactNumber from '../../components/form/RHFContactNumber.jsx';
 import SectionTitle from '../../components/common/SectionTitle.jsx';
-import { FilterRefresh } from '../../components/common/FilterBar.jsx';
+import { ResetIconButton } from '../../components/common/FilterBar.jsx';
 import { ErrorState, CardSkeleton } from '../../components/common/StateViews.jsx';
 import BrandingPanel from './BrandingPanel.jsx';
 import BranchesPanel from './BranchesPanel.jsx';
@@ -259,7 +259,14 @@ const SettingsPage = () => {
                   <Card sx={{ p: CARD_PAD }}>
                     <SectionTitle
                       title="General information"
-                      action={<FilterRefresh onClick={settings.reload} />}
+                      action={
+                        <ResetIconButton
+                          onClick={() => reset()}
+                          disabled={!isDirty}
+                          title="Reset changes"
+                          disabledTitle="No unsaved changes"
+                        />
+                      }
                     />
                     <Divider sx={{ mb: 2.5 }} />
 

@@ -77,6 +77,22 @@ export const CARD_PAD = { xs: 2, sm: 2.5 };
 export const CARD_HEAD_PAD = { px: { xs: 2, sm: 2.5 }, pt: { xs: 2, sm: 2.25 }, pb: 1.75 };
 
 /**
+ * The single-image frame — store logo, favicon, branch logo. One height and one
+ * preview inset everywhere, so a logo looks the same in Settings, in the branch
+ * dialog and wherever a slot lands next. The square corners come from
+ * `<Dropzone variant="frame" />`: artwork is being cropped to a box, and a
+ * rounded box quietly lies about where its edges are.
+ */
+export const LOGO_FRAME = {
+  height: 176,
+  /** Breathing room between the dashed drop target and the well inside it. */
+  gap: 1.25,
+  /** The well's corner, a touch tighter than the dashed frame around it. */
+  radius: '6px',
+  preview: { maxWidth: '84%', maxHeight: '82%', objectFit: 'contain' },
+};
+
+/**
  * The five type sizes available outside the Typography variants.
  *
  * Screens used to reach for 28 different hand-typed rem values, most of them

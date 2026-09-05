@@ -213,6 +213,16 @@ export const updateBillStatus = asyncHandler(async (req, res) => {
     throw ApiError.badRequest(`This bill is already marked as ${status}`);
   }
 
+  // Only a paid bill has money and stock to give back. The collection still
+  // holds bills written under an older status set ('pending', 'cancelled'),
+  // and refunding one of those would put weight back on the shelf that the
+  // bill never took off it — inventory that reconciles to nothing.
+  if (bill.status !== 'paid') {
+    throw ApiError.badRequest(
+      `Only a paid bill can be refunded — bill ${bill.billNumber} is marked as "${bill.status}".`
+    );
+  }
+
   // Refunding puts the weight back on the shelf — into the perfume's single
   // stock, which is the only place it came from. We replay the grams snapshotted
   // on the line, not today's fill size, so a re-sized catalogue cannot skew

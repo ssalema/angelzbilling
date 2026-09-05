@@ -1,12 +1,10 @@
 import { useRef, useState, useEffect } from 'react';
-import { Box, Typography, Stack, Button, IconButton, CircularProgress, Tooltip } from '@mui/material';
-import { AddPhotoAlternateOutlined, DeleteOutline } from '@mui/icons-material';
+import { Box, Typography } from '@mui/material';
 
 import { branchApi } from '../../api/endpoints.js';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
-import Dropzone from '../../components/common/Dropzone.jsx';
-import { IMAGE_TYPES, MAX_UPLOAD_BYTES } from '../../utils/constants.js';
-import { ICON, surface } from '../../theme/index.js';
+import LogoDropzone from '../../components/common/LogoDropzone.jsx';
+import { MAX_UPLOAD_BYTES } from '../../utils/constants.js';
 
 const MAX_BYTES = MAX_UPLOAD_BYTES;
 
@@ -81,57 +79,21 @@ const BranchLogoField = ({ branchId, current, pendingFile, onPendingFile, onUplo
 
   return (
     <Box>
-      <Dropzone
+      <LogoDropzone
         openRef={inputRef}
-        disabled={busy || disabled}
-        accept={IMAGE_TYPES}
-        label={preview ? 'Replace the branch logo' : 'Upload a branch logo'}
+        value={preview}
+        alt="Branch logo"
+        busy={busy}
+        disabled={disabled}
         onFiles={(files) => choose(files?.[0])}
-        sx={{
-          bgcolor: surface.ivoryWash,
-          height: 104,
-          display: 'grid',
-          placeItems: 'center',
-          overflow: 'hidden',
-        }}
-      >
-        {busy ? (
-          <CircularProgress size={24} />
-        ) : preview ? (
-          <Box
-            component="img"
-            src={preview}
-            alt="Branch logo"
-            sx={{ maxWidth: '80%', maxHeight: '76%', objectFit: 'contain' }}
-          />
-        ) : (
-          <Stack alignItems="center" spacing={0.5} sx={{ color: 'text.secondary' }}>
-            <AddPhotoAlternateOutlined />
-            <Typography variant="caption">Upload branch logo</Typography>
-          </Stack>
-        )}
-      </Dropzone>
+        onRemove={remove}
+        replaceLabel="Replace the branch logo"
+        removeLabel="Remove — the branch goes back to the store logo"
+      />
 
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 0.5 }}>
-        <Typography variant="caption" color="text.secondary">
-          {pendingUrl
-            ? 'Uploads when you create the branch'
-            : 'Transparent PNG, around 400×120px'}
-        </Typography>
-
-        {preview && !disabled && (
-          <Stack direction="row" spacing={0.5} alignItems="center">
-            <Button size="small" onClick={() => inputRef.current?.()} disabled={busy}>
-              Replace
-            </Button>
-            <Tooltip title="Remove — the branch goes back to the store logo">
-              <IconButton size="small" color="error" onClick={remove} disabled={busy}>
-                <DeleteOutline sx={{ fontSize: ICON.action }} />
-              </IconButton>
-            </Tooltip>
-          </Stack>
-        )}
-      </Stack>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+        {pendingUrl ? 'Uploads when you create the branch' : 'Transparent PNG, around 400×120px'}
+      </Typography>
     </Box>
   );
 };
