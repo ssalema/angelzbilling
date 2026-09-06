@@ -1,5 +1,6 @@
 import { Stack, IconButton, Tooltip } from '@mui/material';
-import { SwapHorizRounded, DeleteOutline } from '@mui/icons-material';
+import SwapHorizRounded from '@mui/icons-material/SwapHorizRounded';
+import DeleteOutline from '@mui/icons-material/DeleteOutline';
 import { ICON, surface, brand } from '../../theme/index.js';
 
 /**

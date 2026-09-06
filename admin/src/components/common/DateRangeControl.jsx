@@ -10,7 +10,7 @@ import {
   TextField,
   Tooltip,
 } from '@mui/material';
-import { RestartAltRounded } from '@mui/icons-material';
+import RestartAltRounded from '@mui/icons-material/RestartAltRounded';
 import { DATE_RANGES } from '../../utils/constants.js';
 import { FONT, ICON } from '../../theme/index.js';
 

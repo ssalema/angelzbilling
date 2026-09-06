@@ -67,5 +67,41 @@ settingsSchema.statics.getSingleton = async function getSingleton() {
   return this.create({ key: 'general' });
 };
 
+/**
+ * The same singleton, as a plain read-only object, cached in process.
+ *
+ * Every bill view and every printed slip needs the store identity, so
+ * `getSingleton` was being queried on each one — a database round trip for a
+ * document that changes maybe monthly, on one of the hottest read paths in the
+ * app. This serves those readers from memory instead.
+ *
+ * It returns a LEAN object on purpose. `getSingleton` hands back a live
+ * mongoose document that the settings controller mutates and saves, and a
+ * shared cached copy of that is a bug waiting to happen — a caller could
+ * quietly edit everyone else's settings in place. Writers keep using
+ * `getSingleton`; readers use this and cannot mutate anything that matters.
+ *
+ * `invalidate` is called by the settings controller after every successful
+ * write, so the staleness window is "until the next settings change", with the
+ * TTL only as a backstop for a write that happened in another process.
+ */
+let cachedSettings = null;
+let cachedAt = 0;
+const SETTINGS_TTL_MS = 60_000;
+
+settingsSchema.statics.getCached = async function getCached() {
+  if (cachedSettings && Date.now() - cachedAt < SETTINGS_TTL_MS) return cachedSettings;
+
+  const existing = await this.findOne({ key: 'general' }).lean();
+  cachedSettings = existing || (await this.create({ key: 'general' })).toObject();
+  cachedAt = Date.now();
+  return cachedSettings;
+};
+
+settingsSchema.statics.invalidateCache = function invalidateCache() {
+  cachedSettings = null;
+  cachedAt = 0;
+};
+
 export const Settings = mongoose.model('Settings', settingsSchema);
 export default Settings;

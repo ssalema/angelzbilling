@@ -12,6 +12,7 @@ import {
   round2,
 } from '../../utils/query.js';
 import { resolveBranchScope } from '../../middlewares/authorize.js';
+import { lifetimeCache } from '../../middlewares/cache.js';
 import { locationFilter } from '../../utils/locations.js';
 import { branchesOn } from '../../utils/featureFlags.js';
 
@@ -52,9 +53,65 @@ const growth = (current, previous) => {
   return round2(((current - previous) / previous) * 100);
 };
 
+/**
+ * Distinct customers ever billed, and how many of them first appeared inside
+ * the current window.
+ *
+ * This is the most expensive query in the application and the only one that
+ * cannot be narrowed by a date filter — the question is literally "everyone,
+ * ever", so it groups the whole bills collection every time it runs. Left
+ * uncached behind the 30 second analytics cache it was a full scan roughly
+ * eight times a minute with a handful of staff on the dashboard, and the cost
+ * grew with every bill ever written.
+ *
+ * It is also the figure that moves least: a new customer changes the total by
+ * one. So it gets its own hour-long cache that ordinary bill writes do NOT
+ * clear, which is the whole reason `lifetimeCache` exists separately from the
+ * dashboard one. The trade is a lifetime customer count that can lag by up to
+ * an hour; `newInPeriod` is derived from the same scan and lags with it.
+ *
+ * The key carries the branch scope and the window, because `newInPeriod` is
+ * window-dependent even though `total` is not.
+ */
+const countCustomers = async (scope, window) => {
+  const key = `customers :: ${JSON.stringify(scope)} :: ${window.start?.getTime() || 'x'}-${window.end?.getTime() || 'x'}`;
+
+  const cached = lifetimeCache.get(key);
+  if (cached) return cached;
+
+  const rows = await Bill.aggregate([
+    { $match: { ...scope, ...EARNING } },
+    // Only these three fields are needed downstream. Projecting first keeps the
+    // documents flowing through the group small — a bill carries its whole
+    // items array, payment history and status history otherwise.
+    { $project: { 'customer.mobile': 1, 'customer.mobileCountryCode': 1, createdAt: 1 } },
+    { $group: { _id: CUSTOMER_KEY, firstSeen: { $min: '$createdAt' } } },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: 1 },
+        newInPeriod: {
+          $sum: {
+            $cond: [
+              window.start
+                ? { $and: [{ $gte: ['$firstSeen', window.start] }, { $lte: ['$firstSeen', window.end] }] }
+                : true,
+              1,
+              0,
+            ],
+          },
+        },
+      },
+    },
+  ]);
+
+  lifetimeCache.set(key, rows);
+  return rows;
+};
+
 /* ─────────────────────────── Summary cards ─────────────────────────── */
 
-export const getSummary = asyncHandler(async (req, res) => {
+const computeSummary = async (req) => {
   const scope = branchMatch(req);
   const window = windowFromQuery(req);
   const prior = previousPeriod(window);
@@ -118,30 +175,13 @@ export const getSummary = asyncHandler(async (req, res) => {
     ]),
     // "Customers" = distinct contact numbers that have ever been billed. The
     // country code is part of the identity: +65 91234567 is not +91 91234567.
-    Bill.aggregate([
-      { $match: { ...scope, ...EARNING } },
-      { $group: { _id: CUSTOMER_KEY, firstSeen: { $min: '$createdAt' } } },
-      {
-        $group: {
-          _id: null,
-          total: { $sum: 1 },
-          newInPeriod: {
-            $sum: {
-              $cond: [
-                window.start
-                  ? { $and: [{ $gte: ['$firstSeen', window.start] }, { $lte: ['$firstSeen', window.end] }] }
-                  : true,
-                1,
-                0,
-              ],
-            },
-          },
-        },
-      },
-    ]),
+    countCustomers(scope, window),
     previous
       ? Bill.aggregate([
           { $match: { ...scope, ...buildDateMatch(prior), ...EARNING } },
+          // Date-bounded, so this one is cheap — but the projection still keeps
+          // the items array out of the pipeline on the way to the group.
+          { $project: { 'customer.mobile': 1, 'customer.mobileCountryCode': 1 } },
           { $group: { _id: CUSTOMER_KEY } },
           { $count: 'total' },
         ])
@@ -156,7 +196,7 @@ export const getSummary = asyncHandler(async (req, res) => {
 
   const statusMap = Object.fromEntries(billStatusCounts.map((r) => [r._id, r.count]));
 
-  return sendSuccess(res, {
+  return ({
     message: 'Dashboard summary loaded',
     data: {
       range: { ...window, granularity: pickGranularity(window) },
@@ -203,11 +243,11 @@ export const getSummary = asyncHandler(async (req, res) => {
       activeUsers: staffCount,
     },
   });
-});
+};
 
 /* ────────────────── Revenue / Bills / Customers / AOV chart ────────────────── */
 
-export const getSeries = asyncHandler(async (req, res) => {
+const computeSeries = async (req) => {
   const scope = branchMatch(req);
   const window = windowFromQuery(req);
   const granularity = pickGranularity(window);
@@ -276,7 +316,7 @@ export const getSeries = asyncHandler(async (req, res) => {
 
   const total = filled.reduce((sum, point) => sum + (point[metric] || 0), 0);
 
-  return sendSuccess(res, {
+  return ({
     message: 'Revenue analytics loaded',
     data: {
       metric,
@@ -285,11 +325,11 @@ export const getSeries = asyncHandler(async (req, res) => {
       total: metric === 'aov' ? (filled.length ? round2(total / filled.length) : 0) : round2(total),
     },
   });
-});
+};
 
 /* ─────────────────────────── Donut / pie charts ─────────────────────────── */
 
-export const getPaymentBreakdown = asyncHandler(async (req, res) => {
+const computePaymentBreakdown = async (req) => {
   const window = windowFromQuery(req);
   const labels = {
     cash: 'Cash',
@@ -306,7 +346,7 @@ export const getPaymentBreakdown = asyncHandler(async (req, res) => {
 
   const total = rows.reduce((sum, r) => sum + r.count, 0);
 
-  return sendSuccess(res, {
+  return ({
     message: 'Payment analytics loaded',
     data: {
       total,
@@ -319,11 +359,11 @@ export const getPaymentBreakdown = asyncHandler(async (req, res) => {
       })),
     },
   });
-});
+};
 
 /* ─────────────────────────── Top selling perfumes ─────────────────────────── */
 
-export const getTopPerfumes = asyncHandler(async (req, res) => {
+const computeTopPerfumes = async (req) => {
   const window = windowFromQuery(req);
   const limit = Math.min(20, Number.parseInt(req.query.limit, 10) || 5);
   const by = req.query.by === 'revenue' ? 'revenue' : 'units';
@@ -343,7 +383,7 @@ export const getTopPerfumes = asyncHandler(async (req, res) => {
     { $limit: limit },
   ]);
 
-  return sendSuccess(res, {
+  return ({
     message: 'Top selling perfumes loaded',
     data: rows.map((r) => ({
       perfumeId: r._id.perfume,
@@ -353,11 +393,11 @@ export const getTopPerfumes = asyncHandler(async (req, res) => {
       revenue: round2(r.revenue),
     })),
   });
-});
+};
 
 /* ─────────────────────────── Recent bills & low stock ─────────────────────────── */
 
-export const getRecentBills = asyncHandler(async (req, res) => {
+const computeRecentBills = async (req) => {
   const limit = Math.min(20, Number.parseInt(req.query.limit, 10) || 5);
 
   const bills = await Bill.find(branchMatch(req))
@@ -366,13 +406,13 @@ export const getRecentBills = asyncHandler(async (req, res) => {
     .limit(limit)
     .lean();
 
-  return sendSuccess(res, {
+  return ({
     message: 'Recent bills loaded',
     data: bills.map((b) => ({ ...b, id: b._id })),
   });
-});
+};
 
-export const getLowStock = asyncHandler(async (req, res) => {
+const computeLowStock = async (req) => {
   const limit = Math.min(50, Number.parseInt(req.query.limit, 10) || 8);
 
   const rows = await Perfume.aggregate([
@@ -399,18 +439,18 @@ export const getLowStock = asyncHandler(async (req, res) => {
     },
   ]);
 
-  return sendSuccess(res, {
+  return ({
     message: 'Low stock alerts loaded',
     data: rows.map((r) => ({ ...r, id: r._id, isOutOfStock: r.totalStock === 0 })),
   });
-});
+};
 
 /* ─────────────────────────── Branch comparison ─────────────────────────── */
 
-export const getBranchPerformance = asyncHandler(async (req, res) => {
+const computeBranchPerformance = async (req) => {
   // Nothing to compare in a single-location store — every bill would land in
   // one "Unassigned" row.
-  if (!branchesOn(req)) return sendSuccess(res, { message: 'Branch performance loaded', data: [] });
+  if (!branchesOn(req)) return ({ message: 'Branch performance loaded', data: [] });
 
   const window = windowFromQuery(req);
 
@@ -427,7 +467,7 @@ export const getBranchPerformance = asyncHandler(async (req, res) => {
     { $sort: { revenue: -1 } },
   ]);
 
-  return sendSuccess(res, {
+  return ({
     message: 'Branch performance loaded',
     data: rows.map((r) => ({
       branchId: r._id.id,
@@ -439,7 +479,7 @@ export const getBranchPerformance = asyncHandler(async (req, res) => {
       averageOrderValue: r.bills ? round2(r.revenue / r.bills) : 0,
     })),
   });
-});
+};
 
 /* ─────────────────────────── Bill status donut ─────────────────────────── */
 
@@ -457,7 +497,7 @@ const BILL_STATUS_SEGMENTS = [
   { key: 'refunded', label: 'Refunded' },
 ];
 
-export const getBillStatusBreakdown = asyncHandler(async (req, res) => {
+const computeBillStatusBreakdown = async (req) => {
   const window = windowFromQuery(req);
 
   const rows = await Bill.aggregate([
@@ -484,13 +524,97 @@ export const getBillStatusBreakdown = asyncHandler(async (req, res) => {
     percentage: total ? round2((byStatus[s.key].count / total) * 100) : 0,
   }));
 
-  return sendSuccess(res, {
+  return ({
     message: 'Bill status analytics loaded',
     data: {
       total,
       segments,
       settledPercentage: total ? round2(((byStatus.paid?.count || 0) / total) * 100) : 0,
       outstanding: round2(byStatus.pending?.amount || 0),
+    },
+  });
+};
+
+/* ─────────────────────────── Route handlers ─────────────────────────── */
+
+/**
+ * Each widget keeps its own endpoint, because each owns its own date range in
+ * the UI — changing the range on the payment donut must not refetch the whole
+ * page. These are thin wrappers; all the work lives in the compute functions
+ * above, which the combined endpoint below reuses directly.
+ */
+const handlerFor = (compute) => asyncHandler(async (req, res) => sendSuccess(res, await compute(req)));
+
+export const getSummary = handlerFor(computeSummary);
+export const getSeries = handlerFor(computeSeries);
+export const getPaymentBreakdown = handlerFor(computePaymentBreakdown);
+export const getTopPerfumes = handlerFor(computeTopPerfumes);
+export const getRecentBills = handlerFor(computeRecentBills);
+export const getLowStock = handlerFor(computeLowStock);
+export const getBranchPerformance = handlerFor(computeBranchPerformance);
+export const getBillStatusBreakdown = handlerFor(computeBillStatusBreakdown);
+
+/* ─────────────────────────── Combined first load ─────────────────────────── */
+
+/**
+ * Every widget on the dashboard, for one range, in a single response.
+ *
+ * Opening the page used to fire eight requests at once. Each one separately
+ * paid TLS and HTTP overhead, JWT verification, rate-limit accounting and a
+ * cache lookup, and the browser caps how many it will run in parallel to one
+ * origin — so the last widgets queued behind the first. The figures were
+ * already cheap by then; the per-request overhead was the cost.
+ *
+ * This serves the case that actually happens on load: every widget sitting at
+ * the same default range. The moment a user changes one widget's range that
+ * widget goes back to its own endpoint, which is why those still exist and why
+ * this does not try to accept eight different ranges.
+ *
+ * The computes run concurrently and each is independently cached, so a hit on
+ * this endpoint and a hit on a single-widget one return identical figures.
+ */
+export const getOverview = asyncHandler(async (req, res) => {
+  /**
+   * The list widgets each want a different row count, but the shared query
+   * schema carries only one `limit`. So each gets a stand-in request with its
+   * own — carrying exactly the four things the computes read off a request
+   * (`user`, `query`, `body`, `features`), which is what `resolveBranchScope`
+   * and the pipelines need and nothing more. Spreading the Express request
+   * itself would copy its prototype badly; this states the contract instead.
+   */
+  const withLimit = (limit) => ({
+    user: req.user,
+    body: req.body,
+    features: req.features,
+    query: { ...req.query, limit },
+  });
+
+  const [summary, series, billStatus, payments, topPerfumes, recentBills, lowStock, branchPerformance] =
+    await Promise.all([
+      computeSummary(req),
+      computeSeries(req),
+      computeBillStatusBreakdown(req),
+      computePaymentBreakdown(req),
+      computeTopPerfumes(withLimit(5)),
+      computeRecentBills(withLimit(5)),
+      computeLowStock(withLimit(6)),
+      computeBranchPerformance(req),
+    ]);
+
+  return sendSuccess(res, {
+    message: 'Dashboard loaded',
+    // Keyed by widget, each holding exactly what that widget's own endpoint
+    // returns in its `data` — so the client can feed either source to the same
+    // component without a second shape to handle.
+    data: {
+      summary: summary.data,
+      series: series.data,
+      billStatus: billStatus.data,
+      payments: payments.data,
+      topPerfumes: topPerfumes.data,
+      recentBills: recentBills.data,
+      lowStock: lowStock.data,
+      branchPerformance: branchPerformance.data,
     },
   });
 });

@@ -18,16 +18,14 @@ import {
   Skeleton,
   Alert,
 } from '@mui/material';
-import {
-  SaveOutlined,
-  StorefrontOutlined,
-  StoreOutlined,
-  ShareOutlined,
-  ReceiptLongOutlined,
-  Instagram,
-  Facebook,
-  LinkedIn,
-} from '@mui/icons-material';
+import SaveOutlined from '@mui/icons-material/SaveOutlined';
+import StorefrontOutlined from '@mui/icons-material/StorefrontOutlined';
+import StoreOutlined from '@mui/icons-material/StoreOutlined';
+import ShareOutlined from '@mui/icons-material/ShareOutlined';
+import ReceiptLongOutlined from '@mui/icons-material/ReceiptLongOutlined';
+import Instagram from '@mui/icons-material/Instagram';
+import Facebook from '@mui/icons-material/Facebook';
+import LinkedIn from '@mui/icons-material/LinkedIn';
 
 import PageHeader from '../../components/common/PageHeader.jsx';
 import { RHFTextField, RHFNumberField } from '../../components/form/RHFControls.jsx';

@@ -11,7 +11,7 @@ import {
   Box,
   Divider,
 } from '@mui/material';
-import { ArrowDropDown } from '@mui/icons-material';
+import ArrowDropDown from '@mui/icons-material/ArrowDropDown';
 
 import {
   COUNTRIES,

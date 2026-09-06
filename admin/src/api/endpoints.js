@@ -17,6 +17,9 @@ export const authApi = {
 
 /* ─────────────────────────────── Dashboard ─────────────────────────────── */
 export const dashboardApi = {
+  // Every widget for one range in a single request — what the page uses on load.
+  // The per-widget calls below are for when a card's own range diverges.
+  overview: (params) => api.get('/dashboard/overview', { params }).then(unwrap),
   summary: (params) => api.get('/dashboard/summary', { params }).then(unwrap),
   series: (params) => api.get('/dashboard/revenue-series', { params }).then(unwrap),
   paymentMethods: (params) => api.get('/dashboard/payment-methods', { params }).then(unwrap),

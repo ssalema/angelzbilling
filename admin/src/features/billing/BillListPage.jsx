@@ -13,14 +13,12 @@ import {
   Chip,
   CircularProgress,
 } from '@mui/material';
-import {
-  AddCardOutlined,
-  VisibilityOutlined,
-  PrintOutlined,
-  DownloadOutlined,
-  ReceiptLongOutlined,
-  PaymentsOutlined,
-} from '@mui/icons-material';
+import AddCardOutlined from '@mui/icons-material/AddCardOutlined';
+import VisibilityOutlined from '@mui/icons-material/VisibilityOutlined';
+import PrintOutlined from '@mui/icons-material/PrintOutlined';
+import DownloadOutlined from '@mui/icons-material/DownloadOutlined';
+import ReceiptLongOutlined from '@mui/icons-material/ReceiptLongOutlined';
+import PaymentsOutlined from '@mui/icons-material/PaymentsOutlined';
 
 import PageHeader from '../../components/common/PageHeader.jsx';
 import DataTable, { actionsColumn } from '../../components/common/DataTable.jsx';

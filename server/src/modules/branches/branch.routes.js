@@ -3,7 +3,7 @@ import { z } from 'zod';
 import authenticate from '../../middlewares/authenticate.js';
 import { authorize, requireGlobalSuperAdmin } from '../../middlewares/authorize.js';
 import validate from '../../middlewares/validate.js';
-import { imageUpload, enforceFileLimits } from '../../middlewares/upload.js';
+import { imageUpload, enforceFileLimits, uploadGate } from '../../middlewares/upload.js';
 import { createBranchSchema, updateBranchSchema, listBranchQuerySchema } from './branch.validation.js';
 import {
   listBranches,
@@ -41,6 +41,8 @@ router.post(
   '/:id/branding/:kind',
   authorize('superadmin'),
   validate({ params: brandingParam }),
+  // Ahead of multer so a queued request holds no buffer while it waits.
+  uploadGate,
   imageUpload.single('file'),
   enforceFileLimits,
   uploadBranchBranding

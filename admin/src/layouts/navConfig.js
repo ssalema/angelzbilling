@@ -1,10 +1,8 @@
-import {
-  SpaceDashboardOutlined,
-  Inventory2Outlined,
-  ReceiptLongOutlined,
-  GroupOutlined,
-  SettingsOutlined,
-} from '@mui/icons-material';
+import SpaceDashboardOutlined from '@mui/icons-material/SpaceDashboardOutlined';
+import Inventory2Outlined from '@mui/icons-material/Inventory2Outlined';
+import ReceiptLongOutlined from '@mui/icons-material/ReceiptLongOutlined';
+import GroupOutlined from '@mui/icons-material/GroupOutlined';
+import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
 
 /**
  * Single source of truth for navigation.

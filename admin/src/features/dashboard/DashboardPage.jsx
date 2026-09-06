@@ -1,13 +1,11 @@
 import { useState, useCallback } from 'react';
 import { Grid, Button, Box } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
-import { AddRounded } from '@mui/icons-material';
-import {
-  CurrencyRupeeRounded,
-  ReceiptLongOutlined,
-  Inventory2Outlined,
-  PeopleAltOutlined,
-} from '@mui/icons-material';
+import AddRounded from '@mui/icons-material/AddRounded';
+import CurrencyRupeeRounded from '@mui/icons-material/CurrencyRupeeRounded';
+import ReceiptLongOutlined from '@mui/icons-material/ReceiptLongOutlined';
+import Inventory2Outlined from '@mui/icons-material/Inventory2Outlined';
+import PeopleAltOutlined from '@mui/icons-material/PeopleAltOutlined';
 
 import PageHeader from '../../components/common/PageHeader.jsx';
 import StatCard from './components/StatCard.jsx';
@@ -26,8 +24,33 @@ import { brand } from '../../theme/index.js';
 import { DEFAULT_DATE_RANGE, isDefaultRange, locationLabel } from '../../utils/constants.js';
 
 /**
- * Every widget is fed by its own aggregation endpoint and owns its own range,
- * so refreshing the donut does not re-query the whole page.
+ * Feeds one widget, from the combined payload while it is in step with the
+ * page, and from its own endpoint once it is not.
+ *
+ * `immediate: !shared` is what drives the switch: while the widget is shared
+ * its own request never fires, and when `shared` goes false the flag flips to
+ * true and `useApiResource` runs it. `shared` is in the dependency list so
+ * going back in step re-runs the effect too.
+ *
+ * The returned shape is exactly `useApiResource`'s, so a widget component
+ * cannot tell which source it was given.
+ */
+const useSharedWidget = (overview, key, shared, fetcher, deps) => {
+  const own = useApiResource(fetcher, [...deps, shared], { immediate: !shared });
+
+  if (!shared) return own;
+  return {
+    data: overview.data?.[key] ?? null,
+    loading: overview.loading,
+    error: overview.error,
+    reload: overview.reload,
+    setData: own.setData,
+  };
+};
+
+/**
+ * The page loads in one request and every widget owns its own range, so
+ * narrowing the donut refetches only the donut — not the whole page.
  */
 const DashboardPage = () => {
   const { isAdmin, isSuperAdmin, user } = useAuth();
@@ -48,37 +71,52 @@ const DashboardPage = () => {
 
   const params = useCallback((range) => ({ range: range.range, from: range.from, to: range.to }), []);
 
-  const summary = useApiResource(() => dashboardApi.summary(params(mainRange)), [
+  /**
+   * One request brings the whole page back at the main range. Opening the
+   * dashboard used to fire eight at once, and the browser will only run a few
+   * per origin in parallel, so the lower widgets sat queued behind the top ones
+   * for no reason — every one of them is driven by the same range on load.
+   */
+  const overview = useApiResource(() => dashboardApi.overview(params(mainRange)), [
     mainRange.range,
     mainRange.from,
     mainRange.to,
   ]);
 
-  const series = useApiResource(() => dashboardApi.series(params(mainRange)), [
-    mainRange.range,
-    mainRange.from,
-    mainRange.to,
-  ]);
+  const useWidget = (key, shared, fetcher, deps) => useSharedWidget(overview, key, shared, fetcher, deps);
 
-  const billStatus = useApiResource(() => dashboardApi.billStatus(params(statusRange)), [
-    statusRange.range,
-    statusRange.from,
-    statusRange.to,
-  ]);
+  const sameAsMain = (range) =>
+    range.range === mainRange.range && range.from === mainRange.from && range.to === mainRange.to;
 
-  const payments = useApiResource(() => dashboardApi.paymentMethods(params(paymentRange)), [
-    paymentRange.range,
-    paymentRange.from,
-    paymentRange.to,
-  ]);
+  const summary = useWidget('summary', true, () => dashboardApi.summary(params(mainRange)), []);
+  const series = useWidget('series', true, () => dashboardApi.series(params(mainRange)), []);
 
-  const topPerfumes = useApiResource(
+  const billStatus = useWidget(
+    'billStatus',
+    sameAsMain(statusRange),
+    () => dashboardApi.billStatus(params(statusRange)),
+    [statusRange.range, statusRange.from, statusRange.to]
+  );
+
+  const payments = useWidget(
+    'payments',
+    sameAsMain(paymentRange),
+    () => dashboardApi.paymentMethods(params(paymentRange)),
+    [paymentRange.range, paymentRange.from, paymentRange.to]
+  );
+
+  // `by` is part of what makes this widget's request distinct, so a change of
+  // metric takes it off the shared payload just as a range change does.
+  const topPerfumes = useWidget(
+    'topPerfumes',
+    sameAsMain(topRange) && topBy === 'units',
     () => dashboardApi.topPerfumes({ ...params(topRange), by: topBy, limit: 5 }),
     [topRange.range, topRange.from, topRange.to, topBy]
   );
 
-  const recentBills = useApiResource(() => dashboardApi.recentBills({ limit: 5 }), []);
-  const lowStock = useApiResource(() => dashboardApi.lowStock({ limit: 6 }), []);
+  // Neither of these carries a range control, so they are always shared.
+  const recentBills = useWidget('recentBills', true, () => dashboardApi.recentBills({ limit: 5 }), []);
+  const lowStock = useWidget('lowStock', true, () => dashboardApi.lowStock({ limit: 6 }), []);
 
   const stats = summary.data;
 

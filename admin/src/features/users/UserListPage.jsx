@@ -12,12 +12,10 @@ import {
   Chip,
   Select,
 } from '@mui/material';
-import {
-  PersonAddAlt1Outlined,
-  EditOutlined,
-  GroupOutlined,
-  LockResetOutlined,
-} from '@mui/icons-material';
+import PersonAddAlt1Outlined from '@mui/icons-material/PersonAddAlt1Outlined';
+import EditOutlined from '@mui/icons-material/EditOutlined';
+import GroupOutlined from '@mui/icons-material/GroupOutlined';
+import LockResetOutlined from '@mui/icons-material/LockResetOutlined';
 
 import PageHeader from '../../components/common/PageHeader.jsx';
 import DataTable, { actionsColumn } from '../../components/common/DataTable.jsx';

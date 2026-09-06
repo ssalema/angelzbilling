@@ -12,13 +12,11 @@ import {
   Avatar,
   Chip,
 } from '@mui/material';
-import {
-  AddRounded,
-  VisibilityOutlined,
-  EditOutlined,
-  DeleteOutline,
-  Inventory2Outlined,
-} from '@mui/icons-material';
+import AddRounded from '@mui/icons-material/AddRounded';
+import VisibilityOutlined from '@mui/icons-material/VisibilityOutlined';
+import EditOutlined from '@mui/icons-material/EditOutlined';
+import DeleteOutline from '@mui/icons-material/DeleteOutline';
+import Inventory2Outlined from '@mui/icons-material/Inventory2Outlined';
 
 import PageHeader from '../../components/common/PageHeader.jsx';
 import DataTable, { actionsColumn } from '../../components/common/DataTable.jsx';
@@ -48,6 +46,7 @@ import {
 } from '../../utils/format.js';
 import { PERFUME_STATUSES } from '../../utils/constants.js';
 import { DISCOUNT_COLOR, ICON, brand, surface } from '../../theme/index.js';
+import { IMG } from '../../utils/image.js';
 
 const STOCK_FILTERS = [
   { value: 'all', label: 'Any stock level' },
@@ -135,7 +134,7 @@ const PerfumeListPage = () => {
       render: (row) => (
         <Avatar
           variant="rounded"
-          src={row.primaryImage || undefined}
+          src={IMG.avatar(row.primaryImage) || undefined}
           alt={row.name}
           sx={{ width: 48, height: 48, bgcolor: surface.plumSoft, border: 1, borderColor: 'divider' }}
         >

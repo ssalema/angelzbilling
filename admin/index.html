@@ -8,10 +8,25 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!--
+      The stylesheet is fetched as a non-blocking `print` sheet and promoted to
+      `all` once it lands, so a slow Google Fonts response can no longer hold up
+      first paint. `display=swap` means text is readable in the fallback face
+      until the webfont arrives, and the <noscript> copy keeps it working
+      without JavaScript.
+    -->
     <link
       href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Great+Vibes&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'; this.onload=null;"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Great+Vibes&family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
     <title>Angelz Perfume — Admin</title>
     <style>
       /* Painted before React mounts so there is no white flash on the ivory app. */

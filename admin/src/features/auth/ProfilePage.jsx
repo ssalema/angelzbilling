@@ -20,13 +20,11 @@ import {
   InputAdornment,
   IconButton,
 } from '@mui/material';
-import {
-  SaveOutlined,
-  PersonOutline,
-  LockResetOutlined,
-  Visibility,
-  VisibilityOff,
-} from '@mui/icons-material';
+import SaveOutlined from '@mui/icons-material/SaveOutlined';
+import PersonOutline from '@mui/icons-material/PersonOutline';
+import LockResetOutlined from '@mui/icons-material/LockResetOutlined';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
 
 import PageHeader from '../../components/common/PageHeader.jsx';
 import { RHFTextField } from '../../components/form/RHFControls.jsx';
@@ -40,6 +38,7 @@ import { formatDate, initials } from '../../utils/format.js';
 import { ROLE_LABELS, locationLabel } from '../../utils/constants.js';
 import { DEFAULT_DIAL_CODE, addContactNumberIssue } from '../../utils/countries.js';
 import { CARD_PAD, ICON, brand } from '../../theme/index.js';
+import { IMG } from '../../utils/image.js';
 
 const profileSchema = z
   .object({
@@ -149,7 +148,7 @@ const ProfilePage = () => {
         <Grid item xs={12} md={4}>
           <Card sx={{ p: 3, textAlign: 'center' }}>
             <Avatar
-              src={user?.avatar?.url || undefined}
+              src={IMG.thumb(user?.avatar?.url) || undefined}
               sx={{ width: 84, height: 84, mx: 'auto', bgcolor: brand.plum, fontSize: 30, fontWeight: 700 }}
             >
               {initials(user?.name)}

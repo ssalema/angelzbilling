@@ -44,6 +44,90 @@ export const imageUpload = multer({
   limits: { fileSize: MAX_IMAGE_BYTES, files: 1, fields: 20 },
 });
 
+/**
+ * Caps how many uploads may be in flight at once, across the whole process.
+ *
+ * Memory storage is what makes this necessary. Every byte of every in-flight
+ * upload is held in the heap until Cloudinary has taken it, and the multer
+ * limits above are per-REQUEST: one request can hold 7 × 30 MB, so ten
+ * concurrent uploads is roughly 2 GB and the process is killed. Nothing else in
+ * the stack bounds it — the rate limiter counts requests over fifteen minutes,
+ * which says nothing about how many are running right now.
+ *
+ * So uploads queue instead of piling up. A burst is served a few at a time and
+ * the rest wait their turn, which is slower for the user who clicked last and
+ * survivable for everyone, rather than fast for everyone until the container
+ * dies. The queue itself is bounded too: past `maxQueued` the request is
+ * refused immediately with a 503 and a retry hint, because a queue that grows
+ * without limit is just the same memory problem wearing a hat.
+ *
+ * Tune with UPLOAD_MAX_CONCURRENT. The default of 3 assumes the 512 MB-ish
+ * container these apps usually run in: 3 × 30 MB of buffers leaves plenty of
+ * headroom for everything else the process is doing.
+ */
+const createUploadGate = ({ maxConcurrent, maxQueued = 20, timeoutMs = 30_000 }) => {
+  let active = 0;
+  const queue = [];
+
+  const release = () => {
+    active -= 1;
+    const next = queue.shift();
+    if (next) {
+      active += 1;
+      next();
+    }
+  };
+
+  return (req, res, next) => {
+    // Release exactly once, whichever way the response ends — a client that
+    // disconnects mid-upload must not leak a slot and shrink the pool forever.
+    let released = false;
+    const releaseOnce = () => {
+      if (released) return;
+      released = true;
+      release();
+    };
+
+    const start = () => {
+      res.on('finish', releaseOnce);
+      res.on('close', releaseOnce);
+      next();
+    };
+
+    if (active < maxConcurrent) {
+      active += 1;
+      return start();
+    }
+
+    if (queue.length >= maxQueued) {
+      res.set('Retry-After', '5');
+      return next(
+        ApiError.serviceUnavailable('The server is busy handling other uploads. Please try again in a moment.')
+      );
+    }
+
+    // Do not let a slot be held forever by a stalled client.
+    const timer = setTimeout(() => {
+      const index = queue.indexOf(queued);
+      if (index !== -1) queue.splice(index, 1);
+      res.set('Retry-After', '5');
+      next(ApiError.badRequest('The upload queue timed out. Please try again.'));
+    }, timeoutMs);
+
+    const queued = () => {
+      clearTimeout(timer);
+      start();
+    };
+
+    queue.push(queued);
+    return undefined;
+  };
+};
+
+export const uploadGate = createUploadGate({
+  maxConcurrent: Number.parseInt(process.env.UPLOAD_MAX_CONCURRENT, 10) || 3,
+});
+
 /** Per-file size check — images get a tighter cap than the multer-wide limit. */
 export const enforceFileLimits = (req, _res, next) => {
   const files = req.files || (req.file ? [req.file] : []);

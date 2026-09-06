@@ -19,12 +19,10 @@ import {
   LinearProgress,
   Tooltip,
 } from '@mui/material';
-import {
-  ChevronLeft,
-  ChevronRight,
-  SaveOutlined,
-  PublishedWithChangesOutlined,
-} from '@mui/icons-material';
+import ChevronLeft from '@mui/icons-material/ChevronLeft';
+import ChevronRight from '@mui/icons-material/ChevronRight';
+import SaveOutlined from '@mui/icons-material/SaveOutlined';
+import PublishedWithChangesOutlined from '@mui/icons-material/PublishedWithChangesOutlined';
 
 import PageHeader from '../../components/common/PageHeader.jsx';
 import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';

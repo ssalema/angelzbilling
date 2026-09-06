@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useFormContext, useWatch } from 'react-hook-form';
 import { Grid, TextField, Autocomplete, InputAdornment, CircularProgress } from '@mui/material';
-import { CheckCircleOutlined, ErrorOutlineRounded, PublicRounded } from '@mui/icons-material';
+import CheckCircleOutlined from '@mui/icons-material/CheckCircleOutlined';
+import ErrorOutlineRounded from '@mui/icons-material/ErrorOutlineRounded';
+import PublicRounded from '@mui/icons-material/PublicRounded';
 
 import { COUNTRIES, DEFAULT_COUNTRY, postalMetaFor } from '../../utils/countries.js';
 import { geoApi } from '../../api/endpoints.js';

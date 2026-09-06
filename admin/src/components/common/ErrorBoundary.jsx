@@ -1,6 +1,7 @@
 import { Component } from 'react';
 import { Box, Typography, Button, Stack, Alert, AlertTitle } from '@mui/material';
-import { RefreshRounded, HomeOutlined } from '@mui/icons-material';
+import RefreshRounded from '@mui/icons-material/RefreshRounded';
+import HomeOutlined from '@mui/icons-material/HomeOutlined';
 import { FONT, brand } from '../../theme/index.js';
 
 /**

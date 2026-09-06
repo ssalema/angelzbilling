@@ -24,14 +24,12 @@ import {
   Collapse,
   Avatar,
 } from '@mui/material';
-import {
-  AddRounded,
-  DeleteOutline,
-  AutoAwesome,
-  KeyboardArrowUp,
-  KeyboardArrowDown,
-  SearchRounded,
-} from '@mui/icons-material';
+import AddRounded from '@mui/icons-material/AddRounded';
+import DeleteOutline from '@mui/icons-material/DeleteOutline';
+import AutoAwesome from '@mui/icons-material/AutoAwesome';
+import KeyboardArrowUp from '@mui/icons-material/KeyboardArrowUp';
+import KeyboardArrowDown from '@mui/icons-material/KeyboardArrowDown';
+import SearchRounded from '@mui/icons-material/SearchRounded';
 
 import { RHFTextField, RHFSelect, RHFChipInput, RHFNumberField } from '../../../components/form/RHFControls.jsx';
 import { EmptyState } from '../../../components/common/StateViews.jsx';

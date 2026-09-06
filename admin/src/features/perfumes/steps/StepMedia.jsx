@@ -1,6 +1,6 @@
 import { Typography, Alert, AlertTitle, Stack } from '@mui/material';
 import { useController, useFormContext } from 'react-hook-form';
-import { InfoOutlined } from '@mui/icons-material';
+import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import MediaUploader from '../../../components/common/MediaUploader.jsx';
 import { SectionCard } from './StepBasicInfo.jsx';
 import { surface } from '../../../theme/index.js';

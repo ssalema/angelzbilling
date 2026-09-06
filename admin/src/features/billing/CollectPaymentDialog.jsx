@@ -14,7 +14,7 @@ import {
   CircularProgress,
   InputAdornment,
 } from '@mui/material';
-import { PaymentsOutlined } from '@mui/icons-material';
+import PaymentsOutlined from '@mui/icons-material/PaymentsOutlined';
 
 import SummaryRow from '../../components/common/SummaryRow.jsx';
 import SectionTitle from '../../components/common/SectionTitle.jsx';

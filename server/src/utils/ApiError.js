@@ -39,6 +39,16 @@ export class ApiError extends Error {
   static internal(message = 'Something went wrong') {
     return new ApiError(500, message, [], false);
   }
+
+  /**
+   * The server is healthy but deliberately shedding load right now — a full
+   * upload queue, say. Operational and retryable, which is exactly what 503
+   * means and why this is not a 500: nothing is broken, the client should just
+   * come back. Pair it with a Retry-After header at the call site.
+   */
+  static serviceUnavailable(message = 'The server is busy. Please try again in a moment.') {
+    return new ApiError(503, message);
+  }
 }
 
 export default ApiError;

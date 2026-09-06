@@ -11,7 +11,8 @@
     "seed": "node src/seed/seed.js",
     "import:perfumes": "node src/seed/importPerfumes.js",
     "backfill:payments": "node src/seed/backfillPayments.js",
-    "test": "node tests/api.e2e.mjs"
+    "test": "node tests/api.e2e.mjs",
+    "migrate:indexes": "node src/seed/syncIndexes.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -24,10 +25,12 @@
     "express-mongo-sanitize": "^2.2.0",
     "express-rate-limit": "^7.4.1",
     "helmet": "^8.0.0",
+    "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.8.1",
     "morgan": "^1.10.0",
     "multer": "^2.3.0",
+    "rate-limit-redis": "^4.3.1",
     "slugify": "^1.6.6",
     "winston": "^3.16.0",
     "xss": "^1.0.15",

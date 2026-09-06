@@ -1,11 +1,14 @@
 import { Card, Box, Typography, Stack, Divider, Button, Avatar, Badge } from '@mui/material';
-import { ReceiptLongOutlined, Inventory2Outlined, WarningAmberRounded } from '@mui/icons-material';
+import ReceiptLongOutlined from '@mui/icons-material/ReceiptLongOutlined';
+import Inventory2Outlined from '@mui/icons-material/Inventory2Outlined';
+import WarningAmberRounded from '@mui/icons-material/WarningAmberRounded';
 import { Link as RouterLink } from 'react-router-dom';
 import StatusChip from '../../../components/common/StatusChip.jsx';
 import SectionTitle from '../../../components/common/SectionTitle.jsx';
 import { TableSkeleton, ErrorState, EmptyState } from '../../../components/common/StateViews.jsx';
 import { formatCurrency, formatDate, formatGrams, initials, stockStatus, truncate } from '../../../utils/format.js';
 import { CARD_HEAD_PAD, CARD_PAD, ICON, brand, surface } from '../../../theme/index.js';
+import { IMG } from '../../../utils/image.js';
 
 const PanelHeader = ({ title, subtitle, actionLabel, actionTo }) => (
   <>
@@ -140,7 +143,7 @@ export const LowStockAlerts = ({ data, loading, error, onRetry }) => (
             >
               <Avatar
                 variant="rounded"
-                src={perfume.image || undefined}
+                src={IMG.avatar(perfume.image) || undefined}
                 sx={{ width: 40, height: 40, bgcolor: surface.plumSoft }}
               >
                 <Inventory2Outlined sx={{ fontSize: ICON.action, color: brand.plumLight }} />

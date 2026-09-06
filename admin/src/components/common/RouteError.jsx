@@ -1,6 +1,8 @@
 import { useRouteError, isRouteErrorResponse, useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import { Box, Card, Typography, Button, Stack, Alert, AlertTitle } from '@mui/material';
-import { RefreshRounded, HomeOutlined, ErrorOutline } from '@mui/icons-material';
+import RefreshRounded from '@mui/icons-material/RefreshRounded';
+import HomeOutlined from '@mui/icons-material/HomeOutlined';
+import ErrorOutline from '@mui/icons-material/ErrorOutline';
 import { FONT, ICON, brand, surface } from '../../theme/index.js';
 
 /**

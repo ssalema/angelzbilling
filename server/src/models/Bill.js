@@ -164,6 +164,20 @@ const billSchema = new mongoose.Schema(
 billSchema.index({ createdAt: -1 });
 billSchema.index({ 'branch.id': 1, createdAt: -1 });
 billSchema.index({ status: 1, createdAt: -1 });
+/**
+ * The bill list is nearly always branch-scoped AND status-filtered before it is
+ * sorted by date, and a two-field index cannot serve all three. This is the
+ * shape that screen actually asks for.
+ */
+billSchema.index({ 'branch.id': 1, status: 1, createdAt: -1 });
+/**
+ * `grandTotal` is offered as a sort column by the list endpoint but had no
+ * index, so sorting by it loaded every matching bill and sorted them in memory
+ * — which Mongo aborts outright once the set passes 32 MB. Every other sortable
+ * column (createdAt, billNumber, status, amountDue) was already indexed; this
+ * was the one that would have failed, and only once the shop got busy.
+ */
+billSchema.index({ grandTotal: -1 });
 billSchema.index({ billNumber: 'text', 'customer.name': 'text', 'customer.mobile': 'text' });
 
 billSchema.virtual('totalQuantity').get(function totalQuantity() {

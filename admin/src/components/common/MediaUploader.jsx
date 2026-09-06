@@ -9,19 +9,18 @@ import {
   Tooltip,
   CircularProgress,
 } from '@mui/material';
-import {
-  CloudUpload,
-  DeleteOutline,
-  ChevronLeft,
-  ChevronRight,
-  StarRounded,
-  AddPhotoAlternateOutlined,
-} from '@mui/icons-material';
+import CloudUpload from '@mui/icons-material/CloudUpload';
+import DeleteOutline from '@mui/icons-material/DeleteOutline';
+import ChevronLeft from '@mui/icons-material/ChevronLeft';
+import ChevronRight from '@mui/icons-material/ChevronRight';
+import StarRounded from '@mui/icons-material/StarRounded';
+import AddPhotoAlternateOutlined from '@mui/icons-material/AddPhotoAlternateOutlined';
 import { uploadApi } from '../../api/endpoints.js';
 import { IMAGE_TYPES } from '../../utils/constants.js';
 import Dropzone from './Dropzone.jsx';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { ICON, brand, surface } from '../../theme/index.js';
+import { IMG } from '../../utils/image.js';
 
 
 /**
@@ -162,7 +161,7 @@ const MediaUploader = ({ images = [], onImagesChange, maxImages = 5, folder = 'p
             >
               <Box
                 component="img"
-                src={image.url}
+                src={IMG.thumb(image.url)}
                 alt={image.alt || `Perfume image ${index + 1}`}
                 loading="lazy"
                 sx={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }}

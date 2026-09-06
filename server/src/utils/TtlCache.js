@@ -48,9 +48,40 @@ export default class TtlCache {
     }
   }
 
-  /** Drops everything. Called when the underlying data changes. */
+  /** Drops everything. The blunt instrument — prefer `deleteByPrefix`. */
   clear() {
     this.store.clear();
+  }
+
+  /**
+   * Drops only the entries whose key starts with one of `prefixes`.
+   *
+   * This is what keeps the cache useful in a live shop. Clearing the whole map
+   * on every write meant a till raising bills all afternoon flushed the
+   * analytics cache every few seconds, so the 30 second TTL never survived long
+   * enough to serve anything and the hit rate sat near zero exactly when load
+   * was highest. Keys lead with the branch scope, so a bill raised at one
+   * branch now evicts that branch and the all-branches roll-up, and leaves the
+   * other branches' cached figures standing.
+   */
+  deleteByPrefix(prefixes = []) {
+    const list = Array.isArray(prefixes) ? prefixes : [prefixes];
+    if (!list.length) return 0;
+
+    let removed = 0;
+    for (const key of this.store.keys()) {
+      if (list.some((prefix) => key.startsWith(prefix))) {
+        this.store.delete(key);
+        removed += 1;
+      }
+    }
+    return removed;
+  }
+
+  /** Hit rate as a 0-1 fraction, for logging or a health endpoint. */
+  get stats() {
+    const total = this.hits + this.misses;
+    return { hits: this.hits, misses: this.misses, size: this.store.size, hitRate: total ? this.hits / total : 0 };
   }
 
   get size() {

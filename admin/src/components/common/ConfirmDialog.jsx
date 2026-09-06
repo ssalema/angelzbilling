@@ -9,7 +9,7 @@ import {
   Box,
   CircularProgress,
 } from '@mui/material';
-import { WarningAmberRounded } from '@mui/icons-material';
+import WarningAmberRounded from '@mui/icons-material/WarningAmberRounded';
 import DialogCloseButton from './DialogCloseButton.jsx';
 import { FONT, ICON, surface } from '../../theme/index.js';
 

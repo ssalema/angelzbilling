@@ -14,14 +14,12 @@ import {
   Tooltip,
   Button,
 } from '@mui/material';
-import {
-  MenuRounded,
-  LogoutOutlined,
-  PersonOutline,
-  LockResetOutlined,
-  AddCardOutlined,
-  StorefrontOutlined,
-} from '@mui/icons-material';
+import MenuRounded from '@mui/icons-material/MenuRounded';
+import LogoutOutlined from '@mui/icons-material/LogoutOutlined';
+import PersonOutline from '@mui/icons-material/PersonOutline';
+import LockResetOutlined from '@mui/icons-material/LockResetOutlined';
+import AddCardOutlined from '@mui/icons-material/AddCardOutlined';
+import StorefrontOutlined from '@mui/icons-material/StorefrontOutlined';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
@@ -29,6 +27,7 @@ import { useSnackbar } from '../context/SnackbarContext.jsx';
 import ConfirmDialog from '../components/common/ConfirmDialog.jsx';
 import { ROLE_LABELS, locationLabel } from '../utils/constants.js';
 import { ICON, brand, surface } from '../theme/index.js';
+import { IMG } from '../utils/image.js';
 
 const Topbar = ({ onMenuClick }) => {
   const { user, logout, isSuperAdmin } = useAuth();
@@ -117,7 +116,7 @@ const Topbar = ({ onMenuClick }) => {
           <Tooltip title="Account">
             <IconButton onClick={(e) => setAnchor(e.currentTarget)} sx={{ ml: 0.5 }}>
               <Avatar
-                src={user?.avatar?.url || undefined}
+                src={IMG.avatar(user?.avatar?.url) || undefined}
                 sx={{ width: 34, height: 34, bgcolor: brand.plum, fontSize: 13, fontWeight: 700 }}
               >
                 {user?.name?.[0]?.toUpperCase()}

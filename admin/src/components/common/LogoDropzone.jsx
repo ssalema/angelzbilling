@@ -1,10 +1,11 @@
 import { Box, Typography, Stack, CircularProgress } from '@mui/material';
-import { AddPhotoAlternateOutlined } from '@mui/icons-material';
+import AddPhotoAlternateOutlined from '@mui/icons-material/AddPhotoAlternateOutlined';
 
 import Dropzone from './Dropzone.jsx';
 import ImageActions, { imageActionsHover } from './ImageActions.jsx';
 import { IMAGE_TYPES } from '../../utils/constants.js';
 import { LOGO_FRAME, brand, ICON } from '../../theme/index.js';
+import { IMG } from '../../utils/image.js';
 
 /**
  * The single-image slot — store logo, favicon, branch logo.
@@ -76,7 +77,7 @@ const LogoDropzone = ({
         {busy ? (
           <CircularProgress size={26} />
         ) : value ? (
-          <Box component="img" src={value} alt={alt} sx={LOGO_FRAME.preview} />
+          <Box component="img" src={IMG.logo(value)} alt={alt} sx={LOGO_FRAME.preview} />
         ) : (
           <Stack alignItems="center" spacing={0.5}>
             <AddPhotoAlternateOutlined sx={{ fontSize: ICON.illustration, color: brand.inkSoft }} />

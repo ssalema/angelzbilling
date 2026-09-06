@@ -42,6 +42,31 @@ const decorate = (perfume) => {
   };
 };
 
+/**
+ * Same idea as the bill search: recognise a SKU and seek the index for it,
+ * rather than running an unindexable five-field `$or` over the catalogue.
+ *
+ * SKUs are stored uppercase and both `sku` and `variants.sku` are indexed, so a
+ * term that looks like one becomes an anchored, case-sensitive prefix match.
+ * Anything else is treated as a name/brand search, which still scans — a
+ * catalogue is orders of magnitude smaller than the bill collection, so that is
+ * an acceptable cost where it was not for bills.
+ */
+const buildPerfumeSearch = (search) => {
+  const term = String(search || '').trim();
+  if (!term) return {};
+
+  // Uppercase alphanumerics with optional dashes/underscores is a SKU, not a
+  // perfume name — no one types "AP-OUD-100" looking for a name.
+  if (/^[A-Za-z0-9][A-Za-z0-9_-]{2,}$/.test(term) && /\d/.test(term)) {
+    const prefix = new RegExp(`^${escapeRegex(term.toUpperCase())}`);
+    return { $or: [{ sku: prefix }, { 'variants.sku': prefix }] };
+  }
+
+  const rx = new RegExp(escapeRegex(term), 'i');
+  return { $or: [{ name: rx }, { brand: rx }, { tags: rx }] };
+};
+
 export const listPerfumes = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
   const { search, category, subCategory, status, stock, sort } = req.query;
@@ -51,10 +76,7 @@ export const listPerfumes = asyncHandler(async (req, res) => {
   if (category) filter.category = category;
   if (subCategory) filter.subCategory = subCategory;
 
-  if (search) {
-    const rx = new RegExp(escapeRegex(search), 'i');
-    filter.$or = [{ name: rx }, { sku: rx }, { brand: rx }, { 'variants.sku': rx }, { tags: rx }];
-  }
+  if (search) Object.assign(filter, buildPerfumeSearch(search));
 
   // Stock filters work on the perfume's single grams-on-hand figure, and "low"
   // is measured against each perfume's own threshold, not one hard-coded number.
@@ -69,8 +91,24 @@ export const listPerfumes = asyncHandler(async (req, res) => {
     if (stock === 'in') filter.$expr = { $gt: [gramsOnHand, threshold] };
   }
 
+  /**
+   * Only what the table and `decorate` actually read. An unprojected perfume
+   * drags along `description` (up to 8,000 characters), `faqs`, `features`,
+   * every video and the full variant rows — none of it drawn in a list, and on
+   * a 50-row page it is the overwhelming majority of the response.
+   *
+   * The variant subfields are exactly the ones `decorate` and
+   * `smallestFillGrams` need: price for the range, size/label/options to work
+   * out the smallest fill, isActive to ignore retired sizes, and the image only
+   * as a fallback when the perfume itself has none.
+   */
+  const LIST_FIELDS =
+    'name sku brand category subCategory mrp discountPercent finalPrice stock lowStockThreshold ' +
+    'sizeGrams hasVariants status createdAt images.url ' +
+    'variants.sellingPrice variants.sizeGrams variants.label variants.options variants.isActive variants.image.url';
+
   const [items, total] = await Promise.all([
-    Perfume.find(filter).sort(getSort(sort, SORTABLE)).skip(skip).limit(limit).lean(),
+    Perfume.find(filter).select(LIST_FIELDS).sort(getSort(sort, SORTABLE)).skip(skip).limit(limit).lean(),
     Perfume.countDocuments(filter),
   ]);
 

@@ -12,6 +12,7 @@ import {
   getRecentBills,
   getLowStock,
   getBranchPerformance,
+  getOverview,
 } from './dashboard.controller.js';
 
 /** Every widget shares the same range contract, so one schema covers them all. */
@@ -36,6 +37,11 @@ router.use(authenticate);
  * and two requests that mean the same thing hash to the same entry.
  */
 const cached = [validate({ query: rangeQuery }), cacheResponse()];
+
+// Every widget for one range in a single response — what the page asks for on
+// load. The per-widget routes below stay for the case a user narrows one card's
+// range on its own. Cached on the same key rules as the rest.
+router.get('/overview', cached, getOverview);
 
 router.get('/summary', cached, getSummary);
 router.get('/revenue-series', cached, getSeries);

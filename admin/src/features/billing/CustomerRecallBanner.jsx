@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, AlertTitle, Box, Button, CircularProgress, Stack, Typography } from '@mui/material';
-import { HistoryRounded, PersonAddAltRounded, WarningAmberRounded } from '@mui/icons-material';
+import HistoryRounded from '@mui/icons-material/HistoryRounded';
+import PersonAddAltRounded from '@mui/icons-material/PersonAddAltRounded';
+import WarningAmberRounded from '@mui/icons-material/WarningAmberRounded';
 
 import useCustomerRecall from './useCustomerRecall.js';
 import PendingBillsDialog from './PendingBillsDialog.jsx';

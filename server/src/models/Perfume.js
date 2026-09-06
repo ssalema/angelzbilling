@@ -145,6 +145,24 @@ const perfumeSchema = new mongoose.Schema(
 perfumeSchema.index({ status: 1, createdAt: -1 });
 perfumeSchema.index({ category: 1, subCategory: 1 });
 perfumeSchema.index({ 'variants.sku': 1 });
+/**
+ * The billing screen's type-ahead filters on `status: 'published'` and sorts by
+ * name — the hottest read in the app, since it fires while a biller types. This
+ * compound serves the filter and the sort from one index scan.
+ *
+ * It also covers the plain `name` sort on the catalogue list. A text index
+ * cannot serve a sort, so the one below does not help here despite covering the
+ * same field.
+ */
+perfumeSchema.index({ status: 1, name: 1 });
+/**
+ * The remaining sortable columns on the catalogue list. Without these, sorting
+ * by price or stock pulled the whole matching set into memory to sort it, which
+ * Mongo refuses to do past 32 MB.
+ */
+perfumeSchema.index({ name: 1 });
+perfumeSchema.index({ mrp: -1 });
+perfumeSchema.index({ stock: 1 });
 perfumeSchema.index({ name: 'text', brand: 'text', sku: 'text', tags: 'text' });
 
 /** Grams on hand. Variants share this one pool, so it is simply `stock`. */

@@ -15,14 +15,12 @@ import {
   Avatar,
   CircularProgress,
 } from '@mui/material';
-import {
-  PrintOutlined,
-  DownloadOutlined,
-  MoreVertRounded,
-  ReplayOutlined,
-  Inventory2Outlined,
-  PaymentsOutlined,
-} from '@mui/icons-material';
+import PrintOutlined from '@mui/icons-material/PrintOutlined';
+import DownloadOutlined from '@mui/icons-material/DownloadOutlined';
+import MoreVertRounded from '@mui/icons-material/MoreVertRounded';
+import ReplayOutlined from '@mui/icons-material/ReplayOutlined';
+import Inventory2Outlined from '@mui/icons-material/Inventory2Outlined';
+import PaymentsOutlined from '@mui/icons-material/PaymentsOutlined';
 
 import PageHeader from '../../components/common/PageHeader.jsx';
 import StatusChip from '../../components/common/StatusChip.jsx';

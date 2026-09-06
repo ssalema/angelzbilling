@@ -29,14 +29,12 @@ import {
   AccordionDetails,
   Skeleton,
 } from '@mui/material';
-import {
-  EditOutlined,
-  CheckRounded,
-  ExpandMore,
-  Inventory2Outlined,
-  LocalOfferOutlined,
-  InfoOutlined,
-} from '@mui/icons-material';
+import EditOutlined from '@mui/icons-material/EditOutlined';
+import CheckRounded from '@mui/icons-material/CheckRounded';
+import ExpandMore from '@mui/icons-material/ExpandMore';
+import Inventory2Outlined from '@mui/icons-material/Inventory2Outlined';
+import LocalOfferOutlined from '@mui/icons-material/LocalOfferOutlined';
+import InfoOutlined from '@mui/icons-material/InfoOutlined';
 
 import PageHeader from '../../components/common/PageHeader.jsx';
 import StatusChip from '../../components/common/StatusChip.jsx';
@@ -57,6 +55,7 @@ import {
   STOCK_LABELS,
 } from '../../utils/format.js';
 import { FONT, CARD_HEAD_PAD, CARD_PAD, DISCOUNT_COLOR, ICON, brand, numericText, surface } from '../../theme/index.js';
+import { IMG } from '../../utils/image.js';
 
 const Row = ({ label, value }) => (
   <Stack direction="row" justifyContent="space-between" spacing={2} sx={{ py: 0.7 }}>
@@ -156,7 +155,8 @@ const PerfumeViewPage = () => {
               {images[activeImage]?.url ? (
                 <Box
                   component="img"
-                  src={images[activeImage].url}
+                  src={IMG.preview(images[activeImage].url)}
+                  loading="lazy"
                   alt={perfume.name}
                   sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />

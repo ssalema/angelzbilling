@@ -7,6 +7,12 @@ const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  /**
+   * Store identity that arrives with the session itself, so SettingsProvider
+   * has something to draw with immediately instead of waiting for this request
+   * to finish and then making one of its own.
+   */
+  const [bootSettings, setBootSettings] = useState(null);
   const [booting, setBooting] = useState(true);
   const [sessionExpired, setSessionExpired] = useState(false);
 
@@ -20,9 +26,14 @@ export const AuthProvider = ({ children }) => {
     const restore = async () => {
       try {
         const response = await api.post('/auth/refresh');
-        const { accessToken, user: restored } = response.data.data;
+        const { accessToken, user: restored, settings } = response.data.data;
         setAccessToken(accessToken);
-        if (!cancelled) setUser(restored);
+        if (!cancelled) {
+          setUser(restored);
+          // Arrives with the session, so the settings request that used to
+          // follow this one is no longer needed on boot.
+          if (settings) setBootSettings(settings);
+        }
       } catch {
         setAccessToken(null);
         if (!cancelled) setUser(null);
@@ -46,9 +57,10 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = useCallback(async (credentials) => {
-    const { user: loggedIn, accessToken } = await authApi.login(credentials);
+    const { user: loggedIn, accessToken, settings } = await authApi.login(credentials);
     setAccessToken(accessToken);
     setUser(loggedIn);
+    if (settings) setBootSettings(settings);
     setSessionExpired(false);
     return loggedIn;
   }, []);
@@ -61,6 +73,9 @@ export const AuthProvider = ({ children }) => {
     }
     setAccessToken(null);
     setUser(null);
+    // Belongs to the session that just ended. Left in place, the login screen
+    // would render the signed-in store profile instead of the public one.
+    setBootSettings(null);
   }, []);
 
   const refreshUser = useCallback(async () => {
@@ -97,6 +112,7 @@ export const AuthProvider = ({ children }) => {
     () => ({
       user,
       booting,
+      bootSettings,
       sessionExpired,
       isAuthenticated: Boolean(user),
       isSuperAdmin,
@@ -115,6 +131,7 @@ export const AuthProvider = ({ children }) => {
     [
       user,
       booting,
+      bootSettings,
       sessionExpired,
       isSuperAdmin,
       isMainSuperAdmin,

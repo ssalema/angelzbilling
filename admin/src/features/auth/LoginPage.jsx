@@ -15,12 +15,16 @@ import {
   CircularProgress,
   Divider,
 } from '@mui/material';
-import { Visibility, VisibilityOff, MailOutline, LockOutlined } from '@mui/icons-material';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import MailOutline from '@mui/icons-material/MailOutline';
+import LockOutlined from '@mui/icons-material/LockOutlined';
 import { RHFTextField } from '../../components/form/RHFControls.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
 import { applyServerErrors } from '../../api/client.js';
 import { FONT, ICON, brand, onPlum } from '../../theme/index.js';
+import { IMG } from '../../utils/image.js';
 
 const schema = z.object({
   email: z.string().trim().min(1, 'Email is required').email('Enter a valid email address'),
@@ -138,7 +142,7 @@ const LoginPage = () => {
       <Box sx={{ display: 'grid', placeItems: 'center', p: { xs: 2.5, sm: 4 } }}>
         <Card sx={{ p: { xs: 3, sm: 4.5 }, width: '100%', maxWidth: 420, border: 0, boxShadow: 'none', bgcolor: 'transparent' }}>
           {logo ? (
-            <Box component="img" src={logo} alt={siteName} sx={{ display: 'block', width: '100%', maxWidth: '100%', height: 'auto', mb: 1, objectFit: 'contain', objectPosition: 'left' }} />
+            <Box component="img" src={IMG.logo(logo)} alt={siteName} sx={{ display: 'block', width: '100%', maxWidth: '100%', height: 'auto', mb: 1, objectFit: 'contain', objectPosition: 'left' }} />
           ) : (
             <Box sx={{ display: { md: 'none' }, mb: 3 }}>
               <Typography sx={{ fontFamily: "'Cormorant Garamond', serif", fontSize: '1.7rem', fontWeight: 700, color: brand.plum }}>

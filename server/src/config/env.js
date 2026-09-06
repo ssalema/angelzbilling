@@ -30,6 +30,14 @@ export const env = {
 
   mongoUri: process.env.MONGODB_URI,
 
+  /**
+   * Optional. When set, the analytics cache and the rate limiters move off
+   * per-process memory and into Redis, which is what makes running more than
+   * one API instance correct rather than merely possible — see config/redis.js.
+   * Unset is the supported single-instance default.
+   */
+  redisUrl: process.env.REDIS_URL || '',
+
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET,
     refreshSecret: process.env.JWT_REFRESH_SECRET,

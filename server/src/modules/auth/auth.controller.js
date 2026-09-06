@@ -3,7 +3,28 @@ import { sendSuccess } from '../../utils/ApiResponse.js';
 import { REFRESH_COOKIE, refreshCookieOptions } from '../../utils/tokens.js';
 import * as authService from './auth.service.js';
 import User from '../../models/User.js';
+import Settings from '../../models/Settings.js';
 import { HEAD_OFFICE_ID, HEAD_OFFICE_LABEL, HEAD_OFFICE_CODE } from '../../utils/locations.js';
+
+/**
+ * The store identity the app needs before it can draw anything — the sidebar
+ * logo, the browser tab, the currency symbol, and whether branch-aware screens
+ * exist at all.
+ *
+ * It rides along with the session because the client otherwise could not ask
+ * for it until the session existed: settings needs a token, so the browser did
+ * an auth round trip and THEN a settings round trip, two serial requests before
+ * first paint. Sending it here collapses that to one. It costs nothing to add —
+ * `Settings.getCached` serves it from process memory — and it is the same data
+ * any signed-in account can already read from GET /settings.
+ */
+const storeProfile = (settings) => ({
+  siteName: settings.siteName,
+  tagline: settings.tagline,
+  branding: settings.branding,
+  billing: settings.billing,
+  features: { branches: settings.features?.branches !== false },
+});
 
 const publicUser = (user) => ({
   id: user._id,
@@ -55,7 +76,7 @@ export const loginController = asyncHandler(async (req, res) => {
 
   return sendSuccess(res, {
     message: `Welcome back, ${user.name.split(' ')[0]}`,
-    data: { user: publicUser(user), accessToken },
+    data: { user: publicUser(user), accessToken, settings: storeProfile(await Settings.getCached()) },
   });
 });
 
@@ -70,7 +91,7 @@ export const refreshController = asyncHandler(async (req, res) => {
 
   return sendSuccess(res, {
     message: 'Session refreshed',
-    data: { user: publicUser(user), accessToken },
+    data: { user: publicUser(user), accessToken, settings: storeProfile(await Settings.getCached()) },
   });
 });
 

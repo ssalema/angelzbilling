@@ -9,7 +9,8 @@ import {
   Chip,
   Divider,
 } from '@mui/material';
-import { TrendingUp, TrendingDown } from '@mui/icons-material';
+import TrendingUp from '@mui/icons-material/TrendingUp';
+import TrendingDown from '@mui/icons-material/TrendingDown';
 import {
   AreaChart,
   Area,

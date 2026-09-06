@@ -1,5 +1,5 @@
 import { Box, Typography, Breadcrumbs, Link, Stack } from '@mui/material';
-import { NavigateNext } from '@mui/icons-material';
+import NavigateNext from '@mui/icons-material/NavigateNext';
 import { Link as RouterLink } from 'react-router-dom';
 import { FONT, ICON } from '../../theme/index.js';
 

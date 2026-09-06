@@ -1,5 +1,7 @@
 import { Card, Box, Typography, Stack, Skeleton } from '@mui/material';
-import { TrendingUp, TrendingDown, TrendingFlat } from '@mui/icons-material';
+import TrendingUp from '@mui/icons-material/TrendingUp';
+import TrendingDown from '@mui/icons-material/TrendingDown';
+import TrendingFlat from '@mui/icons-material/TrendingFlat';
 import { CARD_PAD, ICON, numericText } from '../../../theme/index.js';
 
 

@@ -1,6 +1,9 @@
 import { Card, Typography, Box, Button, Stack, IconButton, Grid, Chip, Tooltip } from '@mui/material';
 import { useFieldArray, useFormContext } from 'react-hook-form';
-import { AddRounded, DeleteOutline, HelpOutline, CheckCircleOutline } from '@mui/icons-material';
+import AddRounded from '@mui/icons-material/AddRounded';
+import DeleteOutline from '@mui/icons-material/DeleteOutline';
+import HelpOutline from '@mui/icons-material/HelpOutline';
+import CheckCircleOutline from '@mui/icons-material/CheckCircleOutline';
 import { RHFTextField, RHFChipInput } from '../../../components/form/RHFControls.jsx';
 import { EmptyState } from '../../../components/common/StateViews.jsx';
 import { SectionCard } from './StepBasicInfo.jsx';

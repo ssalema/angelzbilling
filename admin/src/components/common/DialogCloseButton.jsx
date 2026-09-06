@@ -1,5 +1,5 @@
 import { IconButton, Tooltip } from '@mui/material';
-import { Close } from '@mui/icons-material';
+import Close from '@mui/icons-material/Close';
 
 /**
  * The single way out of a dialog: a cross in the top right corner.

@@ -21,7 +21,10 @@ import {
   FormControlLabel,
   Alert,
 } from '@mui/material';
-import { AddRounded, EditOutlined, DeleteOutline, StoreOutlined } from '@mui/icons-material';
+import AddRounded from '@mui/icons-material/AddRounded';
+import EditOutlined from '@mui/icons-material/EditOutlined';
+import DeleteOutline from '@mui/icons-material/DeleteOutline';
+import StoreOutlined from '@mui/icons-material/StoreOutlined';
 
 import DataTable, { actionsColumn } from '../../components/common/DataTable.jsx';
 import StatusChip from '../../components/common/StatusChip.jsx';
@@ -48,6 +51,7 @@ import {
   formatContactNumber,
 } from '../../utils/countries.js';
 import { CARD_HEAD_PAD, ICON, LOGO_FRAME } from '../../theme/index.js';
+import { IMG } from '../../utils/image.js';
 
 const schema = z
   .object({
@@ -241,7 +245,8 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
           {row.effectiveFavicon && (
             <Box
               component="img"
-              src={row.effectiveFavicon}
+              src={IMG.avatar(row.effectiveFavicon)}
+              loading="lazy"
               alt={row.name}
               sx={{ width: 28, height: 28, objectFit: 'contain', flexShrink: 0, borderRadius: 0.75 }}
             />

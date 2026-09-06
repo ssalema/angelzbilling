@@ -1,5 +1,5 @@
 import { Box, Typography, Stack, Tooltip } from '@mui/material';
-import { InfoOutlined } from '@mui/icons-material';
+import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import { ICON } from '../../theme/index.js';
 
 /**

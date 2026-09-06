@@ -17,6 +17,7 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { ROLE_LABELS, locationLabel } from '../utils/constants.js';
 import { FONT, ICON, brand, onPlum } from '../theme/index.js';
+import { IMG } from '../utils/image.js';
 
 export const SIDEBAR_WIDTH = 264;
 
@@ -51,7 +52,7 @@ const SidebarContent = ({ onNavigate }) => {
       {/* Brand */}
       <Box sx={{ px: 1, py: 1, display: 'flex', alignItems: 'center', justifyContent: logo ? 'center' : 'flex-start', gap: 1.5 }}>
         {logo ? (
-          <Box component="img" src={logo} alt={siteName} sx={{ display: 'block', width: '100%', maxWidth: '100%', height: 'auto', maxHeight: 'auto', objectFit: 'contain' }} />
+          <Box component="img" src={IMG.logo(logo)} alt={siteName} sx={{ display: 'block', width: '100%', maxWidth: '100%', height: 'auto', maxHeight: 'auto', objectFit: 'contain' }} />
         ) : (
           <>
             <Box
@@ -149,7 +150,7 @@ const SidebarContent = ({ onNavigate }) => {
       <Box sx={{ p: 2 }}>
         <Stack direction="row" spacing={1.25} alignItems="center">
           <Avatar
-            src={user?.avatar?.url || undefined}
+            src={IMG.avatar(user?.avatar?.url) || undefined}
             sx={{ width: 34, height: 34, bgcolor: brand.gold, color: brand.ink, fontSize: 13, fontWeight: 700 }}
           >
             {user?.name?.[0]?.toUpperCase()}

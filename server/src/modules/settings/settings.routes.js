@@ -2,7 +2,7 @@ import { Router } from 'express';
 import authenticate from '../../middlewares/authenticate.js';
 import { requireGlobalSuperAdmin } from '../../middlewares/authorize.js';
 import validate from '../../middlewares/validate.js';
-import { imageUpload, enforceFileLimits } from '../../middlewares/upload.js';
+import { imageUpload, enforceFileLimits, uploadGate } from '../../middlewares/upload.js';
 import {
   getSettings,
   getPublicSettings,
@@ -33,7 +33,15 @@ const mainBusinessOnly = requireGlobalSuperAdmin(
 );
 
 router.patch('/', mainBusinessOnly, validate({ body: updateSettingsSchema }), updateSettings);
-router.post('/branding/:kind', mainBusinessOnly, imageUpload.single('file'), enforceFileLimits, uploadBranding);
+router.post(
+  '/branding/:kind',
+  mainBusinessOnly,
+  // Ahead of multer so a queued request holds no buffer while it waits.
+  uploadGate,
+  imageUpload.single('file'),
+  enforceFileLimits,
+  uploadBranding
+);
 router.delete('/branding/:kind', mainBusinessOnly, removeBranding);
 
 export default router;

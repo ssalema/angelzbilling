@@ -25,9 +25,13 @@ import {
 
 const router = Router();
 router.use(authenticate);
-// Bills, stock and staff counts all feed dashboard figures — any write here
-// makes the cached analytics wrong, so it drops them.
-router.use(invalidateDashboardOnWrite({ except: ['/preview'] }));
+// Bills feed dashboard figures — any write here makes the cached analytics
+// wrong, so it drops them. `scoped` because a bill belongs to exactly one
+// location: raising one at Fort drops Fort's cached figures and the
+// all-branches roll-up, and leaves every other branch's alone. Without that, a
+// busy till flushed the whole cache every few seconds and nothing survived to
+// be served.
+router.use(invalidateDashboardOnWrite({ except: ['/preview'], scoped: true }));
 
 const statsQuery = z.object({
   range: z.enum(['today', 'week', 'month', 'year', 'all', 'custom']).optional().default('month'),

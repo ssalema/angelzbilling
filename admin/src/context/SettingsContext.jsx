@@ -9,7 +9,7 @@ const SettingsContext = createContext(null);
  * so the sidebar, the bill print header and the browser tab all agree.
  */
 export const SettingsProvider = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, booting, bootSettings } = useAuth();
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -25,9 +25,29 @@ export const SettingsProvider = ({ children }) => {
     }
   }, [isAuthenticated]);
 
+  /**
+   * Boot used to cost two serial round trips: this provider reads
+   * `isAuthenticated`, so it could not ask for settings until the auth refresh
+   * had come back, and only then made a request of its own — with the app
+   * showing its splash for both.
+   *
+   * The session response now carries the store profile with it, so for a
+   * signed-in user there is nothing left to fetch here. Only the signed-out
+   * case still needs a request, for the login screen's logo and name.
+   */
   useEffect(() => {
+    // Wait for the auth attempt to resolve; acting on the interim state would
+    // fire the public request and then immediately supersede it.
+    if (booting) return;
+
+    if (bootSettings) {
+      setSettings(bootSettings);
+      setLoading(false);
+      return;
+    }
+
     load();
-  }, [load]);
+  }, [booting, bootSettings, load]);
 
   // Reflect the configured branding in the browser tab.
   useEffect(() => {

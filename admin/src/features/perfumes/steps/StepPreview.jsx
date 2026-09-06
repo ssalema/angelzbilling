@@ -22,16 +22,15 @@ import {
   Radio,
   Paper,
 } from '@mui/material';
-import {
-  CheckCircleRounded,
-  ExpandMore,
-  Inventory2Outlined,
-  ErrorOutline,
-  CheckRounded,
-} from '@mui/icons-material';
+import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
+import ExpandMore from '@mui/icons-material/ExpandMore';
+import Inventory2Outlined from '@mui/icons-material/Inventory2Outlined';
+import ErrorOutline from '@mui/icons-material/ErrorOutline';
+import CheckRounded from '@mui/icons-material/CheckRounded';
 import { formatCurrency, formatGrams, formatNumber, unitsFromGrams } from '../../../utils/format.js';
 import { basePricingFor, computeFinalPrice, sizeGramsFor } from '../perfumeSchema.js';
 import { CARD_PAD, DISCOUNT_COLOR, ICON, brand, numericText, surface } from '../../../theme/index.js';
+import { IMG } from '../../../utils/image.js';
 
 const Row = ({ label, value }) => (
   <Stack direction="row" justifyContent="space-between" spacing={2} sx={{ py: 0.65 }}>
@@ -104,7 +103,8 @@ const StepPreview = () => {
               {data.images?.[0]?.url ? (
                 <Box
                   component="img"
-                  src={data.images[0].url}
+                  src={IMG.preview(data.images[0].url)}
+                  loading="lazy"
                   alt={data.name}
                   sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />

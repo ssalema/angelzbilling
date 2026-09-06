@@ -41,6 +41,48 @@ const splitPayment = (grandTotal, requested) => {
   return { amountPaid: paid, amountDue: round2(total - paid), status: paid >= total ? 'paid' : 'pending' };
 };
 
+/**
+ * Turns the one search box into a predicate the database can actually seek on.
+ *
+ * The old version ran a case-insensitive unanchored regex across three fields
+ * at once. An `$or` where any branch is unindexed forces a full collection
+ * scan, and a case-insensitive regex is unindexable even when anchored — so
+ * every keystroke read every bill ever written.
+ *
+ * What billers actually type is a phone number or a bill number, and both of
+ * those are indexed and stored in a normalised case. Recognising the shape of
+ * the term first means the common searches become a single index seek:
+ *
+ *   "9876"        digits      -> anchored prefix on the indexed customer.mobile
+ *   "AP2609"      bill number -> anchored prefix on the unique billNumber index
+ *   "priya"       anything else -> name match, the one case that still scans
+ *
+ * The name branch keeps the old behaviour deliberately: substring matching on a
+ * human name cannot be indexed without a case-insensitive collation, and it is
+ * the rarest of the three. It is now reached only when the term is not a number.
+ */
+const buildBillSearch = (search) => {
+  const term = String(search || '').trim();
+  if (!term) return {};
+
+  // Mobile numbers are stored digits-only and the field is indexed. Anchored
+  // and case-sensitive (digits have no case), so this is a real index scan.
+  if (/^\d+$/.test(term)) return { 'customer.mobile': new RegExp(`^${escapeRegex(term)}`) };
+
+  // Bill numbers look like AP260900001 and are stored uppercase behind a unique
+  // index. Uppercasing the term lets a lowercase search still seek the index.
+  if (/^[A-Za-z]{1,6}\d*$/.test(term)) {
+    return { billNumber: new RegExp(`^${escapeRegex(term.toUpperCase())}`) };
+  }
+
+  // A name, or something with punctuation in it. Still try the bill number as a
+  // prefix so a pasted "AP-2609" style term is not lost.
+  const rx = new RegExp(escapeRegex(term), 'i');
+  return {
+    $or: [{ 'customer.name': rx }, { billNumber: new RegExp(`^${escapeRegex(term.toUpperCase())}`) }],
+  };
+};
+
 export const listBills = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
   const { search, status, paymentMethod, billedBy, range, from, to, sort } = req.query;
@@ -56,16 +98,26 @@ export const listBills = asyncHandler(async (req, res) => {
   if (paymentMethod !== 'all') filter.paymentMethod = paymentMethod;
   if (billedBy && billedBy !== 'all') filter['billedBy.id'] = new mongoose.Types.ObjectId(String(billedBy));
 
-  if (search) {
-    const rx = new RegExp(escapeRegex(search), 'i');
-    filter.$or = [{ billNumber: rx }, { 'customer.name': rx }, { 'customer.mobile': rx }];
-  }
+  if (search) Object.assign(filter, buildBillSearch(search));
 
   const window = resolveDateRange({ range, from, to });
   Object.assign(filter, buildDateMatch(window));
 
+  /**
+   * The list table renders thirteen fields; an unprojected bill carries its
+   * whole `items` array, the full `payments` audit trail and every
+   * `statusHistory` entry as well, which is the bulk of the document and none
+   * of it is drawn. `items.quantity` is projected rather than dropped because
+   * the table shows an item COUNT — keeping the array at its real length means
+   * `items.length` on the client stays correct while each element shrinks to a
+   * single number.
+   */
+  const LIST_FIELDS =
+    'billNumber customer.name customer.mobile customer.mobileCountryCode grandTotal amountDue ' +
+    'paymentMethod status branch billedBy.name billedBy.id createdAt items.quantity';
+
   const [items, total, totals] = await Promise.all([
-    Bill.find(filter).sort(getSort(sort, SORTABLE)).skip(skip).limit(limit).lean(),
+    Bill.find(filter).select(LIST_FIELDS).sort(getSort(sort, SORTABLE)).skip(skip).limit(limit).lean(),
     Bill.countDocuments(filter),
     Bill.aggregate([
       // Money actually collected across the whole filter — a part-paid bill
@@ -98,11 +150,17 @@ export const getBill = asyncHandler(async (req, res) => {
 
   assertBranchAccess(req, bill.branch?.id);
 
-  const settings = await Settings.getSingleton();
-
+  // Settings and the branch are independent of each other, so they are fetched
+  // together rather than one after the other — this path used to cost three
+  // serial round trips to render one slip. Settings comes from the in-process
+  // cache, so in the steady state only the branch actually hits the database.
+  //
   // A branch that carries its own logo prints under it. Read it live so a logo
   // swap shows on reprints, falling back to the snapshot taken at billing time.
-  const branch = bill.branch?.id ? await Branch.findById(bill.branch.id).lean() : null;
+  const [settings, branch] = await Promise.all([
+    Settings.getCached(),
+    bill.branch?.id ? Branch.findById(bill.branch.id).lean() : Promise.resolve(null),
+  ]);
   const branchLogo = (branch?.hasOwnLogo ? branch.logo?.url : '') || bill.branch?.logo || '';
   // The slip is headed by the favicon, so a branch with its own prints under
   // its own mark rather than the store's.
@@ -159,7 +217,9 @@ const resolveTaxPercent = (req, settings) =>
 
 /** Prices and totals without persisting anything — powers the preview dialog. */
 export const previewBill = asyncHandler(async (req, res) => {
-  const settings = await Settings.getSingleton();
+  // Read-only, and fired on every keystroke in the billing form — served from
+  // the in-process settings cache rather than a database round trip each time.
+  const settings = await Settings.getCached();
   const limits = discountLimits(req, settings);
 
   const { lines } = await buildBillItems(req.body.items, limits);
@@ -176,8 +236,12 @@ export const previewBill = asyncHandler(async (req, res) => {
 });
 
 export const createBill = asyncHandler(async (req, res) => {
-  const branch = await resolveBillBranch(req.user, req.body.branch, { enabled: branchesOn(req) });
-  const settings = await Settings.getSingleton();
+  // Independent of each other, and settings is a cached read — so the pair
+  // costs one round trip rather than two.
+  const [branch, settings] = await Promise.all([
+    resolveBillBranch(req.user, req.body.branch, { enabled: branchesOn(req) }),
+    Settings.getCached(),
+  ]);
 
   const limits = discountLimits(req, settings);
   const { lines, stockOps } = await buildBillItems(req.body.items, limits);

@@ -4,6 +4,7 @@ import { formatDate } from '../../utils/format.js';
 import { PAYMENT_METHOD_LABELS, HEAD_OFFICE } from '../../utils/constants.js';
 import { formatContactNumber } from '../../utils/countries.js';
 import { brand } from '../../theme/index.js';
+import { IMG } from '../../utils/image.js';
 
 /**
  * The printable bill — a thermal receipt slip, not an A4 invoice.
@@ -89,7 +90,7 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
         {/* ── Masthead ── */}
         {mark && (
           <Stack direction="row" alignItems="center" justifyContent="center">
-            <Box component="img" src={mark} alt={shop.name} sx={{ height: 70 }} />
+            <Box component="img" src={IMG.print(mark)} alt={shop.name} sx={{ height: 70 }} />
           </Stack>
         )}
 

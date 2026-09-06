@@ -1,5 +1,6 @@
 import { Stack, TextField, InputAdornment, IconButton, Tooltip } from '@mui/material';
-import { SearchRounded, RestartAltRounded } from '@mui/icons-material';
+import SearchRounded from '@mui/icons-material/SearchRounded';
+import RestartAltRounded from '@mui/icons-material/RestartAltRounded';
 import { ICON } from '../../theme/index.js';
 
 

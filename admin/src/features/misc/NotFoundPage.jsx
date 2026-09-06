@@ -1,6 +1,7 @@
 import { Box, Typography, Button, Stack } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
-import { HomeOutlined, ArrowBackRounded } from '@mui/icons-material';
+import HomeOutlined from '@mui/icons-material/HomeOutlined';
+import ArrowBackRounded from '@mui/icons-material/ArrowBackRounded';
 import { brand } from '../../theme/index.js';
 
 const NotFoundPage = () => (

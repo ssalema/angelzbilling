@@ -1,10 +1,8 @@
 import { Box, IconButton, MenuItem, Select, Tooltip, Typography } from '@mui/material';
-import {
-  FirstPageRounded,
-  ChevronLeftRounded,
-  ChevronRightRounded,
-  LastPageRounded,
-} from '@mui/icons-material';
+import FirstPageRounded from '@mui/icons-material/FirstPageRounded';
+import ChevronLeftRounded from '@mui/icons-material/ChevronLeftRounded';
+import ChevronRightRounded from '@mui/icons-material/ChevronRightRounded';
+import LastPageRounded from '@mui/icons-material/LastPageRounded';
 import { ROWS_PER_PAGE } from '../../utils/constants.js';
 import { FONT, ICON } from '../../theme/index.js';
 

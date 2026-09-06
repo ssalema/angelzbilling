@@ -10,7 +10,9 @@ import {
   Divider,
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
-import { WarningAmberRounded, ReceiptLongOutlined, PaymentsOutlined } from '@mui/icons-material';
+import WarningAmberRounded from '@mui/icons-material/WarningAmberRounded';
+import ReceiptLongOutlined from '@mui/icons-material/ReceiptLongOutlined';
+import PaymentsOutlined from '@mui/icons-material/PaymentsOutlined';
 
 import DialogCloseButton from '../../components/common/DialogCloseButton.jsx';
 import SummaryRow from '../../components/common/SummaryRow.jsx';

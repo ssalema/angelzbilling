@@ -1,5 +1,8 @@
 import { Box, Typography, Button, Stack, Skeleton, Card, Grid, Divider, Alert, AlertTitle } from '@mui/material';
-import { Refresh, LockOutlined, SearchOff, ErrorOutline } from '@mui/icons-material';
+import Refresh from '@mui/icons-material/Refresh';
+import LockOutlined from '@mui/icons-material/LockOutlined';
+import SearchOff from '@mui/icons-material/SearchOff';
+import ErrorOutline from '@mui/icons-material/ErrorOutline';
 import { CARD_PAD, ICON, brand, surface } from '../../theme/index.js';
 
 /* Every screen shares these four states so the app never shows a blank panel. */

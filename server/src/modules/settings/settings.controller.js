@@ -145,6 +145,9 @@ export const updateSettings = asyncHandler(async (req, res) => {
   // Branch scoping is decided from a cached copy of this flag; drop it now so
   // the very next request already sees the switch in its new position.
   refreshFeatures();
+  // The bill print header reads a cached copy of the whole document, so that
+  // goes too — otherwise a renamed store keeps printing its old name for a minute.
+  Settings.invalidateCache();
 
   return sendSuccess(res, { message: 'Settings saved', data: settings });
 });
@@ -165,6 +168,7 @@ export const uploadBranding = asyncHandler(async (req, res) => {
   settings.updatedBy = req.user._id;
   await settings.save();
 
+  Settings.invalidateCache(); // the slip prints this artwork
   if (previous && previous !== asset.publicId) await destroyAsset(previous, 'image');
 
   return sendSuccess(res, {
@@ -187,6 +191,7 @@ export const removeBranding = asyncHandler(async (req, res) => {
   settings.updatedBy = req.user._id;
   await settings.save();
 
+  Settings.invalidateCache(); // the slip prints this artwork
   if (publicId) await destroyAsset(publicId, 'image');
 
   return sendSuccess(res, { message: `${kind === 'logo' ? 'Logo' : 'Favicon'} removed`, data: settings });

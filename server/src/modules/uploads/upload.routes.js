@@ -2,7 +2,7 @@ import { Router } from 'express';
 import authenticate from '../../middlewares/authenticate.js';
 import { authorize } from '../../middlewares/authorize.js';
 import validate from '../../middlewares/validate.js';
-import { upload, enforceFileLimits } from '../../middlewares/upload.js';
+import { upload, enforceFileLimits, uploadGate } from '../../middlewares/upload.js';
 import { uploadAssets, removeAsset, removeAssetSchema } from './upload.controller.js';
 
 const router = Router();
@@ -16,6 +16,9 @@ router.post(
   authorize('superadmin', 'admin'),
   // `files` matches the field name the admin panel appends, and the `files: 7`
   // ceiling in the upload middleware is what bounds this array.
+  // Ahead of multer on purpose: a queued request must not be holding 7 x 30 MB
+  // of buffers while it waits its turn.
+  uploadGate,
   upload.array('files', 7),
   enforceFileLimits,
   uploadAssets
