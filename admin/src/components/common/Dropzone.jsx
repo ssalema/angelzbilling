@@ -11,8 +11,9 @@ const FRAME_RADIUS = 8;
  * and a clean 1.5px line is left inside — the usual trick, and it avoids `calc`
  * inside SVG geometry, which browsers do not agree on.
  */
-const frameOutline = (color) => {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" fill="none"><rect width="100%" height="100%" rx="${FRAME_RADIUS}" stroke="${color}" stroke-width="3" stroke-dasharray="8 6"/></svg>`;
+const frameOutline = (color, dashes = true) => {
+  const dash = dashes ? ' stroke-dasharray="8 6"' : '';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" fill="none"><rect width="100%" height="100%" rx="${FRAME_RADIUS}" stroke="${color}" stroke-width="3"${dash}/></svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 };
 
@@ -28,8 +29,12 @@ const frameOutline = (color) => {
  * caller's business, while focus, keyboard and file plumbing stay here.
  *
  * `variant` picks the frame shape: 'panel' (the wide drag-and-drop area),
- * 'tile' (a grid cell) or 'frame' (a single-image slot — an SVG-stroked dashed
+ * 'tile' (a grid cell) or 'frame' (a single-image slot — an SVG-stroked
  * outline with a soft corner).
+ *
+ * `outline` softens that frame once it holds artwork: a dashed line invites you
+ * to drop something, so an empty slot keeps it, while a slot already showing a
+ * logo reads better as a picture in a plain mount.
  */
 const Dropzone = ({
   onFiles,
@@ -38,6 +43,8 @@ const Dropzone = ({
   disabled = false,
   label = 'Add files',
   variant = 'panel',
+  /** 'dashed' (empty, still asking for a file) or 'solid' (already filled). */
+  outline = 'dashed',
   // Lets a sibling control ("Replace") reopen the picker without owning an
   // input of its own.
   openRef,
@@ -58,15 +65,18 @@ const Dropzone = ({
   // border draws whatever dash length the browser feels like at 1.5px, so the
   // outline is stroked as an SVG instead: one long dash, one clear gap, the
   // same on every browser.
+  // A drag in progress goes back to dashes whatever the slot holds — that is
+  // the line telling you the drop will land.
+  const dashes = outline !== 'solid';
   const dashed =
     variant === 'frame'
       ? {
           border: 0,
           borderRadius: `${FRAME_RADIUS}px`,
           backgroundColor: active ? surface.goldFaint : 'transparent',
-          backgroundImage: frameOutline(active ? brand.gold : brand.line),
+          backgroundImage: frameOutline(active ? brand.gold : brand.line, dashes || active),
           transition: 'background-image .18s ease, background-color .18s ease',
-          '&:hover': { backgroundImage: frameOutline(disabled ? brand.line : brand.gold) },
+          '&:hover': { backgroundImage: frameOutline(disabled ? brand.line : brand.gold, dashes) },
         }
       : {
           border: '1.5px dashed',

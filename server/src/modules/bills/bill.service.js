@@ -4,6 +4,7 @@ import Counter from '../../models/Counter.js';
 import ApiError from '../../utils/ApiError.js';
 import { round2 } from '../../utils/query.js';
 import { resolveSizeGrams, gramsForQuantity, unitsFromGrams, formatGrams } from '../../utils/grams.js';
+import { toBranchId, toLocationId, isValidLocationId, HEAD_OFFICE_LABEL } from '../../utils/locations.js';
 
 /**
  * Bill numbers look like AP260900001 — the store's bill prefix from Settings,
@@ -188,31 +189,36 @@ export const calculateTotals = (
 };
 
 /**
- * Resolves which branch this bill belongs to, honouring role scoping.
+ * Resolves which location this bill belongs to.
  *
- * Returns `null` when the store runs with branches switched off: the bill then
- * carries no branch snapshot at all and prints under the store identity, rather
- * than failing because there is no active branch left to attach it to.
+ * Every bill has one. `null` means the Head Office — the main business itself,
+ * which is a location alongside the branches rather than a branch of its own —
+ * and the slip then prints under the store's name, address, GSTIN and logo. It
+ * also means "no location at all" when branch management is switched off, which
+ * comes to the same printed bill.
+ *
+ * Only the Head Office Super Admin gets to choose. Everyone else bills at the
+ * location they are assigned to, whatever the client sends.
  */
 export const resolveBillBranch = async (user, requestedBranchId, { enabled = true } = {}) => {
   if (!enabled) return null;
 
-  let branchId = null;
+  const own = user.branch ? String(user.branch._id || user.branch) : null;
+  const isHeadOfficeSuperAdmin = user.role === 'superadmin' && !own;
 
-  if (user.role === 'superadmin') {
-    branchId = requestedBranchId || (user.branch ? user.branch._id : null);
-    if (!branchId) {
-      const fallback = await Branch.findOne({ isActive: true }).sort({ isDefault: -1, createdAt: 1 });
-      branchId = fallback?._id || null;
+  if (!isHeadOfficeSuperAdmin) {
+    if (requestedBranchId && toLocationId(requestedBranchId) !== toLocationId(own)) {
+      throw ApiError.forbidden(
+        `You can only raise bills for your own location — ${own ? 'your branch' : HEAD_OFFICE_LABEL}.`
+      );
     }
-  } else {
-    if (!user.branch) throw ApiError.forbidden('Your account is not assigned to a branch yet.');
-    branchId = user.branch._id || user.branch;
+    if (!own) return null; // Head Office staff bill under the main business
+  } else if (requestedBranchId && !isValidLocationId(requestedBranchId)) {
+    throw ApiError.badRequest(`"${requestedBranchId}" is not a valid location`);
   }
 
-  if (!branchId) {
-    throw ApiError.badRequest('No branch exists yet. Create one in Settings → Branches before billing.');
-  }
+  const branchId = isHeadOfficeSuperAdmin ? toBranchId(requestedBranchId) : own;
+  if (!branchId) return null;
 
   const branch = await Branch.findById(branchId);
   if (!branch) throw ApiError.badRequest('The selected branch does not exist');

@@ -107,7 +107,7 @@ const VariantRow = ({ index, attributeNames, onRemove, onOpenDetail, expanded, p
 
         {attributeNames.map((name) => (
           <TableCell key={name}>
-            <Chip size="small" label={variant?.options?.[name] || '—'} sx={{ fontWeight: 600 }} />
+            <Chip size="small" label={variant?.options?.[name] || 'NA'} sx={{ fontWeight: 600 }} />
           </TableCell>
         ))}
 

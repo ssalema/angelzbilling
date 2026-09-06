@@ -12,11 +12,25 @@ import {
   round2,
 } from '../../utils/query.js';
 import { resolveBranchScope } from '../../middlewares/authorize.js';
+import { locationFilter } from '../../utils/locations.js';
 import { branchesOn } from '../../utils/featureFlags.js';
 
 /** Every figure on this page is computed here — nothing is hardcoded. */
 
-const REVENUE_STATUSES = ['paid'];
+/**
+ * Which bills count towards the shop's figures, and what they are worth.
+ *
+ * A refund hands the money back, so a refunded bill is worth nothing and is the
+ * only status excluded. Everything else earns — but only what was actually
+ * collected: a ₹15,000 bill settled with ₹9,450 is ₹9,450 of revenue, and the
+ * ₹5,550 balance is outstanding, not income. `EARNING` is the match, `COLLECTED`
+ * the money, `BILLED` the face value the two are reconciled against.
+ */
+const EARNING = { status: { $ne: 'refunded' } };
+const COLLECTED = '$amountPaid';
+const BILLED = '$grandTotal';
+/** Only a pending bill is owed anything; a refund zeroes its balance on the way out. */
+const OUTSTANDING = { $cond: [{ $eq: ['$status', 'pending'] }, '$amountDue', 0] };
 
 /**
  * A customer is identified by country code + number together, so +65 91234567
@@ -27,10 +41,8 @@ const CUSTOMER_KEY = {
   $concat: [{ $ifNull: ['$customer.mobileCountryCode', '+91'] }, '$customer.mobile'],
 };
 
-const branchMatch = (req) => {
-  const scope = resolveBranchScope(req);
-  return scope ? { 'branch.id': new mongoose.Types.ObjectId(String(scope)) } : {};
-};
+/** Head Office figures are the bills with no branch, so this cannot be a truthy test. */
+const branchMatch = (req) => locationFilter(resolveBranchScope(req), 'branch.id');
 
 const windowFromQuery = (req) =>
   resolveDateRange({ range: req.query.range, from: req.query.from, to: req.query.to });
@@ -51,11 +63,16 @@ export const getSummary = asyncHandler(async (req, res) => {
   const previous = prior.start ? { ...scope, ...buildDateMatch(prior) } : null;
 
   const revenueAgg = (match) => [
-    { $match: { ...match, status: { $in: REVENUE_STATUSES } } },
+    { $match: { ...match, ...EARNING } },
     {
       $group: {
         _id: null,
-        revenue: { $sum: '$grandTotal' },
+        revenue: { $sum: COLLECTED },
+        // The face value of what was sold. AOV is an *order* value, so it is
+        // measured against this rather than against how much of it has been
+        // collected so far — otherwise a slow payer shrinks the basket size.
+        billed: { $sum: BILLED },
+        outstanding: { $sum: OUTSTANDING },
         bills: { $sum: 1 },
         units: { $sum: { $sum: '$items.quantity' } },
       },
@@ -102,7 +119,7 @@ export const getSummary = asyncHandler(async (req, res) => {
     // "Customers" = distinct contact numbers that have ever been billed. The
     // country code is part of the identity: +65 91234567 is not +91 91234567.
     Bill.aggregate([
-      { $match: { ...scope, status: { $in: REVENUE_STATUSES } } },
+      { $match: { ...scope, ...EARNING } },
       { $group: { _id: CUSTOMER_KEY, firstSeen: { $min: '$createdAt' } } },
       {
         $group: {
@@ -124,7 +141,7 @@ export const getSummary = asyncHandler(async (req, res) => {
     ]),
     previous
       ? Bill.aggregate([
-          { $match: { ...scope, ...buildDateMatch(prior), status: { $in: REVENUE_STATUSES } } },
+          { $match: { ...scope, ...buildDateMatch(prior), ...EARNING } },
           { $group: { _id: CUSTOMER_KEY } },
           { $count: 'total' },
         ])
@@ -132,8 +149,8 @@ export const getSummary = asyncHandler(async (req, res) => {
     User.countDocuments({ isActive: true }),
   ]);
 
-  const cur = currentTotals[0] || { revenue: 0, bills: 0, units: 0 };
-  const prev = previousTotals[0] || { revenue: 0, bills: 0, units: 0 };
+  const cur = currentTotals[0] || { revenue: 0, billed: 0, outstanding: 0, bills: 0, units: 0 };
+  const prev = previousTotals[0] || { revenue: 0, billed: 0, outstanding: 0, bills: 0, units: 0 };
   const perfumes = perfumeStats[0] || { total: 0, published: 0, draft: 0, lowStock: 0 };
   const customers = customerRows[0] || { total: 0, newInPeriod: 0 };
 
@@ -144,14 +161,21 @@ export const getSummary = asyncHandler(async (req, res) => {
     data: {
       range: { ...window, granularity: pickGranularity(window) },
       revenue: {
+        // Collected, not billed.
         value: round2(cur.revenue),
         previous: round2(prev.revenue),
         growth: growth(cur.revenue, prev.revenue),
+        // What was raised, and the part of it still to come in. billed =
+        // revenue + outstanding, so the card can show both without a second call.
+        billed: round2(cur.billed),
+        outstanding: round2(cur.outstanding),
       },
       bills: {
         value: cur.bills,
         previous: prev.bills,
         growth: growth(cur.bills, prev.bills),
+        paid: statusMap.paid || 0,
+        pending: statusMap.pending || 0,
         refunded: statusMap.refunded || 0,
       },
       perfumes: {
@@ -166,11 +190,13 @@ export const getSummary = asyncHandler(async (req, res) => {
         growth: growth(customers.total, previousCustomerRows[0]?.total || 0),
       },
       averageOrderValue: {
-        value: cur.bills ? round2(cur.revenue / cur.bills) : 0,
-        previous: prev.bills ? round2(prev.revenue / prev.bills) : 0,
+        // Measured on what was billed: the size of a basket does not change
+        // because the customer is paying for it in two visits.
+        value: cur.bills ? round2(cur.billed / cur.bills) : 0,
+        previous: prev.bills ? round2(prev.billed / prev.bills) : 0,
         growth: growth(
-          cur.bills ? cur.revenue / cur.bills : 0,
-          prev.bills ? prev.revenue / prev.bills : 0
+          cur.bills ? cur.billed / cur.bills : 0,
+          prev.bills ? prev.billed / prev.bills : 0
         ),
       },
       unitsSold: cur.units || 0,
@@ -190,11 +216,12 @@ export const getSeries = asyncHandler(async (req, res) => {
   const formats = { day: '%Y-%m-%d', month: '%Y-%m', year: '%Y' };
 
   const rows = await Bill.aggregate([
-    { $match: { ...scope, ...buildDateMatch(window), status: { $in: REVENUE_STATUSES } } },
+    { $match: { ...scope, ...buildDateMatch(window), ...EARNING } },
     {
       $group: {
         _id: { $dateToString: { format: formats[granularity], date: '$createdAt' } },
-        revenue: { $sum: '$grandTotal' },
+        revenue: { $sum: COLLECTED },
+        billed: { $sum: BILLED },
         bills: { $sum: 1 },
         customers: { $addToSet: CUSTOMER_KEY },
       },
@@ -205,7 +232,8 @@ export const getSeries = asyncHandler(async (req, res) => {
         revenue: { $round: ['$revenue', 2] },
         bills: 1,
         customers: { $size: '$customers' },
-        aov: { $round: [{ $cond: [{ $gt: ['$bills', 0] }, { $divide: ['$revenue', '$bills'] }, 0] }, 2] },
+        // Same definition as the summary card: order value, not cash collected.
+        aov: { $round: [{ $cond: [{ $gt: ['$bills', 0] }, { $divide: ['$billed', '$bills'] }, 0] }, 2] },
       },
     },
     { $sort: { _id: 1 } },
@@ -271,8 +299,8 @@ export const getPaymentBreakdown = asyncHandler(async (req, res) => {
   };
 
   const rows = await Bill.aggregate([
-    { $match: { ...branchMatch(req), ...buildDateMatch(window), status: { $in: REVENUE_STATUSES } } },
-    { $group: { _id: '$paymentMethod', count: { $sum: 1 }, amount: { $sum: '$grandTotal' } } },
+    { $match: { ...branchMatch(req), ...buildDateMatch(window), ...EARNING } },
+    { $group: { _id: '$paymentMethod', count: { $sum: 1 }, amount: { $sum: COLLECTED } } },
     { $sort: { count: -1 } },
   ]);
 
@@ -301,7 +329,7 @@ export const getTopPerfumes = asyncHandler(async (req, res) => {
   const by = req.query.by === 'revenue' ? 'revenue' : 'units';
 
   const rows = await Bill.aggregate([
-    { $match: { ...branchMatch(req), ...buildDateMatch(window), status: { $in: REVENUE_STATUSES } } },
+    { $match: { ...branchMatch(req), ...buildDateMatch(window), ...EARNING } },
     { $unwind: '$items' },
     {
       $group: {
@@ -387,11 +415,12 @@ export const getBranchPerformance = asyncHandler(async (req, res) => {
   const window = windowFromQuery(req);
 
   const rows = await Bill.aggregate([
-    { $match: { ...branchMatch(req), ...buildDateMatch(window), status: { $in: REVENUE_STATUSES } } },
+    { $match: { ...branchMatch(req), ...buildDateMatch(window), ...EARNING } },
     {
       $group: {
         _id: { id: '$branch.id', name: '$branch.name', code: '$branch.code' },
-        revenue: { $sum: '$grandTotal' },
+        revenue: { $sum: COLLECTED },
+        outstanding: { $sum: OUTSTANDING },
         bills: { $sum: 1 },
       },
     },
@@ -403,10 +432,65 @@ export const getBranchPerformance = asyncHandler(async (req, res) => {
     data: rows.map((r) => ({
       branchId: r._id.id,
       name: r._id.name || 'Unassigned',
-      code: r._id.code || '—',
+      code: r._id.code || 'NA',
       revenue: round2(r.revenue),
+      outstanding: round2(r.outstanding),
       bills: r.bills,
       averageOrderValue: r.bills ? round2(r.revenue / r.bills) : 0,
     })),
+  });
+});
+
+/* ─────────────────────────── Bill status donut ─────────────────────────── */
+
+/**
+ * How the period's bills settled: fully paid, still owed, or handed back.
+ *
+ * Counts, not money — the money version of this question is the revenue card and
+ * its outstanding figure. A status with nothing in it is left out entirely so a
+ * shop that never refunds does not carry a permanent empty slice, but the order
+ * is fixed so Paid always wears the same colour from one period to the next.
+ */
+const BILL_STATUS_SEGMENTS = [
+  { key: 'paid', label: 'Paid' },
+  { key: 'pending', label: 'Pending' },
+  { key: 'refunded', label: 'Refunded' },
+];
+
+export const getBillStatusBreakdown = asyncHandler(async (req, res) => {
+  const window = windowFromQuery(req);
+
+  const rows = await Bill.aggregate([
+    { $match: { ...branchMatch(req), ...buildDateMatch(window) } },
+    {
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 },
+        // The slice's worth is what the shop holds against it: cash taken on a
+        // paid bill, the balance owed on a pending one, money returned on a refund.
+        amount: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, '$amountDue', '$amountPaid'] } },
+      },
+    },
+  ]);
+
+  const byStatus = Object.fromEntries(rows.map((r) => [r._id, r]));
+  const total = rows.reduce((sum, r) => sum + r.count, 0);
+
+  const segments = BILL_STATUS_SEGMENTS.filter((s) => byStatus[s.key]?.count).map((s) => ({
+    key: s.key,
+    label: s.label,
+    count: byStatus[s.key].count,
+    amount: round2(byStatus[s.key].amount),
+    percentage: total ? round2((byStatus[s.key].count / total) * 100) : 0,
+  }));
+
+  return sendSuccess(res, {
+    message: 'Bill status analytics loaded',
+    data: {
+      total,
+      segments,
+      settledPercentage: total ? round2(((byStatus.paid?.count || 0) / total) * 100) : 0,
+      outstanding: round2(byStatus.pending?.amount || 0),
+    },
   });
 });

@@ -3,6 +3,7 @@ import { sendSuccess } from '../../utils/ApiResponse.js';
 import { REFRESH_COOKIE, refreshCookieOptions } from '../../utils/tokens.js';
 import * as authService from './auth.service.js';
 import User from '../../models/User.js';
+import { HEAD_OFFICE_ID, HEAD_OFFICE_LABEL, HEAD_OFFICE_CODE } from '../../utils/locations.js';
 
 const publicUser = (user) => ({
   id: user._id,
@@ -12,9 +13,15 @@ const publicUser = (user) => ({
   phoneCountryCode: user.phoneCountryCode || '+91',
   role: user.role,
   roleLabel: user.roleLabel,
+  // A Super Admin with no branch is the main one and may change anything. With
+  // a branch they still see everything, but only edit inside that branch.
+  isMainSuperAdmin: user.role === 'superadmin' && !user.branch,
   avatar: user.avatar,
   isActive: user.isActive,
   lastLoginAt: user.lastLoginAt,
+  // No branch means the Head Office — the main business, which is a location in
+  // its own right. The client reads this the same way it reads any branch; the
+  // Head Office's details come from Settings, so only the label travels here.
   branch: user.branch
     ? {
         id: user.branch._id,
@@ -24,8 +31,16 @@ const publicUser = (user) => ({
         phone: user.branch.phone,
         phoneCountryCode: user.branch.phoneCountryCode || '+91',
         gstin: user.branch.gstin,
+        hasOwnLogo: Boolean(user.branch.hasOwnLogo),
+        // Resolved the same way the branch endpoints resolve it: '' means the
+        // branch inherits the store's mark.
+        effectiveLogo: user.branch.hasOwnLogo ? user.branch.logo?.url || '' : '',
+        effectiveFavicon: user.branch.hasOwnLogo ? user.branch.favicon?.url || '' : '',
+        logo: user.branch.logo,
+        favicon: user.branch.favicon,
+        isHeadOffice: false,
       }
-    : null,
+    : { id: HEAD_OFFICE_ID, name: HEAD_OFFICE_LABEL, code: HEAD_OFFICE_CODE, isHeadOffice: true },
 });
 
 export const loginController = asyncHandler(async (req, res) => {
@@ -81,7 +96,7 @@ export const updateProfileController = asyncHandler(async (req, res) => {
       },
     },
     { new: true, runValidators: true }
-  ).populate('branch', 'name code address phone phoneCountryCode gstin hasOwnLogo logo');
+  ).populate('branch', 'name code address phone phoneCountryCode gstin isActive hasOwnLogo logo favicon');
 
   return sendSuccess(res, { message: 'Profile updated', data: { user: publicUser(user) } });
 });

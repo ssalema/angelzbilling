@@ -1,19 +1,32 @@
 import { useRef, useState, useEffect } from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, Stack, Typography } from '@mui/material';
 
 import { branchApi } from '../../api/endpoints.js';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import LogoDropzone from '../../components/common/LogoDropzone.jsx';
 import { MAX_UPLOAD_BYTES } from '../../utils/constants.js';
 
-const MAX_BYTES = MAX_UPLOAD_BYTES;
-
 /**
- * Logo slot for a single branch. An existing branch uploads straight away; a
- * branch being created has no id yet, so the file is held here and the dialog
- * uploads it once the branch exists.
+ * One branding slot — logo or favicon — for a single branch.
+ *
+ * It reads like the store's own Branding panel on purpose: same dropzone, same
+ * label/hint row, same two artwork sizes. The difference is when the file
+ * moves. An existing branch uploads straight away; a branch being created has
+ * no id yet, so the file is held here and the dialog uploads it once the branch
+ * exists.
  */
-const BranchLogoField = ({ branchId, current, pendingFile, onPendingFile, onUploaded, disabled }) => {
+const BranchBrandingField = ({
+  kind,
+  label,
+  hint,
+  branchId,
+  current,
+  pendingFile,
+  onPendingFile,
+  onUploaded,
+  disabled,
+  frameHeight,
+}) => {
   const inputRef = useRef(null);
   const snackbar = useSnackbar();
   const [busy, setBusy] = useState(false);
@@ -35,7 +48,7 @@ const BranchLogoField = ({ branchId, current, pendingFile, onPendingFile, onUplo
       snackbar.error('Choose an image file (PNG, JPG, WEBP or GIF)');
       return;
     }
-    if (file.size > MAX_BYTES) {
+    if (file.size > MAX_UPLOAD_BYTES) {
       snackbar.error('That image is over 5MB. Please choose a smaller one.');
       return;
     }
@@ -48,7 +61,7 @@ const BranchLogoField = ({ branchId, current, pendingFile, onPendingFile, onUplo
 
     setBusy(true);
     try {
-      const result = await branchApi.uploadLogo(branchId, file);
+      const result = await branchApi.uploadBranding(branchId, kind, file);
       snackbar.success(result.message);
       onUploaded?.(result.data);
     } catch (error) {
@@ -65,7 +78,7 @@ const BranchLogoField = ({ branchId, current, pendingFile, onPendingFile, onUplo
     }
     setBusy(true);
     try {
-      const result = await branchApi.removeLogo(branchId);
+      const result = await branchApi.removeBranding(branchId, kind);
       snackbar.success(result.message);
       onUploaded?.(result.data);
     } catch (error) {
@@ -76,26 +89,31 @@ const BranchLogoField = ({ branchId, current, pendingFile, onPendingFile, onUplo
   };
 
   const preview = pendingUrl || current || '';
+  const name = label.toLowerCase();
 
   return (
     <Box>
+      <Stack direction="row" justifyContent="space-between" alignItems="baseline" spacing={1} sx={{ mb: 0.75 }}>
+        <Typography variant="subtitle2">{label}</Typography>
+        <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'right' }}>
+          {pendingUrl ? 'Uploads when you create the branch' : hint}
+        </Typography>
+      </Stack>
+
       <LogoDropzone
         openRef={inputRef}
         value={preview}
-        alt="Branch logo"
+        alt={label}
         busy={busy}
         disabled={disabled}
+        height={frameHeight}
         onFiles={(files) => choose(files?.[0])}
         onRemove={remove}
-        replaceLabel="Replace the branch logo"
-        removeLabel="Remove — the branch goes back to the store logo"
+        replaceLabel={`Replace the ${name}`}
+        removeLabel={`Remove — the branch goes back to the store ${kind}`}
       />
-
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-        {pendingUrl ? 'Uploads when you create the branch' : 'Transparent PNG, around 400×120px'}
-      </Typography>
     </Box>
   );
 };
 
-export default BranchLogoField;
+export default BranchBrandingField;

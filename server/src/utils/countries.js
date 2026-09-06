@@ -328,7 +328,7 @@ export const addContactNumberIssue = (ctx, { dial, number, path, required = true
 };
 
 /** "+91 9812521138" — the one way a contact number is rendered anywhere. */
-export const formatContactNumber = (dial, number, fallback = '—') => {
+export const formatContactNumber = (dial, number, fallback = 'NA') => {
   const digits = onlyDigits(number);
   if (!digits) return fallback;
   return `${isDialCode(dial) ? dial : DEFAULT_DIAL_CODE} ${digits}`;

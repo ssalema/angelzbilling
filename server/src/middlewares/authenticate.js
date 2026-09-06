@@ -24,7 +24,11 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
 
   if (payload.tokenType !== 'access') throw ApiError.unauthorized('Invalid authentication token');
 
-  const user = await User.findById(payload.sub).populate('branch', 'name code address phone phoneCountryCode gstin isActive');
+  const user = await User
+    .findById(payload.sub)
+    // The sidebar prints under a branch's own logo when it has one, so /auth/me
+    // has to carry the same branch fields login and refresh do.
+    .populate('branch', 'name code address phone phoneCountryCode gstin isActive hasOwnLogo logo favicon');
   if (!user) throw ApiError.unauthorized('This account no longer exists');
   if (!user.isActive) throw ApiError.forbidden('Your account has been deactivated. Contact the super admin.');
 

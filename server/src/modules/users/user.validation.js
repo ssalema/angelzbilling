@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { DEFAULT_DIAL_CODE, addContactNumberIssue } from '../../utils/countries.js';
 import { passwordRule } from '../auth/auth.validation.js';
+import { HEAD_OFFICE_ID } from '../../utils/locations.js';
 
 const objectId = z.string().regex(/^[a-f\d]{24}$/i, 'Invalid id');
 
@@ -10,17 +11,29 @@ const baseUser = {
   phone: z.string().trim().optional().default(''),
   phoneCountryCode: z.string().trim().optional().default(DEFAULT_DIAL_CODE),
   role: z.enum(['superadmin', 'admin', 'staff'], { errorMap: () => ({ message: 'Choose a valid role' }) }),
-  branch: objectId.nullable().optional(),
+  // A branch id, or the Head Office — the main business is a location too, and
+  // null on the wire means exactly that.
+  branch: z.union([objectId, z.literal(HEAD_OFFICE_ID)]).nullable().optional(),
   isActive: z.boolean().optional().default(true),
 };
 
-/** A non-superadmin must belong to exactly one branch — that is what scopes them. */
+/**
+ * A non-superadmin must belong to exactly one location — that is what scopes
+ * them — but the Head Office is one of those, and it travels as null. So the
+ * field has to be PRESENT rather than truthy: an omitted branch is a client
+ * that forgot to ask, and posting someone to the Head Office by accident is
+ * not a thing we want to do quietly.
+ *
+ * For a superadmin it is optional either way: with a branch they still see
+ * everything but may only edit inside it, without one they are the Head Office
+ * Super Admin.
+ */
 const requireBranchForScopedRoles = (data, ctx) => {
-  if (data.role && data.role !== 'superadmin' && !data.branch) {
+  if (data.role && data.role !== 'superadmin' && data.branch === undefined) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['branch'],
-      message: 'Assign a branch for Branch Admin and Billing Staff accounts',
+      message: 'Choose a location for Branch Admin and Billing Staff accounts',
     });
   }
   addContactNumberIssue(ctx, {

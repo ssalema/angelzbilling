@@ -29,15 +29,25 @@ const branchSchema = new mongoose.Schema(
     email: { type: String, trim: true, lowercase: true, default: '' },
     gstin: { type: String, trim: true, uppercase: true, default: '' },
     isActive: { type: Boolean, default: true },
-    isDefault: { type: Boolean, default: false },
 
     // Set when branch management itself was switched off, so switching it back
     // on restores exactly these branches and leaves manual deactivations alone.
     deactivatedByFeature: { type: Boolean, default: false },
 
-    // A branch may print under its own logo; when off it inherits the store logo.
+    /**
+     * A branch may print under its own branding; when off it inherits the
+     * store's. One switch covers both marks, so a branch is never half itself —
+     * its own logo on the bill header but the store's favicon beside it.
+     *
+     * The field keeps its original name: existing branches carry it, and a
+     * rename would silently reset every one of them to the store branding.
+     */
     hasOwnLogo: { type: Boolean, default: false },
     logo: {
+      url: { type: String, default: '' },
+      publicId: { type: String, default: '' },
+    },
+    favicon: {
       url: { type: String, default: '' },
       publicId: { type: String, default: '' },
     },
@@ -48,22 +58,18 @@ const branchSchema = new mongoose.Schema(
 branchSchema.index({ isActive: 1 });
 branchSchema.index({ name: 'text', code: 'text' });
 
-/** '' means the branch inherits the store logo — the single place that rule lives. */
+/** '' means the branch inherits the store's — the single place that rule lives. */
 branchSchema.virtual('effectiveLogo').get(function effectiveLogo() {
   return this.hasOwnLogo ? this.logo?.url || '' : '';
+});
+
+branchSchema.virtual('effectiveFavicon').get(function effectiveFavicon() {
+  return this.hasOwnLogo ? this.favicon?.url || '' : '';
 });
 
 branchSchema.virtual('fullAddress').get(function fullAddress() {
   const { line1, city, state, pincode, country } = this.address || {};
   return [line1, city, state, pincode, country].filter(Boolean).join(', ');
-});
-
-/** Only one branch can carry the default flag. */
-branchSchema.pre('save', async function ensureSingleDefault(next) {
-  if (this.isDefault && this.isModified('isDefault')) {
-    await this.constructor.updateMany({ _id: { $ne: this._id } }, { $set: { isDefault: false } });
-  }
-  next();
 });
 
 export const Branch = mongoose.model('Branch', branchSchema);

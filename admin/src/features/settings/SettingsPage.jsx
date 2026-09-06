@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -27,7 +27,6 @@ import {
   Instagram,
   Facebook,
   LinkedIn,
-  RefreshRounded,
 } from '@mui/icons-material';
 
 import PageHeader from '../../components/common/PageHeader.jsx';
@@ -105,8 +104,8 @@ const UpdatedHint = ({ settings, path }) => {
   );
 };
 
-const FieldRow = ({ label, settings, path, children }) => (
-  <Box sx={{ mb: 2.25 }}>
+const FieldRow = ({ label, settings, path, gutter = true, children }) => (
+  <Box sx={{ mb: gutter ? 2.25 : 0 }}>
     <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: 0.6 }}>
       <Typography variant="subtitle2">{label}</Typography>
       <UpdatedHint settings={settings} path={path} />
@@ -124,7 +123,9 @@ const TABS = [
 
 const SettingsPage = () => {
   const snackbar = useSnackbar();
-  const { isSuperAdmin } = useAuth();
+  // The General, Billing, Social and Branding panels all write the ONE main
+  // business record, so they follow store-wide authority, not branch authority.
+  const { isSuperAdmin, isMainSuperAdmin, branchName } = useAuth();
   const { reload: reloadGlobalSettings } = useSettings();
   const { tab, setTab } = useSettingsTab();
 
@@ -166,11 +167,41 @@ const SettingsPage = () => {
     });
   }, [settings.data, reset]);
 
+  /**
+   * Branding waits here until the form is saved, so the logo behaves like every
+   * other field on the tab: a File to upload, `null` to remove, or no key at
+   * all for untouched. Discarding drops the lot.
+   */
+  const [branding, setBranding] = useState({});
+  const brandingDirty = Object.keys(branding).length > 0;
+
+  const stageBranding = (kind, value) => setBranding((current) => ({ ...current, [kind]: value }));
+
+  const discard = () => {
+    reset();
+    setBranding({});
+  };
+
   const onSubmit = async (values) => {
     try {
       const result = await settingsApi.update(values);
+
+      // Sequentially, and after the text fields: every branding call writes the
+      // same settings document, so the last response is the one that carries
+      // the whole save.
+      let data = result.data;
+      for (const kind of ['logo', 'favicon']) {
+        if (!(kind in branding)) continue;
+        const file = branding[kind];
+        const uploaded = file
+          ? await settingsApi.uploadBranding(kind, file)
+          : await settingsApi.removeBranding(kind);
+        data = uploaded.data;
+      }
+
+      setBranding({});
       snackbar.success(result.message);
-      settings.setData(result.data);
+      settings.setData(data);
       reset(values);
       reloadGlobalSettings(); // sidebar + print header pick up the new name/logo
     } catch (error) {
@@ -198,9 +229,11 @@ const SettingsPage = () => {
         breadcrumbs={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Settings' }]}
       />
 
-      {!isSuperAdmin && (
+      {!isMainSuperAdmin && (
         <Alert severity="info" sx={{ mb: 2.5 }}>
-          You can view these settings, but only a Super Admin can change them.
+          {isSuperAdmin
+            ? `These are the main business details and apply to every location. Your account is assigned to ${branchName}, so you can view them but only the main Super Admin can change them — edit your own branch under the Branches tab.`
+            : 'You can view these settings, but only a Super Admin can change them.'}
         </Alert>
       )}
 
@@ -256,9 +289,12 @@ const SettingsPage = () => {
             <Grid container spacing={2.5}>
               <Grid item xs={12} md={tab === 'general' ? 8 : 12}>
                 {tab === 'general' && (
-                  <Card sx={{ p: CARD_PAD }}>
+                  // Every field row carries a bottom margin for the row under
+                  // it; the last one has nothing under it but the card edge.
+                  <Card sx={{ p: CARD_PAD, '& > :last-child': { mb: 0 } }}>
                     <SectionTitle
                       title="General information"
+                      description="The main business identity — used everywhere a branch does not override it."
                       action={
                         <ResetIconButton
                           onClick={() => reset()}
@@ -271,14 +307,14 @@ const SettingsPage = () => {
                     <Divider sx={{ mb: 2.5 }} />
 
                     <FieldRow label="Site name" settings={settings.data} path="siteName">
-                      <RHFTextField name="siteName" placeholder="Your store name" disabled={!isSuperAdmin} />
+                      <RHFTextField name="siteName" placeholder="Your store name" disabled={!isMainSuperAdmin} />
                     </FieldRow>
 
                     <FieldRow label="Tagline" settings={settings.data} path="tagline">
                       <RHFTextField
                         name="tagline"
                         placeholder="Hand blended attars and fine fragrance"
-                        disabled={!isSuperAdmin}
+                        disabled={!isMainSuperAdmin}
                       />
                     </FieldRow>
 
@@ -287,7 +323,7 @@ const SettingsPage = () => {
                         name="contactEmail"
                         type="email"
                         placeholder="support@yourstore.in"
-                        disabled={!isSuperAdmin}
+                        disabled={!isMainSuperAdmin}
                       />
                     </FieldRow>
 
@@ -296,7 +332,7 @@ const SettingsPage = () => {
                         name="contactNumber"
                         codeName="contactNumberCountryCode"
                         label={null}
-                        disabled={!isSuperAdmin}
+                        disabled={!isMainSuperAdmin}
                       />
                     </FieldRow>
 
@@ -307,7 +343,7 @@ const SettingsPage = () => {
                         multiline
                         minRows={2}
                         maxRows={2}
-                        disabled={!isSuperAdmin}
+                        disabled={!isMainSuperAdmin}
                       />
                     </FieldRow>
 
@@ -315,7 +351,7 @@ const SettingsPage = () => {
                       <RHFTextField
                         name="gstin"
                         placeholder="22AAAAA0000A1Z5"
-                        disabled={!isSuperAdmin}
+                        disabled={!isMainSuperAdmin}
                         inputProps={{ style: { textTransform: 'uppercase' } }}
                       />
                     </FieldRow>
@@ -335,7 +371,7 @@ const SettingsPage = () => {
                         <RHFTextField
                           name="billing.billPrefix"
                           label="Bill number prefix"
-                          disabled={!isSuperAdmin}
+                          disabled={!isMainSuperAdmin}
                           helperText="e.g. AP260900001"
                           inputProps={{ style: { textTransform: 'uppercase' }, maxLength: 6 }}
                         />
@@ -344,7 +380,7 @@ const SettingsPage = () => {
                         <RHFTextField
                           name="billing.currencySymbol"
                           label="Currency symbol"
-                          disabled={!isSuperAdmin}
+                          disabled={!isMainSuperAdmin}
                           inputProps={{ maxLength: 4 }}
                         />
                       </Grid>
@@ -353,7 +389,7 @@ const SettingsPage = () => {
                           name="billing.defaultTaxPercent"
                           label="Default tax"
                           suffix="%"
-                          disabled={!isSuperAdmin}
+                          disabled={!isMainSuperAdmin}
                           inputProps={{ min: 0, max: 100, step: '0.01' }}
                         />
                       </Grid>
@@ -362,18 +398,17 @@ const SettingsPage = () => {
                           name="billing.maxDiscountPercent"
                           label="Staff discount limit"
                           suffix="%"
-                          disabled={!isSuperAdmin}
+                          disabled={!isMainSuperAdmin}
                           helperText="The most Billing Staff may take off a line or a bill. Admins can go higher."
                           inputProps={{ min: 0, max: 100, step: '1' }}
                         />
                       </Grid>
-
-                      <Grid item xs={12}>
+                      <Grid item xs={12} sm={8}>
                         <RHFTextField
                           name="billing.invoiceFooter"
                           label="Invoice footer"
                           placeholder="Thank you for shopping with us."
-                          disabled={!isSuperAdmin}
+                          disabled={!isMainSuperAdmin}
                         />
                       </Grid>
                       <Grid item xs={12}>
@@ -383,7 +418,7 @@ const SettingsPage = () => {
                           multiline
                           minRows={4}
                           placeholder="Printed in small type at the bottom of every bill."
-                          disabled={!isSuperAdmin}
+                          disabled={!isMainSuperAdmin}
                         />
                       </Grid>
                     </Grid>
@@ -400,11 +435,11 @@ const SettingsPage = () => {
 
                     <Grid container spacing={2.5}>
                       <Grid item xs={12} md={6}>
-                        <FieldRow label="Instagram" settings={settings.data} path="social.instagram">
+                        <FieldRow label="Instagram" settings={settings.data} path="social.instagram" gutter={false}>
                           <RHFTextField
                             name="social.instagram"
                             placeholder="https://instagram.com/yourstore"
-                            disabled={!isSuperAdmin}
+                            disabled={!isMainSuperAdmin}
                             InputProps={{
                               startAdornment: (
                                 <InputAdornment position="start">
@@ -417,11 +452,11 @@ const SettingsPage = () => {
                       </Grid>
 
                       <Grid item xs={12} md={6}>
-                        <FieldRow label="X (Twitter)" settings={settings.data} path="social.twitter">
+                        <FieldRow label="X (Twitter)" settings={settings.data} path="social.twitter" gutter={false}>
                           <RHFTextField
                             name="social.twitter"
                             placeholder="https://x.com/yourstore"
-                            disabled={!isSuperAdmin}
+                            disabled={!isMainSuperAdmin}
                             InputProps={{
                               startAdornment: (
                                 <InputAdornment position="start">
@@ -436,11 +471,11 @@ const SettingsPage = () => {
                       </Grid>
 
                       <Grid item xs={12} md={6}>
-                        <FieldRow label="Facebook" settings={settings.data} path="social.facebook">
+                        <FieldRow label="Facebook" settings={settings.data} path="social.facebook" gutter={false}>
                           <RHFTextField
                             name="social.facebook"
                             placeholder="https://facebook.com/yourstore"
-                            disabled={!isSuperAdmin}
+                            disabled={!isMainSuperAdmin}
                             InputProps={{
                               startAdornment: (
                                 <InputAdornment position="start">
@@ -453,11 +488,11 @@ const SettingsPage = () => {
                       </Grid>
 
                       <Grid item xs={12} md={6}>
-                        <FieldRow label="LinkedIn" settings={settings.data} path="social.linkedin">
+                        <FieldRow label="LinkedIn" settings={settings.data} path="social.linkedin" gutter={false}>
                           <RHFTextField
                             name="social.linkedin"
                             placeholder="https://linkedin.com/company/yourstore"
-                            disabled={!isSuperAdmin}
+                            disabled={!isMainSuperAdmin}
                             InputProps={{
                               startAdornment: (
                                 <InputAdornment position="start">
@@ -477,18 +512,17 @@ const SettingsPage = () => {
                 <Grid item xs={12} md={4}>
                   <BrandingPanel
                     settings={settings.data}
-                    canEdit={isSuperAdmin}
-                    onRefresh={settings.reload}
-                    onChanged={(data) => {
-                      settings.setData(data);
-                      reloadGlobalSettings();
-                    }}
+                    canEdit={isMainSuperAdmin}
+                    pending={branding}
+                    onPending={stageBranding}
+                    onResetPending={() => setBranding({})}
+                    disabled={isSubmitting}
                   />
                 </Grid>
               )}
             </Grid>
 
-            {isSuperAdmin && isDirty && (
+            {isMainSuperAdmin && (isDirty || brandingDirty) && (
               <Paper
                 elevation={0}
                 sx={{
@@ -513,7 +547,7 @@ const SettingsPage = () => {
                     You have unsaved changes.
                   </Typography>
                   <Stack direction="row" spacing={1.5} justifyContent="flex-end">
-                    <Button variant="outlined" color="inherit" onClick={() => reset()} disabled={isSubmitting}>
+                    <Button variant="outlined" color="inherit" onClick={discard} disabled={isSubmitting}>
                       Discard changes
                     </Button>
                     <Button

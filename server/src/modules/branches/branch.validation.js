@@ -38,7 +38,6 @@ const branchFields = z.object({
   email: z.string().trim().toLowerCase().email('Enter a valid email').or(z.literal('')).optional().default(''),
   gstin: z.string().trim().toUpperCase().max(20).optional().default(''),
   isActive: z.boolean().optional().default(true),
-  isDefault: z.boolean().optional().default(false),
   hasOwnLogo: z.boolean().optional().default(false),
 });
 

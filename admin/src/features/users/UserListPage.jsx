@@ -40,14 +40,25 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { formatCurrency, formatDate, formatNumber, formatRelative, initials } from '../../utils/format.js';
-import { ROLES } from '../../utils/constants.js';
+import { ROLES, HEAD_OFFICE, locationOf } from '../../utils/constants.js';
 import { formatContactNumber } from '../../utils/countries.js';
 import { FONT, ICON, brand } from '../../theme/index.js';
 
 const UserListPage = () => {
   const snackbar = useSnackbar();
-  const { user: me } = useAuth();
+  const { user: me, isMainSuperAdmin, canEditBranch, branchName } = useAuth();
   const { branchesEnabled } = useSettings();
+
+  /**
+   * Every Super Admin sees every account — the list is never filtered by branch.
+   * Changing one is narrower: a Super Admin assigned to a branch manages that
+   * branch's team, and never another Super Admin. The server enforces the same
+   * rule; this only keeps the table honest about it.
+   */
+  const canManage = (row) =>
+    isMainSuperAdmin || (row.role !== 'superadmin' && canEditBranch(locationOf(row.branch).id));
+
+  const roleOptions = ROLES.filter((role) => isMainSuperAdmin || role.value !== 'superadmin');
 
   const [filters, setFilters] = useState({
     search: '',
@@ -101,14 +112,21 @@ const UserListPage = () => {
     }
   };
 
-  /** Inline role change straight from the table, as in the reference UI. */
+  /**
+   * Inline role change straight from the table, as in the reference UI.
+   *
+   * The branch assignment rides along unchanged. Promoting a branch account to
+   * Super Admin therefore makes a branch-level one — full visibility, authority
+   * still capped at their branch. Cutting them loose to the whole business is a
+   * deliberate act, done in the edit dialog by clearing the branch.
+   */
   const changeRole = async (row, role) => {
     if (role === row.role) return;
+    // The location rides along unchanged; `null` keeps a Head Office account
+    // at the Head Office rather than reading as "no location".
+    const branch = locationOf(row.branch);
     await run(() =>
-      userApi.update(row.id, {
-        role,
-        branch: role === 'superadmin' ? null : row.branch?.id || null,
-      })
+      userApi.update(row.id, { role, branch: branch.id === HEAD_OFFICE.id ? null : branch.id })
     );
   };
 
@@ -188,12 +206,16 @@ const UserListPage = () => {
       key: 'branch',
       label: 'Branch',
       hideBelow: 'lg',
-      render: (row) =>
-        row.branch ? (
-          <Chip size="small" variant="outlined" label={row.branch.code} title={row.branch.name} />
+      // Nobody is assigned to "all branches" — an account with no branch belongs
+      // to the Head Office, which is a location alongside the rest.
+      render: (row) => {
+        const location = locationOf(row.branch);
+        return location.isHeadOffice || location.id === HEAD_OFFICE.id ? (
+          <Chip size="small" label={HEAD_OFFICE.name} color="secondary" sx={{ color: brand.ink }} />
         ) : (
-          <Chip size="small" label="All branches" color="secondary" sx={{ color: brand.ink }} />
-        ),
+          <Chip size="small" variant="outlined" label={location.code} title={location.name} />
+        );
+      },
     },
     {
       key: 'createdAt',
@@ -214,15 +236,17 @@ const UserListPage = () => {
       label: 'Role',
       align: 'center',
       width: 160,
+      // The dropdown changes the role in place; it must not also open the row.
+      stopRowClick: true,
       render: (row) => (
         <Select
           size="small"
           value={row.role}
           onChange={(e) => changeRole(row, e.target.value)}
-          disabled={row.id === me?.id}
+          disabled={row.id === me?.id || !canManage(row)}
           sx={{ minWidth: 140, fontSize: FONT.small }}
         >
-          {ROLES.map((role) => (
+          {roleOptions.map((role) => (
             <MenuItem key={role.value} value={role.value} sx={{ fontSize: FONT.body }}>
               {role.label}
             </MenuItem>
@@ -236,39 +260,65 @@ const UserListPage = () => {
       align: 'center',
       render: (row) => {
         const isSelf = row.id === me?.id;
+        const locked = isSelf || !canManage(row);
         return (
-          <Tooltip title={isSelf ? 'You cannot change your own status' : row.isActive ? 'Deactivate account' : 'Activate account'}>
+          <Tooltip
+            title={
+              isSelf
+                ? 'You cannot change your own status'
+                : !canManage(row)
+                  ? `Only accounts in ${branchName} can be changed by your account`
+                  : row.isActive
+                    ? 'Deactivate account'
+                    : 'Activate account'
+            }
+          >
             <span>
               <StatusChip
                 status={row.isActive ? 'active' : 'inactive'}
-                onClick={isSelf ? undefined : () => confirmToggleStatus(row)}
+                onClick={locked ? undefined : () => confirmToggleStatus(row)}
               />
             </span>
           </Tooltip>
         );
       },
     },
-    actionsColumn((row) => (
+    actionsColumn((row) => {
+      const manageable = canManage(row);
+      const blocked = `Your account manages ${branchName} only`;
+      return (
         <Stack direction="row" spacing={0.25} justifyContent="center">
-          <Tooltip title="Edit account">
-            <IconButton size="small" color="primary" onClick={() => setFormUser(row)}>
-              <EditOutlined sx={{ fontSize: ICON.action }} />
-            </IconButton>
+          <Tooltip title={manageable ? 'Edit account' : blocked}>
+            <Box component="span">
+              <IconButton
+                size="small"
+                color="primary"
+                disabled={!manageable}
+                onClick={() => setFormUser(row)}
+              >
+                <EditOutlined sx={{ fontSize: ICON.action }} />
+              </IconButton>
+            </Box>
           </Tooltip>
-          <Tooltip title="Reset password">
-            <IconButton size="small" onClick={() => setResetUser(row)}>
-              <LockResetOutlined sx={{ fontSize: ICON.action }} />
-            </IconButton>
+          <Tooltip title={manageable ? 'Reset password' : blocked}>
+            <Box component="span">
+              <IconButton size="small" disabled={!manageable} onClick={() => setResetUser(row)}>
+                <LockResetOutlined sx={{ fontSize: ICON.action }} />
+              </IconButton>
+            </Box>
           </Tooltip>
         </Stack>
-      )),
+      );
+    }),
   ];
 
   return (
     <Box>
       <PageHeader
         title="Users"
-        subtitle={`${formatNumber(meta.total || 0)} registered account${meta.total === 1 ? '' : 's'} · only a Super Admin can manage these`}
+        subtitle={`${formatNumber(meta.total || 0)} registered account${meta.total === 1 ? '' : 's'} · ${
+          isMainSuperAdmin ? 'only a Super Admin can manage these' : `you manage the ${branchName} team`
+        }`}
         breadcrumbs={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Users' }]}
         action={
           <Button variant="contained" startIcon={<PersonAddAlt1Outlined />} onClick={() => setFormUser(null)}>
@@ -307,11 +357,14 @@ const UserListPage = () => {
             onChange={(e) => patch({ branch: e.target.value })}
           >
             <MenuItem value="">All branches</MenuItem>
-            {(branches.data?.items || []).map((branch) => (
-              <MenuItem key={branch.id} value={branch.id}>
-                {branch.name}
-              </MenuItem>
-            ))}
+            <MenuItem value={HEAD_OFFICE.id}>{HEAD_OFFICE.name}</MenuItem>
+            {(branches.data?.items || [])
+              .filter((branch) => branch.isActive)
+              .map((branch) => (
+                <MenuItem key={branch.id} value={branch.id}>
+                  {branch.name}
+                </MenuItem>
+              ))}
           </FilterSelect>
           )}
 
@@ -335,7 +388,7 @@ const UserListPage = () => {
           loading={users.loading}
           error={users.error}
           onRetry={users.reload}
-          onRowClick={(row) => setFormUser(row)}
+          onRowClick={(row) => (canManage(row) ? setFormUser(row) : undefined)}
           page={filters.page}
           limit={filters.limit}
           total={meta.total}

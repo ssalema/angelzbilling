@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DEFAULT_DIAL_CODE, addContactNumberIssue } from '../../utils/countries.js';
+import { HEAD_OFFICE_ID } from '../../utils/locations.js';
 
 const objectId = z.string().regex(/^[a-f\d]{24}$/i, 'Invalid id');
 
@@ -42,16 +43,26 @@ export const createBillSchema = z.object({
   taxPercent: z.coerce.number().min(0).max(100).optional(),
   /** Whole-bill discount in currency, applied after line discounts. */
   extraDiscount: z.coerce.number().min(0).optional().default(0),
-  amountPaid: z.coerce.number().min(0).optional(),
+  /**
+   * How much of the bill the customer is settling right now.
+   *
+   * Omitted means "the whole thing" — that is the Full Paid path, and the
+   * server fills in the grand total it just computed rather than trusting a
+   * number the client worked out. A value below the total is a part payment:
+   * the same bill is saved as pending with the balance still owed.
+   */
+  amountPaid: z.coerce.number().min(0, 'Amount received cannot be negative').optional(),
   notes: z.string().trim().max(1000).optional().default(''),
-  branch: objectId.optional(), // superadmin may bill on behalf of any branch
+  // Only the Head Office Super Admin may send this: a branch id, or the Head
+  // Office itself. Everyone else is pinned to their own location server-side.
+  branch: z.union([objectId, z.literal(HEAD_OFFICE_ID)]).nullable().optional(),
 });
 
 export const listBillQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(10),
   search: z.string().trim().max(100, 'Search term is too long').optional().default(''),
-  status: z.enum(['all', 'paid', 'refunded']).optional().default('all'),
+  status: z.enum(['all', 'paid', 'pending', 'refunded']).optional().default('all'),
   paymentMethod: z
     .enum(['all', 'cash', 'card', 'upi', 'bank_transfer'])
     .optional()
@@ -73,6 +84,20 @@ export const listBillQuerySchema = z.object({
 export const updateStatusSchema = z.object({
   status: z.literal('refunded'),
   reason: z.string().trim().max(300).optional().default(''),
+});
+
+/**
+ * Collecting the balance on a pending bill. This never re-prices anything and
+ * never touches stock — it is money arriving against a bill that already exists,
+ * so the only things it carries are the amount, how it came in, and a note.
+ */
+export const collectPaymentSchema = z.object({
+  amount: z.coerce
+    .number({ invalid_type_error: 'Enter the amount received' })
+    .positive('Enter an amount greater than zero'),
+  // Defaults to whatever the bill was raised under, resolved in the controller.
+  method: z.enum(['cash', 'card', 'upi', 'bank_transfer']).optional(),
+  note: z.string().trim().max(300).optional().default(''),
 });
 
 export const idParamSchema = z.object({ id: objectId });

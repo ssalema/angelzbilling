@@ -8,6 +8,7 @@ import {
   createBillSchema,
   listBillQuerySchema,
   updateStatusSchema,
+  collectPaymentSchema,
   idParamSchema,
   customerLookupQuerySchema,
 } from './bill.validation.js';
@@ -17,6 +18,7 @@ import {
   createBill,
   previewBill,
   updateBillStatus,
+  collectPayment,
   getBillStats,
   lookupCustomers,
 } from './bill.controller.js';
@@ -46,6 +48,15 @@ router.post('/preview', validate({ body: createBillSchema.partial({ paymentMetho
 router.post('/', validate({ body: createBillSchema }), createBill);
 
 router.get('/:id', validate({ params: idParamSchema }), getBill);
+
+// Collecting the balance on a pending bill. Taking money at the counter is the
+// billing staff's job, exactly like raising the bill was, so this is not gated
+// on admin — only on the location the bill belongs to.
+router.patch(
+  '/:id/payment',
+  validate({ params: idParamSchema, body: collectPaymentSchema }),
+  collectPayment
+);
 
 // Refunding moves money and stock — admins only.
 router.patch(

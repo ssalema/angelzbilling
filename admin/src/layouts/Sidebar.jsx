@@ -15,7 +15,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { visibleSections } from './navConfig.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
-import { ROLE_LABELS } from '../utils/constants.js';
+import { ROLE_LABELS, locationLabel } from '../utils/constants.js';
 import { FONT, ICON, brand, onPlum } from '../theme/index.js';
 
 export const SIDEBAR_WIDTH = 264;
@@ -24,9 +24,13 @@ const SidebarContent = ({ onNavigate }) => {
   const { user } = useAuth();
   const { siteName, logo: storeLogo, branchesEnabled } = useSettings();
   // Staff of a branch that carries its own logo work under that logo — unless
-  // branches are switched off, when only the store's own logo exists.
+  // branches are switched off, when only the store's own logo exists. The Head
+  // Office has no branch record, so it falls through to the store logo, which
+  // is its logo.
   const branch = branchesEnabled ? user?.branch : null;
-  const logo = (branch?.hasOwnLogo ? branch.logo?.url : '') || storeLogo;
+  // The server resolves 'its own, or none' into effectiveLogo — same rule the
+  // branch table and the bill header read.
+  const logo = branch?.effectiveLogo || storeLogo;
   const location = useLocation();
   const sections = visibleSections(user?.role || 'staff');
 
@@ -45,9 +49,9 @@ const SidebarContent = ({ onNavigate }) => {
       }}
     >
       {/* Brand */}
-      <Box sx={{ px: 2.5, py: 2.75, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+      <Box sx={{ px: 1, py: 1, display: 'flex', alignItems: 'center', justifyContent: logo ? 'center' : 'flex-start', gap: 1.5 }}>
         {logo ? (
-          <Box component="img" src={logo} alt={siteName} sx={{ height: 34, maxWidth: 130, objectFit: 'contain' }} />
+          <Box component="img" src={logo} alt={siteName} sx={{ display: 'block', width: '100%', maxWidth: '100%', height: 'auto', maxHeight: 'auto', objectFit: 'contain' }} />
         ) : (
           <>
             <Box
@@ -164,7 +168,7 @@ const SidebarContent = ({ onNavigate }) => {
         {branchesEnabled && (
           <Chip
             size="small"
-            label={user?.branch?.name || 'All branches'}
+            label={locationLabel(user?.branch)}
             sx={{
               mt: 1.25,
               width: '100%',

@@ -12,6 +12,7 @@ import {
   Divider,
   Autocomplete,
   TextField,
+  MenuItem,
   IconButton,
   Avatar,
   Chip,
@@ -51,7 +52,7 @@ import CustomerRecallBanner from './CustomerRecallBanner.jsx';
 import DialogCloseButton from '../../components/common/DialogCloseButton.jsx';
 
 import { billSchema, emptyBill, calculateTotals } from './billSchema.js';
-import { perfumeApi, billApi } from '../../api/endpoints.js';
+import { perfumeApi, billApi, branchApi } from '../../api/endpoints.js';
 import useApiResource from '../../hooks/useApiResource.js';
 import useDebounce from '../../hooks/useDebounce.js';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -59,17 +60,22 @@ import { useSettings } from '../../context/SettingsContext.jsx';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { applyServerErrors } from '../../api/client.js';
 import { formatCurrency, formatGrams, formatNumber, unitsFromGrams } from '../../utils/format.js';
-import { PAYMENT_METHODS } from '../../utils/constants.js';
+import { PAYMENT_METHODS, PAYMENT_TERMS, HEAD_OFFICE, locationOf, locationOptions } from '../../utils/constants.js';
 import { downloadBillPdf } from '../../utils/downloadBill.js';
-import { FONT, CARD_HEAD_PAD, CARD_PAD, ICON, brand, numericText, surface } from '../../theme/index.js';
+import { FONT, CARD_HEAD_PAD, CARD_PAD, ICON, brand, numericText, statusColors, surface } from '../../theme/index.js';
 
 const CreateBillPage = () => {
   const navigate = useNavigate();
   const snackbar = useSnackbar();
-  const { user } = useAuth();
+  // Only the Head Office Super Admin picks where a bill is raised. Everyone
+  // else bills at the location they are assigned to and cannot change it — the
+  // server pins them there regardless of what this page sends.
+  const { user, isMainSuperAdmin } = useAuth();
   const { settings, loading: settingsLoading, defaultTaxPercent, branchesEnabled } = useSettings();
 
   const [perfumeQuery, setPerfumeQuery] = useState('');
+  // Head Office by default: the main business is a location, not a fallback.
+  const [billLocationId, setBillLocationId] = useState(HEAD_OFFICE.id);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [savedBill, setSavedBill] = useState(null);
 
@@ -78,6 +84,43 @@ const CreateBillPage = () => {
   const [downloading, setDownloading] = useState(false);
 
   const debouncedQuery = useDebounce(perfumeQuery, 300);
+
+  const canPickLocation = isMainSuperAdmin && branchesEnabled;
+
+  const branches = useApiResource(
+    () => (canPickLocation ? branchApi.list({ limit: 100 }) : Promise.resolve({ items: [] })),
+    [canPickLocation],
+    { immediate: canPickLocation }
+  );
+
+  const locations = useMemo(
+    () => locationOptions((branches.data?.items || []).filter((branch) => branch.isActive)),
+    [branches.data]
+  );
+
+  /** The location this bill will be recorded against, whoever is billing. */
+  const billLocation = useMemo(() => {
+    if (!canPickLocation) return locationOf(user?.branch);
+    return locations.find((option) => option.id === billLocationId) || HEAD_OFFICE;
+  }, [canPickLocation, locations, billLocationId, user]);
+
+  const atHeadOffice = billLocation.id === HEAD_OFFICE.id;
+
+  /**
+   * The slip is headed by a favicon, and a branch with its own branding prints
+   * under its own. The server resolves it that way when the bill is reloaded, so
+   * the preview and the just-saved slip have to resolve it the same way here or
+   * the paper would change after the save.
+   */
+  const slipStore = useMemo(
+    () => ({
+      ...settings,
+      currencySymbol: settings?.billing?.currencySymbol || '₹',
+      favicon:
+        (!atHeadOffice && billLocation.effectiveFavicon) || settings?.branding?.favicon?.url || '',
+    }),
+    [settings, atHeadOffice, billLocation]
+  );
 
   const methods = useForm({
     resolver: zodResolver(billSchema),
@@ -146,6 +189,16 @@ const CreateBillPage = () => {
       }),
     [watched.items, watched.taxPercent, watched.extraDiscount]
   );
+
+  /**
+   * A part payment is still one bill: the total below is what the customer owes
+   * in full, and `amountReceived` is only how much of it crossed the counter
+   * today. The server recomputes both — this is what the biller watches while
+   * typing, so the drawer and the slip agree before anything is saved.
+   */
+  const isPartial = watched.paymentTerm === 'partial';
+  const amountReceived = isPartial ? Math.min(Number(watched.amountPaid) || 0, totals.grandTotal) : totals.grandTotal;
+  const balanceDue = Math.max(0, Number((totals.grandTotal - amountReceived).toFixed(2)));
 
   const options = useApiResource(
     () => perfumeApi.lookup({ q: debouncedQuery, limit: 25 }),
@@ -223,7 +276,13 @@ const CreateBillPage = () => {
     paymentMethod: values.paymentMethod,
     taxPercent: Number(values.taxPercent) || 0,
     extraDiscount: Number(values.extraDiscount) || 0,
+    // Full Paid sends nothing at all: the server fills in the grand total it
+    // computed itself, so the two can never disagree about what "all of it" was.
+    ...(values.paymentTerm === 'partial' ? { amountPaid: Number(values.amountPaid) || 0 } : {}),
     notes: values.notes,
+    // Sent only by the one account allowed to choose; null is the Head Office,
+    // which is an answer rather than an absence.
+    ...(canPickLocation ? { branch: atHeadOffice ? null : billLocation.id } : {}),
   });
 
   const onSubmit = async (values) => {
@@ -266,12 +325,29 @@ const CreateBillPage = () => {
       <Box>
         <PageHeader
           title="Bill created"
-          subtitle={`${savedBill.billNumber} · ${formatCurrency(savedBill.grandTotal)}`}
+          subtitle={`${savedBill.billNumber} · ${formatCurrency(savedBill.grandTotal)}${
+            savedBill.amountDue > 0 ? ` · ${formatCurrency(savedBill.amountDue)} due` : ''
+          }`}
           breadcrumbs={[{ label: 'Billing', to: '/billing' }, { label: savedBill.billNumber }]}
         />
 
-        <Alert severity="success" icon={<CheckCircleOutline />} className="no-print" sx={{ mb: 2.5 }}>
+        {/* A bill with a balance is saved and stocked exactly like any other —
+            the only difference worth saying out loud is what is still owed and
+            that it is collected on this same bill, not a new one. */}
+        <Alert
+          severity={savedBill.amountDue > 0 ? 'warning' : 'success'}
+          icon={<CheckCircleOutline />}
+          className="no-print"
+          sx={{ mb: 2.5 }}
+        >
           Bill <strong>{savedBill.billNumber}</strong> has been saved and stock has been updated.
+          {savedBill.amountDue > 0 && (
+            <>
+              {' '}
+              <strong>{formatCurrency(savedBill.amountDue, { precise: true })}</strong> is still due — collect it
+              from the bill record when the customer pays.
+            </>
+          )}
         </Alert>
 
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} className="no-print" sx={{ mb: 2.5 }}>
@@ -280,7 +356,7 @@ const CreateBillPage = () => {
           </Button>
           <Button
             variant="outlined"
-            startIcon={downloading ? <CircularProgress size={16} /> : <DownloadOutlined />}
+            startIcon={downloading ? <CircularProgress size={16} color="inherit" /> : <DownloadOutlined />}
             disabled={downloading}
             onClick={handleDownload}
           >
@@ -295,7 +371,7 @@ const CreateBillPage = () => {
         </Stack>
 
         <Card sx={{ overflow: 'hidden', bgcolor: 'transparent', border: 'none', py: 3 }}>
-          <BillPrintView ref={savedSlipRef} bill={savedBill} store={{ ...settings, currencySymbol: '₹' }} />
+          <BillPrintView ref={savedSlipRef} bill={savedBill} store={slipStore} />
         </Card>
       </Box>
     );
@@ -362,15 +438,31 @@ const CreateBillPage = () => {
                     helperText="Taken from your signed-in account"
                     sx={{ bgcolor: surface.plumFaint }}
                   />
-                  {branchesEnabled && (
-                    <TextField
-                      label="Branch"
-                      value={user?.branch?.name || 'Default branch'}
-                      InputProps={{ readOnly: true }}
-                      helperText="This bill is recorded against this branch"
-                      sx={{ bgcolor: surface.plumFaint }}
-                    />
-                  )}
+                  {branchesEnabled &&
+                    (canPickLocation ? (
+                      <TextField
+                        select
+                        label="Branch *"
+                        value={billLocationId}
+                        onChange={(event) => setBillLocationId(event.target.value)}
+                        helperText="Where this bill is raised — it prints under this location's details"
+                        sx={{ minWidth: 220 }}
+                      >
+                        {locations.map((option) => (
+                          <MenuItem key={option.id} value={option.id}>
+                            {option.code ? `${option.name} (${option.code})` : option.name}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    ) : (
+                      <TextField
+                        label="Branch"
+                        value={billLocation.name}
+                        InputProps={{ readOnly: true }}
+                        helperText="Taken from your signed-in account"
+                        sx={{ bgcolor: surface.plumFaint }}
+                      />
+                    ))}
                 </Stack>
               </Card>
 
@@ -645,29 +737,72 @@ const CreateBillPage = () => {
                   )}
                 />
 
+                {/* ── How much of it is being settled now ── */}
+                <Typography variant="subtitle2" sx={{ mt: 2.25, mb: 1 }}>
+                  Payment received
+                </Typography>
+                <Controller
+                  control={control}
+                  name="paymentTerm"
+                  render={({ field }) => (
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
+                      {PAYMENT_TERMS.map((term) => (
+                        <Chip
+                          key={term.value}
+                          label={term.label}
+                          onClick={() => {
+                            field.onChange(term.value);
+                            // Going back to Full clears the part amount, so a
+                            // stale figure cannot be sent with a settled bill.
+                            if (term.value === 'full') setValue('amountPaid', 0);
+                          }}
+                          variant={field.value === term.value ? 'filled' : 'outlined'}
+                          color={field.value === term.value ? 'primary' : 'default'}
+                          sx={{ height: 34, borderRadius: 2, fontWeight: 600, cursor: 'pointer' }}
+                        />
+                      ))}
+                    </Box>
+                  )}
+                />
+
+                {isPartial && (
+                  <Box sx={{ mt: 1.75 }}>
+                    <RHFNumberField
+                      name="amountPaid"
+                      label="Amount received *"
+                      prefix="₹"
+                      fullWidth
+                      inputProps={{ min: 0, max: totals.grandTotal }}
+                      helperText="The balance stays on this bill and can be collected later"
+                    />
+                    <Box sx={{ mt: 1, p: 1.5, borderRadius: 2, bgcolor: surface.plumFaint }}>
+                      <SummaryRow label="Paid now" value={formatCurrency(amountReceived, { precise: true })} />
+                      <SummaryRow
+                        label="Balance due"
+                        value={formatCurrency(balanceDue, { precise: true })}
+                        strong
+                        tone={balanceDue > 0 ? statusColors.pending.color : 'text.primary'}
+                      />
+                    </Box>
+                  </Box>
+                )}
+
                 <Box sx={{ mt: 2.25 }}>
                   <RHFTextField name="notes" label="Notes (optional)" multiline minRows={2} />
                 </Box>
 
-                <Stack spacing={1.25} sx={{ mt: 2.5 }}>
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    size="large"
-                    startIcon={<VisibilityOutlined />}
-                    disabled={fields.length === 0 || isSubmitting}
-                  >
-                    Preview bill
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    onClick={handleSubmit(onSubmit)}
-                    disabled={fields.length === 0 || isSubmitting}
-                    startIcon={isSubmitting ? <CircularProgress size={15} /> : <ReceiptLongOutlined />}
-                  >
-                    {isSubmitting ? 'Saving…' : 'Save without preview'}
-                  </Button>
-                </Stack>
+                {/* Every bill is saved from the preview dialog, so this is the only way out of the form. */}
+                <Button
+                  type="submit"
+                  variant="contained"
+                  size="large"
+                  fullWidth
+                  startIcon={<VisibilityOutlined />}
+                  disabled={fields.length === 0 || isSubmitting}
+                  sx={{ mt: 2.5 }}
+                >
+                  Preview bill
+                </Button>
               </Card>
             </Grid>
           </Grid>
@@ -705,22 +840,35 @@ const CreateBillPage = () => {
               taxPercent: totals.taxPercent,
               taxAmount: totals.taxAmount,
               grandTotal: totals.grandTotal,
+              // The preview has to show the slip the customer will actually be
+              // handed, balance and all — otherwise the paper changes after save.
+              amountPaid: amountReceived,
+              amountDue: balanceDue,
+              status: balanceDue > 0 ? 'pending' : 'paid',
+              // The slip prints one line per payment, and the only payment this
+              // bill can have yet is the one being taken right now — so stand it
+              // in exactly as the server will write it.
+              payments: amountReceived > 0
+                ? [{ amount: amountReceived, method: watched.paymentMethod, at: new Date(), atBilling: true }]
+                : [],
               paymentMethod: watched.paymentMethod,
               notes: watched.notes,
-              // Branches off: no branch identity at all, so the slip prints
-              // under the store's own name, address and logo.
-              branch: branchesEnabled
-                ? {
-                    name: user?.branch?.name || 'Default branch',
-                    code: user?.branch?.code || '',
-                    address: '',
-                    phone: user?.branch?.phone || '',
-                    phoneCountryCode: user?.branch?.phoneCountryCode || '+91',
-                  }
-                : {},
+              // The Head Office carries no branch snapshot, and neither does a
+              // store with branches switched off — both print under the main
+              // business name, address and logo, exactly as the server writes it.
+              branch:
+                branchesEnabled && !atHeadOffice
+                  ? {
+                      name: billLocation.name,
+                      code: billLocation.code || '',
+                      address: '',
+                      phone: billLocation.phone || '',
+                      phoneCountryCode: billLocation.phoneCountryCode || '+91',
+                    }
+                  : {},
               billedBy: { name: user?.name },
             }}
-            store={settings}
+            store={slipStore}
           />
         </DialogContent>
 

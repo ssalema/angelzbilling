@@ -48,9 +48,9 @@ export const unitsFromGrams = (grams, sizeGrams) => {
 };
 
 export const formatDate = (value, style = 'medium') => {
-  if (!value) return '—';
+  if (!value) return 'NA';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
+  if (Number.isNaN(date.getTime())) return 'NA';
 
   const options = {
     short: { day: '2-digit', month: 'short' },

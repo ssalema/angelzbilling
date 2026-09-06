@@ -10,6 +10,7 @@
     "start": "node src/server.js",
     "seed": "node src/seed/seed.js",
     "import:perfumes": "node src/seed/importPerfumes.js",
+    "backfill:payments": "node src/seed/backfillPayments.js",
     "test": "node tests/api.e2e.mjs"
   },
   "dependencies": {

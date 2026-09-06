@@ -32,6 +32,8 @@ export const useCustomerRecall = () => {
 
   // One lookup per number: re-filling on every keystroke would fight the biller.
   const lastLookup = useRef('');
+  /** Bumped to force that one lookup to run again — see `refresh` below. */
+  const [reloadKey, setReloadKey] = useState(0);
 
   const fill = useCallback(
     (found, { overwrite = false } = {}) => {
@@ -78,7 +80,20 @@ export const useCustomerRecall = () => {
     return () => {
       active = false;
     };
-  }, [debouncedMobile, dial, fill]);
+  }, [debouncedMobile, dial, fill, reloadKey]);
+
+  /**
+   * Re-reads the customer from the server.
+   *
+   * The lookup normally runs once per number so it cannot fight the biller as
+   * they type. But a balance collected from the pending-bills warning changes
+   * the very thing that warning is showing, so that one case has to be able to
+   * ask again — clearing the guard is what makes the effect re-run.
+   */
+  const refresh = useCallback(() => {
+    lastLookup.current = '';
+    setReloadKey((key) => key + 1);
+  }, []);
 
   /** "That's not them" — drop the recalled details, keep the number typed so far. */
   const forget = useCallback(() => {
@@ -96,6 +111,7 @@ export const useCustomerRecall = () => {
     /** Overwrites even hand-typed fields with what the last bill had. */
     applySaved: useCallback(() => customer && fill(customer, { overwrite: true }), [customer, fill]),
     forget,
+    refresh,
   };
 };
 

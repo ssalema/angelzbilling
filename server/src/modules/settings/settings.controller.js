@@ -181,6 +181,9 @@ export const removeBranding = asyncHandler(async (req, res) => {
   const publicId = settings.branding?.[kind]?.publicId;
 
   settings.set(`branding.${kind}`, { url: '', publicId: '' });
+  // Back to the default (no artwork), so the audit stamp goes with it — the
+  // panel reads these keys to decide whether branding has been edited at all.
+  settings.updatedFields.delete(auditKey(`branding.${kind}`));
   settings.updatedBy = req.user._id;
   await settings.save();
 

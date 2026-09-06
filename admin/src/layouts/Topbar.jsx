@@ -27,11 +27,11 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { useSnackbar } from '../context/SnackbarContext.jsx';
 import ConfirmDialog from '../components/common/ConfirmDialog.jsx';
-import { ROLE_LABELS } from '../utils/constants.js';
+import { ROLE_LABELS, locationLabel } from '../utils/constants.js';
 import { ICON, brand, surface } from '../theme/index.js';
 
 const Topbar = ({ onMenuClick }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, isSuperAdmin } = useAuth();
   const { branchesEnabled } = useSettings();
   const navigate = useNavigate();
   const snackbar = useSnackbar();
@@ -67,12 +67,13 @@ const Topbar = ({ onMenuClick }) => {
             <MenuRounded />
           </IconButton>
 
-          {/* Which branch the numbers on screen belong to — important in multi-branch use */}
+          {/* Which location the numbers on screen belong to. A Super Admin reads the
+              whole store, so theirs says so; everyone else sees their own location. */}
           {branchesEnabled && (
-          <Tooltip title="Data on screen is scoped to this branch">
+          <Tooltip title="Data on screen is scoped to this location">
             <Chip
               icon={<StorefrontOutlined sx={{ fontSize: ICON.inline }} />}
-              label={user?.branch?.name || 'All branches'}
+              label={isSuperAdmin ? 'All branches' : locationLabel(user?.branch)}
               size="small"
               sx={{
                 bgcolor: surface.plumSoft,

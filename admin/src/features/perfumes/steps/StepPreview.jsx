@@ -39,7 +39,7 @@ const Row = ({ label, value }) => (
       {label}
     </Typography>
     <Typography variant="body2" sx={{ fontWeight: 600, textAlign: 'right' }}>
-      {value || '—'}
+      {value || 'NA'}
     </Typography>
   </Stack>
 );

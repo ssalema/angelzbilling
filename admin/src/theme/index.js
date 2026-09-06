@@ -85,11 +85,33 @@ export const CARD_HEAD_PAD = { px: { xs: 2, sm: 2.5 }, pt: { xs: 2, sm: 2.25 }, 
  */
 export const LOGO_FRAME = {
   height: 176,
+  /**
+   * The frame for a square mark. A wordmark is roughly 400×120, so a landscape
+   * frame fits it with room to spare; a favicon is as tall as it is wide, and
+   * in that same frame it can only ever be shown at frame height — which is
+   * most of the width wasted and a small icon. This one is square-ish, so the
+   * favicon lands about as large as the logo beside it.
+   */
+  squareHeight: 260,
   /** Breathing room between the dashed drop target and the well inside it. */
   gap: 1.25,
   /** The well's corner, a touch tighter than the dashed frame around it. */
   radius: '6px',
-  preview: { maxWidth: '84%', maxHeight: '82%', objectFit: 'contain' },
+  /**
+   * Laid out against the well rather than sized by it: the image is centred by
+   * `margin: auto` inside an absolutely positioned box, so its percentage caps
+   * resolve against a height that is definitely known. Sized by `maxHeight`
+   * alone it depended on the flex chain above resolving one, and a square mark
+   * dropped into a slot that did not simply overflowed the frame.
+   */
+  preview: {
+    position: 'absolute',
+    inset: 0,
+    margin: 'auto',
+    maxWidth: '94%',
+    maxHeight: '94%',
+    objectFit: 'contain',
+  },
 };
 
 /**
@@ -152,6 +174,9 @@ export const chartPalette = [
 
 export const statusColors = {
   paid: { color: '#1E6B4F', bg: '#E3F3EB' },
+  // Money still owed is a "come back to this", not a fault — the same amber
+  // low stock wears, rather than error red.
+  pending: { color: '#B4801A', bg: '#FBF1DE' },
   refunded: { color: '#5C4B8A', bg: '#EDE9F7' },
   published: { color: '#1E6B4F', bg: '#E3F3EB' },
   draft: { color: '#6B5C70', bg: '#EFEAF1' },
@@ -256,14 +281,43 @@ const theme = createTheme({
       defaultProps: { disableElevation: true },
       styleOverrides: {
         root: { borderRadius: 10, paddingInline: 18, minHeight: 40 },
+        // Nearly every disabled button here is disabled because it is *busy* —
+        // "Signing in…", "Saving…" — and MUI's default paints that state near
+        // black, so the label and its spinner disappear at the exact moment the
+        // user is watching them. Keep the brand fill, keep the label (and any
+        // color="inherit" spinner) white, and show "waiting" by dimming the
+        // fill rather than the text.
+        contained: {
+          '&.Mui-disabled': { color: '#fff', backgroundColor: alpha(brand.plum, 0.55) },
+          '&.Mui-disabled .MuiCircularProgress-root': { color: '#fff' },
+        },
         containedPrimary: {
           '&:hover': { backgroundColor: brand.plumDark },
+          '&.Mui-disabled': { color: '#fff', backgroundColor: alpha(brand.plum, 0.55) },
         },
         containedSecondary: {
           color: brand.ink,
           '&:hover': { backgroundColor: brand.goldDark, color: '#fff' },
+          '&.Mui-disabled': { color: '#fff', backgroundColor: alpha(brand.goldDark, 0.6) },
         },
-        outlined: { borderColor: brand.line, '&:hover': { borderColor: brand.plum } },
+        containedError: {
+          '&.Mui-disabled': { color: '#fff', backgroundColor: alpha('#9B2C2C', 0.55) },
+        },
+        containedSuccess: {
+          '&.Mui-disabled': { color: '#fff', backgroundColor: alpha('#1E6B4F', 0.55) },
+        },
+        // Outlined and text buttons sit on ivory, so white would vanish there —
+        // they get a dimmed plum instead, which their spinners inherit.
+        outlined: {
+          borderColor: brand.line,
+          '&:hover': { borderColor: brand.plum },
+          '&.Mui-disabled': { color: alpha(brand.plum, 0.55), borderColor: brand.line },
+          '&.Mui-disabled .MuiCircularProgress-root': { color: alpha(brand.plum, 0.55) },
+        },
+        text: {
+          '&.Mui-disabled': { color: alpha(brand.plum, 0.5) },
+          '&.Mui-disabled .MuiCircularProgress-root': { color: alpha(brand.plum, 0.5) },
+        },
       },
     },
 

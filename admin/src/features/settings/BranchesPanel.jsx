@@ -32,9 +32,10 @@ import SectionTitle from '../../components/common/SectionTitle.jsx';
 import { RHFTextField, RHFSwitch } from '../../components/form/RHFControls.jsx';
 import RHFContactNumber from '../../components/form/RHFContactNumber.jsx';
 import AddressFields from '../../components/form/AddressFields.jsx';
-import BranchLogoField from './BranchLogoField.jsx';
+import BranchBrandingField from './BranchBrandingField.jsx';
 
 import { branchApi, settingsApi } from '../../api/endpoints.js';
+import { useAuth } from '../../context/AuthContext.jsx';
 import useApiResource from '../../hooks/useApiResource.js';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { applyServerErrors } from '../../api/client.js';
@@ -46,7 +47,7 @@ import {
   addPostalCodeIssue,
   formatContactNumber,
 } from '../../utils/countries.js';
-import { CARD_HEAD_PAD, ICON } from '../../theme/index.js';
+import { CARD_HEAD_PAD, ICON, LOGO_FRAME } from '../../theme/index.js';
 
 const schema = z
   .object({
@@ -75,7 +76,6 @@ const schema = z
   email: z.string().trim().email('Enter a valid email').or(z.literal('')).default(''),
   gstin: z.string().trim().toUpperCase().max(20).default(''),
   isActive: z.boolean().default(true),
-  isDefault: z.boolean().default(false),
   hasOwnLogo: z.boolean().default(false),
   })
   .superRefine((data, ctx) =>
@@ -87,6 +87,21 @@ const schema = z
     })
   );
 
+/**
+ * A branch carries the same two marks the store does, sized the same way: a wide
+ * logo for bill headers and sidebars, a square favicon for the printed slip and
+ * the branch table.
+ */
+const BRANDING_SLOTS = [
+  { kind: 'logo', label: 'Branch logo', hint: 'Transparent PNG, around 400×120px' },
+  {
+    kind: 'favicon',
+    label: 'Branch favicon',
+    hint: 'Square PNG, 64×64px or larger',
+    frameHeight: LOGO_FRAME.squareHeight,
+  },
+];
+
 const emptyBranch = {
   name: '',
   code: '',
@@ -96,17 +111,23 @@ const emptyBranch = {
   email: '',
   gstin: '',
   isActive: true,
-  isDefault: false,
   hasOwnLogo: false,
 };
 
+/**
+ * `canEdit` says the viewer is a Super Admin, so they see every branch here.
+ * Authority is narrower: adding a location, taking one out of service and the
+ * branch switch itself are store-wide and belong to the main Super Admin, while
+ * a Super Admin assigned to a branch edits that one branch's own details.
+ */
 const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
   const snackbar = useSnackbar();
+  const { isMainSuperAdmin, canEditBranch, branchName } = useAuth();
   const [formBranch, setFormBranch] = useState(undefined);
   const [confirm, setConfirm] = useState(null);
-  // A branch being created has no id yet, so its logo waits here until it does.
-  const [pendingLogo, setPendingLogo] = useState(null);
-  const [dialogLogo, setDialogLogo] = useState('');
+  // A branch being created has no id yet, so its artwork waits here until it does.
+  const [pendingAssets, setPendingAssets] = useState({ logo: null, favicon: null });
+  const [dialogAssets, setDialogAssets] = useState({ logo: '', favicon: '' });
   const [togglingFeature, setTogglingFeature] = useState(false);
   // Branches come back in one call; the bar keeps a long list navigable.
   const [page, setPage] = useState(1);
@@ -128,8 +149,8 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
 
   useEffect(() => {
     if (formBranch === undefined) return;
-    setPendingLogo(null);
-    setDialogLogo(formBranch?.logo?.url || '');
+    setPendingAssets({ logo: null, favicon: null });
+    setDialogAssets({ logo: formBranch?.logo?.url || '', favicon: formBranch?.favicon?.url || '' });
     reset(
       formBranch
         ? {
@@ -147,10 +168,14 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
         ? await branchApi.update(formBranch.id, values)
         : await branchApi.create(values);
 
-      // The logo picked while creating could only be uploaded once an id existed.
-      if (pendingLogo && values.hasOwnLogo) {
+      // Artwork picked while creating could only be uploaded once an id existed.
+      if (values.hasOwnLogo) {
         const branchId = formBranch?.id || result.data?.id || result.data?._id;
-        if (branchId) await branchApi.uploadLogo(branchId, pendingLogo);
+        for (const kind of BRANDING_SLOTS.map((slot) => slot.kind)) {
+          if (branchId && pendingAssets[kind]) {
+            await branchApi.uploadBranding(branchId, kind, pendingAssets[kind]);
+          }
+        }
       }
 
       snackbar.success(result.message);
@@ -211,12 +236,14 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
       label: 'Branch',
       render: (row) => (
         <Stack direction="row" spacing={1.25} alignItems="center">
-          {row.effectiveLogo && (
+          {/* The favicon is the branch's mark — the same square that heads its
+              printed slip — so the row shows that rather than the wide logo. */}
+          {row.effectiveFavicon && (
             <Box
               component="img"
-              src={row.effectiveLogo}
+              src={row.effectiveFavicon}
               alt={row.name}
-              sx={{ width: 40, height: 28, objectFit: 'contain', flexShrink: 0 }}
+              sx={{ width: 28, height: 28, objectFit: 'contain', flexShrink: 0, borderRadius: 0.75 }}
             />
           )}
           <Box>
@@ -224,7 +251,9 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
               <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                 {row.name}
               </Typography>
-              {row.isDefault && <Chip size="small" label="Default" color="secondary" sx={{ height: 19 }} />}
+              {canEdit && !isMainSuperAdmin && canEditBranch(row.id) && (
+                <Chip size="small" label="Yours" color="secondary" sx={{ height: 19 }} />
+              )}
             </Stack>
             <Typography variant="caption" color="text.secondary">
               Code: {row.code}
@@ -241,7 +270,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
         <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 260 }}>
           {[row.address?.line1, row.address?.city, row.address?.state, row.address?.pincode]
             .filter(Boolean)
-            .join(', ') || '—'}
+            .join(', ') || 'NA'}
         </Typography>
       ),
     },
@@ -253,7 +282,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
         <Box>
           <Typography variant="body2">{formatContactNumber(row.phoneCountryCode, row.phone)}</Typography>
           <Typography variant="caption" color="text.secondary">
-            {row.email || '—'}
+            {row.email || 'NA'}
           </Typography>
         </Box>
       ),
@@ -280,10 +309,10 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
         const chip = (
           <StatusChip
             status={row.isActive ? 'active' : 'inactive'}
-            onClick={canEdit ? () => setConfirm(statusConfirm(row)) : undefined}
+            onClick={isMainSuperAdmin ? () => setConfirm(statusConfirm(row)) : undefined}
           />
         );
-        return canEdit ? (
+        return isMainSuperAdmin ? (
           <Tooltip title={row.isActive ? 'Deactivate branch' : 'Activate branch'}>
             <Box component="span">{chip}</Box>
           </Tooltip>
@@ -295,11 +324,19 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
     actionsColumn((row) =>
         canEdit && (
           <Stack direction="row" spacing={0.25} justifyContent="center">
-            <Tooltip title="Edit branch">
-              <IconButton size="small" color="primary" onClick={() => setFormBranch(row)}>
-                <EditOutlined sx={{ fontSize: ICON.action }} />
-              </IconButton>
+            <Tooltip title={canEditBranch(row.id) ? 'Edit branch' : 'You can only edit your own branch'}>
+              <Box component="span">
+                <IconButton
+                  size="small"
+                  color="primary"
+                  disabled={!canEditBranch(row.id)}
+                  onClick={() => setFormBranch(row)}
+                >
+                  <EditOutlined sx={{ fontSize: ICON.action }} />
+                </IconButton>
+              </Box>
             </Tooltip>
+            {isMainSuperAdmin && (
             <Tooltip title="Delete branch">
               <IconButton
                 size="small"
@@ -318,6 +355,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
                 <DeleteOutline sx={{ fontSize: ICON.action }} />
               </IconButton>
             </Tooltip>
+            )}
           </Stack>
         )),
   ];
@@ -333,14 +371,14 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
       >
         <SectionTitle
           title="Branch management"
-          description="Each bill records the branch it was raised at, so reporting stays accurate across locations."
+          description="Every bill records the location it was raised at. The Head Office — the main business on the General tab — is one of those locations; the branches below are the others."
           sx={{ mb: 0 }}
         />
         <Stack direction="row" spacing={1.5} alignItems="center" sx={{ flexShrink: 0 }}>
           <Tooltip
             title={
-              !canEdit
-                ? 'Only a Super Admin can change this'
+              !isMainSuperAdmin
+                ? 'Only the main Super Admin can change this'
                 : branchesEnabled
                   ? 'Turn off if this store runs from a single location'
                   : 'Turn on to bill and report per location'
@@ -352,7 +390,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
                 control={
                   <Switch
                     checked={branchesEnabled}
-                    disabled={!canEdit || togglingFeature}
+                    disabled={!isMainSuperAdmin || togglingFeature}
                     onChange={(event) => {
                       const next = event.target.checked;
                       if (next) return setBranchesEnabled(true);
@@ -375,13 +413,22 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
               />
             </Box>
           </Tooltip>
-          {canEdit && branchesEnabled && (
+          {isMainSuperAdmin && branchesEnabled && (
             <Button variant="contained" startIcon={<AddRounded />} onClick={() => setFormBranch(null)}>
               Add branch
             </Button>
           )}
         </Stack>
       </Stack>
+
+      {canEdit && !isMainSuperAdmin && (
+        <Box sx={{ px: 2.5, pb: !branchesEnabled ? 0 : 2.5 }}>
+          <Alert severity="info">
+            You can see every location here, but your account is assigned to {branchName} — so you can edit that
+            branch's details only. Adding, activating or removing a location is the main Super Admin's call.
+          </Alert>
+        </Box>
+      )}
 
       {!branchesEnabled && (
         <Box sx={{ px: 2.5, pb: 2.5 }}>
@@ -398,7 +445,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
         loading={branches.loading}
         error={branches.error}
         onRetry={branches.reload}
-        onRowClick={canEdit ? (row) => setFormBranch(row) : undefined}
+        onRowClick={canEdit ? (row) => (canEditBranch(row.id) ? setFormBranch(row) : undefined) : undefined}
         page={page}
         limit={limit}
         total={items.length}
@@ -411,9 +458,9 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
           <EmptyState
             icon={StoreOutlined}
             title="No branches yet"
-            description="Add at least one branch — every bill has to belong to one. A single-location store can switch branch management off instead."
+            description="The Head Office is already a location, so billing works without any branches. Add one for each additional shop you run."
             action={
-              canEdit && (
+              isMainSuperAdmin && (
                 <Button variant="contained" startIcon={<AddRounded />} onClick={() => setFormBranch(null)}>
                   Add the first branch
                 </Button>
@@ -435,7 +482,8 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
         <DialogTitle sx={{ pb: 1, pr: 6 }}>
           {formBranch ? `Edit ${formBranch.name}` : 'Add a branch'}
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-            The branch code appears in every bill number raised here.
+            An additional business location. It inherits the main business details from the General tab unless it
+            sets its own here.
           </Typography>
         </DialogTitle>
 
@@ -468,39 +516,44 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
                 </Grid>
 
                 <Grid item xs={12} sm={6}>
-                  <RHFSwitch name="isActive" label="Branch is active" />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <RHFSwitch
-                    name="isDefault"
-                    label="Default branch"
-                    helperText="Used when a Super Admin bills without picking one"
-                  />
+                  <RHFSwitch name="isActive" label="Branch is active" disabled={!isMainSuperAdmin} />
                 </Grid>
 
-                <Grid item xs={12}>
+                <Grid item xs={12} sm={6}>
                   <RHFSwitch
                     name="hasOwnLogo"
-                    label="This branch has its own logo"
-                    helperText="Off: the branch prints under the store logo from Settings → Branding"
+                    label="This branch has its own branding"
+                    helperText="Off: the branch prints under the store logo and favicon from Settings → Branding"
                   />
                 </Grid>
-                {hasOwnLogo && (
-                  <Grid item xs={12}>
-                    <BranchLogoField
-                      branchId={formBranch?.id}
-                      current={dialogLogo}
-                      pendingFile={pendingLogo}
-                      onPendingFile={setPendingLogo}
-                      onUploaded={(branch) => {
-                        setDialogLogo(branch?.logo?.url || '');
-                        // Removing the logo puts the branch back on the store logo.
-                        if (branch && !branch.hasOwnLogo) setValue('hasOwnLogo', false);
-                        branches.reload();
-                      }}
-                    />
-                  </Grid>
-                )}
+                {hasOwnLogo &&
+                  BRANDING_SLOTS.map((slot) => (
+                    // Stacked rather than side by side, in the same order and at
+                    // the same full width the store's own Branding panel gives them.
+                    <Grid item xs={12} key={slot.kind}>
+                      <BranchBrandingField
+                        kind={slot.kind}
+                        label={slot.label}
+                        hint={slot.hint}
+                        frameHeight={slot.frameHeight}
+                        branchId={formBranch?.id}
+                        current={dialogAssets[slot.kind]}
+                        pendingFile={pendingAssets[slot.kind]}
+                        onPendingFile={(file) =>
+                          setPendingAssets((current) => ({ ...current, [slot.kind]: file }))
+                        }
+                        onUploaded={(branch) => {
+                          setDialogAssets({
+                            logo: branch?.logo?.url || '',
+                            favicon: branch?.favicon?.url || '',
+                          });
+                          // Removing the last mark puts the branch back on the store's.
+                          if (branch && !branch.hasOwnLogo) setValue('hasOwnLogo', false);
+                          branches.reload();
+                        }}
+                      />
+                    </Grid>
+                  ))}
               </Grid>
             </DialogContent>
 

@@ -20,6 +20,7 @@ export const dashboardApi = {
   summary: (params) => api.get('/dashboard/summary', { params }).then(unwrap),
   series: (params) => api.get('/dashboard/revenue-series', { params }).then(unwrap),
   paymentMethods: (params) => api.get('/dashboard/payment-methods', { params }).then(unwrap),
+  billStatus: (params) => api.get('/dashboard/bill-status', { params }).then(unwrap),
   topPerfumes: (params) => api.get('/dashboard/top-perfumes', { params }).then(unwrap),
   recentBills: (params) => api.get('/dashboard/recent-bills', { params }).then(unwrap),
   lowStock: (params) => api.get('/dashboard/low-stock', { params }).then(unwrap),
@@ -48,6 +49,9 @@ export const billApi = {
   lookupCustomers: (params) => api.get('/bills/customers', { params }).then(unwrap),
   create: (payload) => api.post('/bills', payload).then((r) => r.data),
   setStatus: (id, payload) => api.patch(`/bills/${id}/status`, payload).then((r) => r.data),
+  // Records money collected against a bill that already exists. Never creates a
+  // second bill, and never moves stock.
+  collectPayment: (id, payload) => api.patch(`/bills/${id}/payment`, payload).then((r) => r.data),
 };
 
 /* ─────────────────────────────── Users ─────────────────────────────── */
@@ -69,12 +73,13 @@ export const branchApi = {
   update: (id, payload) => api.patch(`/branches/${id}`, payload).then((r) => r.data),
   toggleStatus: (id) => api.patch(`/branches/${id}/status`).then((r) => r.data),
   remove: (id) => api.delete(`/branches/${id}`).then((r) => r.data),
-  uploadLogo: (id, file) => {
+  // kind is 'logo' | 'favicon' — the same pair the store carries.
+  uploadBranding: (id, kind, file) => {
     const form = new FormData();
     form.append('file', file);
-    return api.post(`/branches/${id}/logo`, form).then((r) => r.data);
+    return api.post(`/branches/${id}/branding/${kind}`, form).then((r) => r.data);
   },
-  removeLogo: (id) => api.delete(`/branches/${id}/logo`).then((r) => r.data),
+  removeBranding: (id, kind) => api.delete(`/branches/${id}/branding/${kind}`).then((r) => r.data),
 };
 
 /* ─────────────────────────────── Geo (address directory) ─────────────────────────────── */

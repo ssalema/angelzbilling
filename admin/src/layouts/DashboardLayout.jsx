@@ -4,6 +4,7 @@ import { Box, Container } from '@mui/material';
 import Sidebar, { SIDEBAR_WIDTH } from './Sidebar.jsx';
 import Topbar from './Topbar.jsx';
 import { RouteSkeleton } from '../components/common/StateViews.jsx';
+import ScrollManager from '../components/common/ScrollManager.jsx';
 
 const DashboardLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -11,6 +12,8 @@ const DashboardLayout = () => {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+      {/* Every route below scrolls the window, so one manager covers them all. */}
+      <ScrollManager />
       <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
 
       <Box

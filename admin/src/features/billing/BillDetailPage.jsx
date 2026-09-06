@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Box,
@@ -13,12 +13,15 @@ import {
   Typography,
   Divider,
   Avatar,
+  CircularProgress,
 } from '@mui/material';
 import {
   PrintOutlined,
+  DownloadOutlined,
   MoreVertRounded,
   ReplayOutlined,
   Inventory2Outlined,
+  PaymentsOutlined,
 } from '@mui/icons-material';
 
 import PageHeader from '../../components/common/PageHeader.jsx';
@@ -28,16 +31,23 @@ import SectionTitle from '../../components/common/SectionTitle.jsx';
 import SummaryRow from '../../components/common/SummaryRow.jsx';
 import { ErrorState, CardSkeleton } from '../../components/common/StateViews.jsx';
 import BillPrintView from './BillPrintView.jsx';
+import CollectPaymentDialog from './CollectPaymentDialog.jsx';
 
 import { billApi } from '../../api/endpoints.js';
+import { downloadBillPdf } from '../../utils/downloadBill.js';
 import useApiResource from '../../hooks/useApiResource.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { formatCurrency, formatDate } from '../../utils/format.js';
-import { PAYMENT_METHOD_LABELS } from '../../utils/constants.js';
+import { PAYMENT_METHOD_LABELS, locationOf } from '../../utils/constants.js';
 import { formatContactNumber } from '../../utils/countries.js';
-import { FONT, CARD_HEAD_PAD, CARD_PAD, brand, numericText } from '../../theme/index.js';
+import { FONT, CARD_HEAD_PAD, CARD_PAD, brand, numericText, statusColors } from '../../theme/index.js';
+
+// Long bills scroll inside the items card instead of pushing the summary
+// column far off screen. One row is an avatar plus two lines of text.
+const ITEMS_BEFORE_SCROLL = 6;
+const ITEM_ROW_HEIGHT = 97;
 
 const BillDetailPage = () => {
   const { id } = useParams();
@@ -48,6 +58,11 @@ const BillDetailPage = () => {
 
   const [menuAnchor, setMenuAnchor] = useState(null);
   const [confirmAction, setConfirmAction] = useState(null);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+
+  // The slip stays mounted off-screen, so the PDF is rasterised straight from it.
+  const slipRef = useRef(null);
+  const [downloading, setDownloading] = useState(false);
 
   const { data: bill, loading, error, reload } = useApiResource(() => billApi.get(id), [id]);
 
@@ -59,6 +74,17 @@ const BillDetailPage = () => {
     }
     return undefined;
   }, [bill, searchParams]);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      await downloadBillPdf(slipRef.current, bill);
+    } catch (err) {
+      snackbar.error(err.message);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const changeStatus = async (status, reason) => {
     try {
@@ -119,6 +145,17 @@ const BillDetailPage = () => {
   const paymentLabel = PAYMENT_METHOD_LABELS[bill.paymentMethod] || bill.paymentMethod;
   const savings = Number(bill.totalDiscount || 0);
 
+  const amountDue = Number(bill.amountDue || 0);
+  /**
+   * Only a bill that is still owed something can take a payment. A settled bill
+   * has nothing to collect and a refunded one has had its money handed back —
+   * offering the button on either would invite an entry that cannot be undone.
+   */
+  const canCollectPayment = bill.status === 'pending' && amountDue > 0;
+  // Newest first: "what happened last to this bill" is the question being asked.
+  const history = [...(bill.payments || [])].sort((a, b) => new Date(b.at) - new Date(a.at));
+  const refund = (bill.statusHistory || []).find((event) => event.to === 'refunded');
+
   return (
     <Box>
       <Box className="no-print">
@@ -129,8 +166,34 @@ const BillDetailPage = () => {
           breadcrumbs={crumbs}
           action={
             <Stack direction="row" spacing={1.5} alignItems="center">
-              <Button variant="contained" startIcon={<PrintOutlined />} onClick={() => window.print()}>
+              {/* Pending bills only — this is the whole point of the status. */}
+              {canCollectPayment && (
+                <Button
+                  variant="contained"
+                  startIcon={<PaymentsOutlined />}
+                  onClick={() => setPaymentOpen(true)}
+                  sx={{
+                    bgcolor: statusColors.pending.color,
+                    '&:hover': { bgcolor: statusColors.pending.color, filter: 'brightness(0.92)' },
+                  }}
+                >
+                  Update payment
+                </Button>
+              )}
+              <Button
+                variant={canCollectPayment ? 'outlined' : 'contained'}
+                startIcon={<PrintOutlined />}
+                onClick={() => window.print()}
+              >
                 Print
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={downloading ? <CircularProgress size={16} color="inherit" /> : <DownloadOutlined />}
+                disabled={downloading}
+                onClick={handleDownload}
+              >
+                Download
               </Button>
               {canModify && (
                 <Button
@@ -154,40 +217,49 @@ const BillDetailPage = () => {
               </Box>
               <Divider />
 
-              {items.map((item, index) => (
-                <Box key={`${item.sku}-${item.variantSku}-${index}`}>
-                  {index > 0 && <Divider />}
-                  <Stack direction="row" spacing={2} alignItems="flex-start" sx={{ p: CARD_PAD }}>
-                    <Avatar
-                      variant="rounded"
-                      src={item.image || undefined}
-                      alt={item.perfumeName}
-                      sx={{ width: 56, height: 56, bgcolor: brand.ivoryDeep, color: brand.inkSoft }}
-                    >
-                      <Inventory2Outlined fontSize="small" />
-                    </Avatar>
+              <Box
+                sx={{
+                  ...(items.length > ITEMS_BEFORE_SCROLL && {
+                    maxHeight: ITEMS_BEFORE_SCROLL * ITEM_ROW_HEIGHT,
+                    overflowY: 'auto',
+                  }),
+                }}
+              >
+                {items.map((item, index) => (
+                  <Box key={`${item.sku}-${item.variantSku}-${index}`}>
+                    {index > 0 && <Divider />}
+                    <Stack direction="row" spacing={2} alignItems="flex-start" sx={{ p: CARD_PAD }}>
+                      <Avatar
+                        variant="rounded"
+                        src={item.image || undefined}
+                        alt={item.perfumeName}
+                        sx={{ width: 56, height: 56, bgcolor: brand.ivoryDeep, color: brand.inkSoft }}
+                      >
+                        <Inventory2Outlined fontSize="small" />
+                      </Avatar>
 
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography sx={{ fontSize: FONT.lead, fontWeight: 700, lineHeight: 1.35 }}>
-                        {item.perfumeName}
-                      </Typography>
-                      {(item.variantLabel || item.variantSku || item.sku) && (
-                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-                          {[item.variantLabel, item.variantSku || item.sku].filter(Boolean).join(' · ')}
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography sx={{ fontSize: FONT.lead, fontWeight: 700, lineHeight: 1.35 }}>
+                          {item.perfumeName}
                         </Typography>
-                      )}
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                        {formatCurrency(item.unitPrice, { precise: true })} × {item.quantity}
-                        {item.discountPercent > 0 ? ` · ${item.discountPercent}% off` : ''}
-                      </Typography>
-                    </Box>
+                        {(item.variantLabel || item.variantSku || item.sku) && (
+                          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                            {[item.variantLabel, item.variantSku || item.sku].filter(Boolean).join(' · ')}
+                          </Typography>
+                        )}
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                          {formatCurrency(item.unitPrice, { precise: true })} × {item.quantity}
+                          {item.discountPercent > 0 ? ` · ${item.discountPercent}% off` : ''}
+                        </Typography>
+                      </Box>
 
-                    <Typography sx={{ fontSize: FONT.lead, fontWeight: 700, flexShrink: 0 }}>
-                      {formatCurrency(item.lineTotal, { precise: true })}
-                    </Typography>
-                  </Stack>
-                </Box>
-              ))}
+                      <Typography sx={{ fontSize: FONT.lead, fontWeight: 700, flexShrink: 0 }}>
+                        {formatCurrency(item.lineTotal, { precise: true })}
+                      </Typography>
+                    </Stack>
+                  </Box>
+                ))}
+              </Box>
             </Card>
 
             {bill.notes && (
@@ -206,7 +278,7 @@ const BillDetailPage = () => {
               <Card sx={{ p: CARD_PAD }}>
                 <SectionTitle title="Customer" sx={{ mb: 0 }} />
                 <Typography sx={{ mt: 0.5, fontSize: FONT.lead, fontWeight: 700 }}>
-                  {bill.customer?.name || '—'}
+                  {bill.customer?.name || 'NA'}
                 </Typography>
                 {bill.customer?.email && (
                   <Typography variant="body2" color="text.secondary">
@@ -235,15 +307,25 @@ const BillDetailPage = () => {
                   {branchesEnabled && (
                     <SummaryRow
                       label="Branch"
-                      value={
-                        bill.branch?.name
-                          ? `${bill.branch.name}${bill.branch.code ? ` (${bill.branch.code})` : ''}`
-                          : '—'
-                      }
+                      value={(() => {
+                        // No branch on the bill means it was raised at the Head
+                        // Office, which is a location like any other.
+                        const location = locationOf(bill.branch);
+                        return location.code ? `${location.name} (${location.code})` : location.name;
+                      })()}
                     />
                   )}
-                  <SummaryRow label="Billed by" value={bill.billedBy?.name || '—'} />
+                  <SummaryRow label="Billed by" value={bill.billedBy?.name || 'NA'} />
                   <SummaryRow label="Date" value={formatDate(bill.createdAt, 'time')} />
+                  {/* A status change is an action someone took, so it names them
+                      the same way the bill names who raised it. */}
+                  {refund && (
+                    <>
+                      <SummaryRow label="Refunded by" value={refund.by?.name || 'NA'} />
+                      <SummaryRow label="Refunded on" value={formatDate(refund.at, 'time')} />
+                      {refund.note && <SummaryRow label="Reason" value={refund.note} />}
+                    </>
+                  )}
                   {bill.transactionId && <SummaryRow label="Transaction ID" value={bill.transactionId} />}
                 </Box>
               </Card>
@@ -277,6 +359,24 @@ const BillDetailPage = () => {
                     </Typography>
                   </Stack>
 
+                  {/* A bill still carrying a balance has to show both halves, and
+                      say plainly that the balance is collected here rather than
+                      on a new bill. A settled one keeps the panel it always had. */}
+                  {amountDue > 0 && (
+                    <>
+                      <Divider sx={{ my: 1 }} />
+                      <SummaryRow label="Paid" value={formatCurrency(bill.amountPaid, { precise: true })} />
+                      <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ py: 0.6 }}>
+                        <Typography sx={{ fontSize: FONT.lead, fontWeight: 700 }}>Due</Typography>
+                        <Typography
+                          sx={{ ...numericText, fontSize: FONT.figureSm, color: statusColors.pending.color }}
+                        >
+                          {formatCurrency(amountDue, { precise: true })}
+                        </Typography>
+                      </Stack>
+                    </>
+                  )}
+
                   {savings > 0 && (
                     <Typography variant="body2" sx={{ mt: 0.75, color: 'success.main', fontWeight: 600 }}>
                       Saved {formatCurrency(savings, { precise: true })}
@@ -284,14 +384,62 @@ const BillDetailPage = () => {
                   )}
                 </Box>
               </Card>
+
+              {/* ── Payment history ──
+                  Who took money against this bill, how much, and when. Written
+                  from the signed-in account on every payment, so a part-paid
+                  bill settled by a second person still says exactly that. */}
+              {history.length > 0 && (
+                <Card>
+                  <Box sx={CARD_HEAD_PAD}>
+                    <SectionTitle title={`Payment history (${history.length})`} sx={{ mb: 0 }} />
+                  </Box>
+                  <Divider />
+                  {history.map((entry, index) => (
+                    <Box key={entry._id || `${entry.at}-${index}`}>
+                      {index > 0 && <Divider />}
+                      <Box sx={{ p: CARD_PAD }}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="baseline" spacing={1}>
+                          <Typography sx={{ fontSize: FONT.lead, fontWeight: 700 }}>
+                            {formatCurrency(entry.amount, { precise: true })}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" noWrap>
+                            {PAYMENT_METHOD_LABELS[entry.method] || entry.method}
+                          </Typography>
+                        </Stack>
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                          {entry.by?.name || 'NA'} · {formatDate(entry.at, 'medium')},{' '}
+                          {formatDate(entry.at, 'clock')}
+                        </Typography>
+                        {entry.note && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                            {entry.note}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+                  ))}
+                </Card>
+              )}
             </Stack>
           </Grid>
         </Grid>
       </Box>
 
-      {/* The thermal slip stays mounted but off-screen — Print still produces the receipt. */}
-      <Box sx={{ display: 'none', '@media print': { display: 'block' } }}>
-        <BillPrintView bill={bill} store={bill.store} />
+      {/* The thermal slip stays mounted but parked off-screen: Print still produces the
+          receipt, and Download can rasterise a node that actually has layout. */}
+      <Box
+        aria-hidden
+        sx={{
+          position: 'absolute',
+          top: 0,
+          left: -10000,
+          width: 360,
+          pointerEvents: 'none',
+          '@media print': { position: 'static', left: 0, width: 'auto', pointerEvents: 'auto' },
+        }}
+      >
+        <BillPrintView ref={slipRef} bill={bill} store={bill.store} />
       </Box>
 
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
@@ -302,7 +450,12 @@ const BillDetailPage = () => {
               status: 'refunded',
               title: 'Refund this bill?',
               message:
-                'The bill will be marked refunded and its items returned to stock. Revenue reports will exclude it.',
+                'The bill will be marked refunded and its items returned to stock. Revenue reports will exclude it' +
+                // A pending bill is being written off as well as refunded, and
+                // that is worth saying before it is done.
+                (amountDue > 0
+                  ? `, and the ${formatCurrency(amountDue)} still owed on it will no longer be collectable.`
+                  : '.'),
               confirmLabel: 'Mark refunded',
               severity: 'error',
             });
@@ -315,6 +468,16 @@ const BillDetailPage = () => {
           Refund bill
         </MenuItem>
       </Menu>
+
+      {/* Collecting the balance reloads the bill rather than patching it in
+          place: the server is what decided the new status, and the slip below
+          has to reprint from that same answer. */}
+      <CollectPaymentDialog
+        open={paymentOpen}
+        bill={bill}
+        onClose={() => setPaymentOpen(false)}
+        onCollected={reload}
+      />
 
       <ConfirmDialog
         open={Boolean(confirmAction)}

@@ -45,7 +45,14 @@ const userSchema = new mongoose.Schema(
     phone: { type: String, trim: true, default: '' },
     phoneCountryCode: { type: String, trim: true, default: '+91' },
     role: { type: String, enum: ROLES, default: 'staff', index: true },
-    /** null == every branch. Only a superadmin is allowed to have null here. */
+    /**
+     * The branch this account belongs to; null means the whole store.
+     *
+     * For an admin or staff account it is what scopes them — they see and touch
+     * their branch only. On a superadmin it means something different: they
+     * still SEE everything, but may only make changes inside that branch. Only
+     * a superadmin may have null here, and that one is the main Super Admin.
+     */
     branch: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', default: null },
     avatar: {
       url: { type: String, default: '' },
@@ -91,16 +98,11 @@ userSchema.pre('save', async function hashPassword(next) {
   next();
 });
 
-/** A superadmin is global by definition — never pin one to a single branch. */
-userSchema.pre('save', function normaliseBranch(next) {
-  if (this.role === 'superadmin') this.branch = null;
-  next();
-});
-
 userSchema.methods.comparePassword = function comparePassword(candidate) {
   return bcrypt.compare(candidate, this.password);
 };
 
+/** Read access. Every superadmin can look at every branch, assigned or not. */
 userSchema.methods.hasBranchAccess = function hasBranchAccess(branchId) {
   if (this.role === 'superadmin' || !this.branch) return true;
   return String(this.branch._id || this.branch) === String(branchId);

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import authenticate from '../../middlewares/authenticate.js';
-import { authorize } from '../../middlewares/authorize.js';
+import { requireGlobalSuperAdmin } from '../../middlewares/authorize.js';
 import validate from '../../middlewares/validate.js';
 import { imageUpload, enforceFileLimits } from '../../middlewares/upload.js';
 import {
@@ -22,15 +22,18 @@ router.use(authenticate);
 // Reading settings is fine for anyone — the bill print header uses them.
 router.get('/', getSettings);
 
-// Changing store identity and branding is a Super Admin responsibility.
-router.patch('/', authorize('superadmin'), validate({ body: updateSettingsSchema }), updateSettings);
-router.post(
-  '/branding/:kind',
-  authorize('superadmin'),
-  imageUpload.single('file'),
-  enforceFileLimits,
-  uploadBranding
+/**
+ * These settings ARE the main business: its name, tagline, contact details,
+ * address, GSTIN, logo and favicon, plus store-wide billing rules and the
+ * branch switch. A branch never overrides them, and a Super Admin assigned to a
+ * branch cannot change them — only the main Super Admin can.
+ */
+const mainBusinessOnly = requireGlobalSuperAdmin(
+  'Only the main Super Admin can change the main business details. Your account manages its branch only.'
 );
-router.delete('/branding/:kind', authorize('superadmin'), removeBranding);
+
+router.patch('/', mainBusinessOnly, validate({ body: updateSettingsSchema }), updateSettings);
+router.post('/branding/:kind', mainBusinessOnly, imageUpload.single('file'), enforceFileLimits, uploadBranding);
+router.delete('/branding/:kind', mainBusinessOnly, removeBranding);
 
 export default router;

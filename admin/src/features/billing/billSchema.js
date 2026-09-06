@@ -64,8 +64,45 @@ export const billSchema = z.object({
   }),
   taxPercent: z.coerce.number().min(0).max(100).default(0),
   extraDiscount: z.coerce.number().min(0, 'Cannot be negative').default(0),
+
+  /**
+   * Full Paid or Partial Paid. Only the amount is different — the bill itself
+   * is identical either way, which is why this never reaches the server: it
+   * sends `amountPaid` and the server decides the status from the total it
+   * computed itself.
+   */
+  paymentTerm: z.enum(['full', 'partial']).default('full'),
+  amountPaid: z.coerce.number().min(0, 'Cannot be negative').default(0),
+
   notes: z.string().trim().max(1000).default(''),
   branch: z.string().optional(),
+}).superRefine((values, ctx) => {
+  // A part payment is checked against the bill it is paying, so this has to sit
+  // at the object level where the items and the tax are both in hand.
+  if (values.paymentTerm !== 'partial') return;
+
+  const { grandTotal } = calculateTotals(values.items || [], {
+    taxPercent: values.taxPercent,
+    extraDiscount: values.extraDiscount,
+  });
+  const received = Number(values.amountPaid) || 0;
+
+  if (received > grandTotal) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['amountPaid'],
+      message: 'Cannot be more than the total payable',
+    });
+  }
+  // Paying the whole thing is Full Paid. Letting it through as "partial" would
+  // save a bill that is settled but carries the pending status forever.
+  if (received === grandTotal && grandTotal > 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['amountPaid'],
+      message: 'That is the full amount — choose Full Paid instead',
+    });
+  }
 });
 
 export const emptyBill = {
@@ -81,6 +118,8 @@ export const emptyBill = {
   paymentMethod: 'cash',
   taxPercent: 0,
   extraDiscount: 0,
+  paymentTerm: 'full',
+  amountPaid: 0,
   notes: '',
 };
 

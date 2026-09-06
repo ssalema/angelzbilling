@@ -29,7 +29,9 @@ const LogoDropzone = ({
   openRef,
   replaceLabel = 'Replace the logo',
   removeLabel = 'Remove the logo',
-  /** Fills the height of a flex column instead of standing at its own height. */
+  /** Frame height — `LOGO_FRAME.squareHeight` for a slot holding a square mark. */
+  height = LOGO_FRAME.height,
+  /** Takes the leftover height of a flex column, with `height` as its floor. */
   fill = false,
   sx,
 }) => (
@@ -47,9 +49,12 @@ const LogoDropzone = ({
       label={value ? replaceLabel : `Upload the ${alt.toLowerCase()}`}
       onFiles={onFiles}
       variant="frame"
+      // Dashed while the slot is empty and asking for a file; a plain mount
+      // once it holds artwork.
+      outline={value ? 'solid' : 'dashed'}
       sx={{
         p: LOGO_FRAME.gap,
-        ...(fill ? { flex: 1, minHeight: LOGO_FRAME.height } : { height: LOGO_FRAME.height }),
+        ...(fill ? { flex: 1, minHeight: height } : { height }),
         display: 'flex',
       }}
     >
@@ -59,6 +64,7 @@ const LogoDropzone = ({
           preview a background the bill never has. */}
       <Box
         sx={{
+          position: 'relative', // the preview centres itself against this box
           flex: 1,
           minWidth: 0,
           borderRadius: LOGO_FRAME.radius,

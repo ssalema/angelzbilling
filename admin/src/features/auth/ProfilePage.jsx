@@ -37,7 +37,7 @@ import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { authApi } from '../../api/endpoints.js';
 import { applyServerErrors } from '../../api/client.js';
 import { formatDate, initials } from '../../utils/format.js';
-import { ROLE_LABELS } from '../../utils/constants.js';
+import { ROLE_LABELS, locationLabel } from '../../utils/constants.js';
 import { DEFAULT_DIAL_CODE, addContactNumberIssue } from '../../utils/countries.js';
 import { CARD_PAD, ICON, brand } from '../../theme/index.js';
 
@@ -165,7 +165,7 @@ const ProfilePage = () => {
             <Stack direction="row" spacing={1} justifyContent="center" sx={{ mt: 1.5, flexWrap: 'wrap' }} useFlexGap>
               <Chip size="small" color="secondary" label={ROLE_LABELS[user?.role]} sx={{ color: brand.ink }} />
               {branchesEnabled && (
-                <Chip size="small" variant="outlined" label={user?.branch?.name || 'All branches'} />
+                <Chip size="small" variant="outlined" label={locationLabel(user?.branch)} />
               )}
             </Stack>
 
@@ -177,7 +177,7 @@ const ProfilePage = () => {
                   Last signed in
                 </Typography>
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  {user?.lastLoginAt ? formatDate(user.lastLoginAt, 'time') : '—'}
+                  {user?.lastLoginAt ? formatDate(user.lastLoginAt, 'time') : 'NA'}
                 </Typography>
               </Stack>
               <Stack direction="row" justifyContent="space-between">

@@ -7,6 +7,7 @@ import {
   getSummary,
   getSeries,
   getPaymentBreakdown,
+  getBillStatusBreakdown,
   getTopPerfumes,
   getRecentBills,
   getLowStock,
@@ -39,6 +40,7 @@ const cached = [validate({ query: rangeQuery }), cacheResponse()];
 router.get('/summary', cached, getSummary);
 router.get('/revenue-series', cached, getSeries);
 router.get('/payment-methods', cached, getPaymentBreakdown);
+router.get('/bill-status', cached, getBillStatusBreakdown);
 router.get('/top-perfumes', cached, getTopPerfumes);
 router.get('/recent-bills', cached, getRecentBills);
 router.get('/low-stock', cached, getLowStock);

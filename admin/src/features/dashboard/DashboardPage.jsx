@@ -23,18 +23,19 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
 import { formatCurrency, formatNumber } from '../../utils/format.js';
 import { brand } from '../../theme/index.js';
-import { DEFAULT_DATE_RANGE, isDefaultRange } from '../../utils/constants.js';
+import { DEFAULT_DATE_RANGE, isDefaultRange, locationLabel } from '../../utils/constants.js';
 
 /**
  * Every widget is fed by its own aggregation endpoint and owns its own range,
  * so refreshing the donut does not re-query the whole page.
  */
 const DashboardPage = () => {
-  const { isAdmin, user } = useAuth();
+  const { isAdmin, isSuperAdmin, user } = useAuth();
   const { branchesEnabled } = useSettings();
 
   // The main range drives the summary cards and the revenue chart together.
   const [mainRange, setMainRange] = useState(DEFAULT_DATE_RANGE);
+  const [statusRange, setStatusRange] = useState(DEFAULT_DATE_RANGE);
   const [paymentRange, setPaymentRange] = useState(DEFAULT_DATE_RANGE);
   const [topRange, setTopRange] = useState(DEFAULT_DATE_RANGE);
   const [topBy, setTopBy] = useState('units');
@@ -59,6 +60,12 @@ const DashboardPage = () => {
     mainRange.to,
   ]);
 
+  const billStatus = useApiResource(() => dashboardApi.billStatus(params(statusRange)), [
+    statusRange.range,
+    statusRange.from,
+    statusRange.to,
+  ]);
+
   const payments = useApiResource(() => dashboardApi.paymentMethods(params(paymentRange)), [
     paymentRange.range,
     paymentRange.from,
@@ -81,7 +88,7 @@ const DashboardPage = () => {
         title="Dashboard"
         subtitle={
           branchesEnabled
-            ? `Store performance at a glance · ${user?.branch?.name || 'all branches'}`
+            ? `Store performance at a glance · ${isSuperAdmin ? 'all branches' : locationLabel(user?.branch)}`
             : 'Store performance at a glance'
         }
         action={
@@ -99,10 +106,16 @@ const DashboardPage = () => {
       <Grid container spacing={2.25} sx={{ mb: 2.5 }}>
         <Grid item xs={12} sm={6} lg={3}>
           <StatCard
-            label="Total revenue"
+            // Money actually taken. A part-paid bill counts for what came in,
+            // and the rest shows up in the caption as still owed.
+            label="Revenue collected"
             value={formatCurrency(stats?.revenue?.value)}
             growth={stats?.revenue?.growth}
-            caption="vs previous period"
+            caption={
+              stats?.revenue?.outstanding
+                ? `${formatCurrency(stats.revenue.outstanding)} still pending`
+                : 'vs previous period'
+            }
             icon={CurrencyRupeeRounded}
             color={brand.plum}
             loading={summary.loading}
@@ -115,9 +128,12 @@ const DashboardPage = () => {
             value={formatNumber(stats?.bills?.value)}
             growth={stats?.bills?.growth}
             caption={
-              stats?.bills?.refunded
-                ? `${formatNumber(stats.bills.refunded)} refunded`
-                : 'none refunded'
+              [
+                stats?.bills?.pending ? `${formatNumber(stats.bills.pending)} pending` : '',
+                stats?.bills?.refunded ? `${formatNumber(stats.bills.refunded)} refunded` : '',
+              ]
+                .filter(Boolean)
+                .join(' · ') || 'all settled'
             }
             icon={ReceiptLongOutlined}
             color={brand.gold}
@@ -167,26 +183,55 @@ const DashboardPage = () => {
         />
       </Box>
 
-      {/* ── Payment breakdown ── */}
-      <Box sx={{ mb: 2.5 }}>
-        <BreakdownChart
-          title="Payment preference"
-          data={payments.data}
-          loading={payments.loading}
-          error={payments.error}
-          onRetry={payments.reload}
-          range={paymentRange}
-          onRangeChange={setPaymentRange}
-          onReset={() => setPaymentRange(DEFAULT_DATE_RANGE)}
-          canReset={!isDefaultRange(paymentRange)}
-          donut={false}
-          emptyMessage="No payments recorded in this period."
-          insight={(segments) => {
-            const top = segments[0];
-            return top ? `Customers prefer ${top.label} for payments.` : null;
-          }}
-        />
-      </Box>
+      {/* ── How bills settled, and how customers paid ──
+          Two questions about the same bills, so they sit side by side: the donut
+          is how many were settled in full, the pie is what they paid with. */}
+      <Grid container spacing={2.25} sx={{ mb: 2.5 }}>
+        <Grid item xs={12} md={5}>
+          <BreakdownChart
+            title="Bill status"
+            data={billStatus.data}
+            loading={billStatus.loading}
+            error={billStatus.error}
+            onRetry={billStatus.reload}
+            range={statusRange}
+            onRangeChange={setStatusRange}
+            onReset={() => setStatusRange(DEFAULT_DATE_RANGE)}
+            canReset={!isDefaultRange(statusRange)}
+            emptyMessage="No bills raised in this period."
+            insight={() => {
+              const settled = billStatus.data?.settledPercentage;
+              if (settled === undefined) return null;
+              const owed = billStatus.data?.outstanding || 0;
+              // The number a shop owner actually wants off this chart is how much
+              // of the period is still walking around unpaid.
+              return owed > 0
+                ? `${formatNumber(settled)}% settled in full · ${formatCurrency(owed)} still pending.`
+                : `${formatNumber(settled)}% of bills in this period were settled in full.`;
+            }}
+          />
+        </Grid>
+
+        <Grid item xs={12} md={7}>
+          <BreakdownChart
+            title="Payment preference"
+            data={payments.data}
+            loading={payments.loading}
+            error={payments.error}
+            onRetry={payments.reload}
+            range={paymentRange}
+            onRangeChange={setPaymentRange}
+            onReset={() => setPaymentRange(DEFAULT_DATE_RANGE)}
+            canReset={!isDefaultRange(paymentRange)}
+            donut={false}
+            emptyMessage="No payments recorded in this period."
+            insight={(segments) => {
+              const top = segments[0];
+              return top ? `Customers prefer ${top.label} for payments.` : null;
+            }}
+          />
+        </Grid>
+      </Grid>
 
       {/* ── Top sellers ── */}
       <Box sx={{ mb: 2.5 }}>

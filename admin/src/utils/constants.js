@@ -1,5 +1,29 @@
 /** Shared option lists. Keeping them here stops labels drifting between screens. */
 
+/**
+ * The store's locations are the Head Office plus every branch.
+ *
+ * The Head Office is the main business itself — the General tab in Settings —
+ * and is a location alongside the branches rather than a branch of its own. It
+ * has no Branch record, so the server sends `branch: null` for anything that
+ * belongs to it and shapes it into this on the way out. "All branches" is a
+ * filter word only: nothing is ever assigned to it.
+ */
+export const HEAD_OFFICE = { id: 'head-office', name: 'Head Office', code: 'HO', isHeadOffice: true };
+export const ALL_LOCATIONS = '';
+
+/** The location a record belongs to, with the Head Office standing in for null. */
+export const locationOf = (branch) => (branch?.id ? branch : HEAD_OFFICE);
+
+/** How a location is labelled in a table cell or chip. */
+export const locationLabel = (branch) => locationOf(branch).name;
+
+/** Head Office first, then the branches — the order every picker uses. */
+export const locationOptions = (branches = []) => [
+  HEAD_OFFICE,
+  ...branches.map((branch) => ({ ...branch, isHeadOffice: false })),
+];
+
 export const ROLES = [
   { value: 'superadmin', label: 'Super Admin', description: 'Full access to every branch, user and setting' },
   { value: 'admin', label: 'Branch Admin', description: 'Manages perfumes, billing and reports for one branch' },
@@ -19,7 +43,19 @@ export const PAYMENT_METHOD_LABELS = Object.fromEntries(PAYMENT_METHODS.map((p) 
 
 export const BILL_STATUSES = [
   { value: 'paid', label: 'Paid' },
+  { value: 'pending', label: 'Pending' },
   { value: 'refunded', label: 'Refunded' },
+];
+
+/**
+ * How much of a bill the customer settles at the counter.
+ *
+ * Partial does not make a different bill — same number, same items, same stock
+ * deduction — only a balance the shop collects later against that same record.
+ */
+export const PAYMENT_TERMS = [
+  { value: 'full', label: 'Full Paid', description: 'The customer settles the whole bill now' },
+  { value: 'partial', label: 'Partial Paid', description: 'Part now, the balance collected later' },
 ];
 
 export const PERFUME_STATUSES = [

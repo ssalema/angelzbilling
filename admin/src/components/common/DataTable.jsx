@@ -99,8 +99,9 @@ const DataTable = ({
         key={getRowKey(row, index)}
         hover
         // A clickable row is also a keyboard target — Enter opens it, exactly
-        // as clicking does. The actions cell stops the event so its buttons
-        // never open the row behind them.
+        // as clicking does. The actions cell stops the event so its buttons never
+        // open the row behind them, and any column marked `stopRowClick` does the
+        // same for a control it carries — an inline dropdown, say.
         onClick={onRowClick ? () => onRowClick(row) : undefined}
         onKeyDown={
           onRowClick
@@ -119,13 +120,17 @@ const DataTable = ({
           <TableCell
             key={column.key}
             align={column.align || 'left'}
-            onClick={column.key === 'actions' ? (event) => event.stopPropagation() : undefined}
+            onClick={
+              column.key === 'actions' || column.stopRowClick
+                ? (event) => event.stopPropagation()
+                : undefined
+            }
             sx={{
               width: column.width,
               ...(column.hideBelow ? { display: { xs: 'none', [column.hideBelow]: 'table-cell' } } : {}),
             }}
           >
-            {column.render ? column.render(row, index) : row[column.key] ?? '—'}
+            {column.render ? column.render(row, index) : row[column.key] ?? 'NA'}
           </TableCell>
         ))}
       </TableRow>

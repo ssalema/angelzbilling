@@ -20,8 +20,9 @@ import RHFContactNumber from '../../components/form/RHFContactNumber.jsx';
 import { userApi } from '../../api/endpoints.js';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 import { applyServerErrors } from '../../api/client.js';
-import { ROLES } from '../../utils/constants.js';
+import { ROLES, HEAD_OFFICE, locationOf, locationOptions } from '../../utils/constants.js';
 import { DEFAULT_DIAL_CODE, addContactNumberIssue } from '../../utils/countries.js';
 
 const passwordRule = z
@@ -40,18 +41,21 @@ const buildSchema = (isEdit, branchesEnabled = true) =>
       phone: z.string().trim().default(''),
       phoneCountryCode: z.string().trim().default(DEFAULT_DIAL_CODE),
       role: z.enum(['superadmin', 'admin', 'staff']),
-      branch: z.string().default(''),
+      // A location id: a branch, or the Head Office. Never empty in the form —
+      // "all branches" is a filter word and is not assignable.
+      branch: z.string().default(HEAD_OFFICE.id),
       isActive: z.boolean().default(true),
       password: isEdit ? z.string().optional() : passwordRule,
     })
     .superRefine((data, ctx) => {
-      // A scoped role without a branch would have access to nothing at all —
-      // unless branches are switched off, when there is nothing to scope to.
+      // Every account sits somewhere — the Head Office counts — so this only
+      // catches a picker that was never answered. With branches off there is
+      // nothing to scope to at all.
       if (branchesEnabled && data.role !== 'superadmin' && !data.branch) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['branch'],
-          message: 'Branch Admin and Billing Staff accounts must be assigned to a branch',
+          message: 'Choose the location this account belongs to',
         });
       }
       addContactNumberIssue(ctx, {
@@ -65,6 +69,9 @@ const buildSchema = (isEdit, branchesEnabled = true) =>
 const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
   const snackbar = useSnackbar();
   const { branchesEnabled } = useSettings();
+  // A Super Admin assigned to a branch builds that branch's team: they cannot
+  // grant the Super Admin role, and cannot post anyone to another location.
+  const { isMainSuperAdmin, myLocationId, branchName } = useAuth();
   const isEdit = Boolean(user);
 
   const methods = useForm({
@@ -75,7 +82,7 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
       phone: '',
       phoneCountryCode: DEFAULT_DIAL_CODE,
       role: 'staff',
-      branch: '',
+      branch: HEAD_OFFICE.id,
       isActive: true,
       password: '',
     },
@@ -100,11 +107,13 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
       phone: user?.phone || '',
       phoneCountryCode: user?.phoneCountryCode || DEFAULT_DIAL_CODE,
       role: user?.role || 'staff',
-      branch: user?.branch?.id || '',
+      branch: locationOf(user?.branch).id === HEAD_OFFICE.id && !isMainSuperAdmin
+        ? myLocationId
+        : locationOf(user?.branch).id,
       isActive: user?.isActive ?? true,
       password: '',
     });
-  }, [open, user, reset]);
+  }, [open, user, reset, isMainSuperAdmin, myLocationId]);
 
   const onSubmit = async (values) => {
     const payload = {
@@ -113,7 +122,10 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
       phone: values.phone,
       phoneCountryCode: values.phoneCountryCode,
       role: values.role,
-      branch: values.role === 'superadmin' ? null : values.branch,
+      // The Head Office has no Branch record, so it goes over the wire as null.
+      // For a Super Admin that also makes them the Head Office Super Admin, the
+      // one account with authority over the whole business.
+      branch: !values.branch || values.branch === HEAD_OFFICE.id ? null : values.branch,
       isActive: values.isActive,
     };
     if (!isEdit) payload.password = values.password;
@@ -129,7 +141,13 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
     }
   };
 
-  const activeBranches = branches.filter((b) => b.isActive || b.id === user?.branch?.id);
+  // Head Office first, then the branches. A Super Admin assigned to a branch
+  // only gets that one: they staff their own location, nobody else's.
+  const locations = locationOptions(
+    branches.filter((b) => b.isActive || b.id === locationOf(user?.branch).id)
+  ).filter((option) => isMainSuperAdmin || String(option.id) === String(myLocationId));
+
+  const roleOptions = ROLES.filter((r) => isMainSuperAdmin || r.value !== 'superadmin');
 
   return (
     <Dialog open={open} onClose={isSubmitting ? undefined : onClose} maxWidth="sm" fullWidth>
@@ -168,8 +186,12 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
                 <RHFSelect
                   name="role"
                   label="Role *"
-                  options={ROLES.map((r) => ({ value: r.value, label: r.label }))}
-                  helperText={ROLES.find((r) => r.value === role)?.description}
+                  options={roleOptions.map((r) => ({ value: r.value, label: r.label }))}
+                  helperText={
+                    isMainSuperAdmin
+                      ? ROLES.find((r) => r.value === role)?.description
+                      : 'Only the main Super Admin can grant the Super Admin role.'
+                  }
                 />
               </Grid>
 
@@ -179,17 +201,18 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
               <Grid item xs={12}>
                 <RHFSelect
                   name="branch"
-                  label={role === 'superadmin' ? 'Branch (not applicable)' : 'Assigned branch *'}
-                  disabled={role === 'superadmin'}
-                  placeholder={role === 'superadmin' ? 'All branches' : 'Select a branch'}
-                  options={activeBranches.map((branch) => ({
-                    value: branch.id,
-                    label: `${branch.name} (${branch.code})`,
+                  label="Assigned location *"
+                  disabled={!isMainSuperAdmin}
+                  options={locations.map((option) => ({
+                    value: option.id,
+                    label: option.code ? `${option.name} (${option.code})` : option.name,
                   }))}
                   helperText={
-                    role === 'superadmin'
-                      ? 'Super Admins always have access to every branch'
-                      : 'They will only see data belonging to this branch'
+                    !isMainSuperAdmin
+                      ? `New accounts join ${branchName}, the location your account manages.`
+                      : role === 'superadmin'
+                        ? `${HEAD_OFFICE.name} makes them the Head Office Super Admin, with authority over the whole business. Pick a branch and they still see everything, but can only make changes inside that branch.`
+                        : 'They will only see data belonging to this location'
                   }
                 />
               </Grid>
@@ -218,7 +241,9 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
               {role === 'superadmin' && (
                 <Grid item xs={12}>
                   <Alert severity="warning">
-                    A Super Admin can manage every branch, every user and every setting. Grant this sparingly.
+                    {watch('branch') && watch('branch') !== HEAD_OFFICE.id
+                      ? 'This Super Admin can view every location, user, bill and setting, but can only make changes within their assigned branch — not to the main business details or to another branch.'
+                      : `A ${HEAD_OFFICE.name} Super Admin can manage every location, every user and every setting, including the main business details. Grant this sparingly.`}
                   </Alert>
                 </Grid>
               )}

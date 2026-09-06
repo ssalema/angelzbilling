@@ -46,7 +46,6 @@ const BRANCHES = [
     address: { line1: '12 Attar Lane, Chandni Chowk', city: 'New Delhi', state: 'Delhi', pincode: '110006' },
     phone: '9811001100',
     email: 'flagship@angelzperfume.com',
-    isDefault: true,
   },
   {
     name: 'Angelz Perfume — Mumbai',

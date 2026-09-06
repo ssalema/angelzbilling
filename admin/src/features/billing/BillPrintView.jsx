@@ -1,8 +1,8 @@
 import { forwardRef } from 'react';
 import { Box, Typography, Stack } from '@mui/material';
 import { formatDate } from '../../utils/format.js';
-import { PAYMENT_METHOD_LABELS } from '../../utils/constants.js';
-import { DEFAULT_DIAL_CODE, formatContactNumber } from '../../utils/countries.js';
+import { PAYMENT_METHOD_LABELS, HEAD_OFFICE } from '../../utils/constants.js';
+import { formatContactNumber } from '../../utils/countries.js';
 import { brand } from '../../theme/index.js';
 
 /**
@@ -19,20 +19,20 @@ const readShop = (store, bill) => {
   return {
     name: s.siteName || 'Angelz Perfume',
     tagline: s.tagline || 'More than a fragrance',
-    logo: s.logo || s.branding?.logo?.url || '',
-    address: s.companyAddress || '',
-    phone: s.contactNumber || '',
-    phoneCountryCode: s.contactNumberCountryCode || DEFAULT_DIAL_CODE,
-    email: s.contactEmail || '',
+    favicon: s.favicon || s.branding?.favicon?.url || '',
     gstin: s.gstin || '',
     footer: s.invoiceFooter || s.billing?.invoiceFooter || 'Keep Smelling Amazing!',
     terms: s.termsAndConditions || s.billing?.termsAndConditions || '',
+    branchesEnabled: s.features?.branches !== false,
   };
 };
 
 /** Line columns carry no symbol — their headers already say (₹). */
 const money = (value) =>
   Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** How a collected instalment is dated on the slip: "06 Sept 2026, 04:49 PM". */
+const stamp = (at) => `${formatDate(at, 'medium')}, ${formatDate(at, 'clock').toUpperCase()}`;
 
 /** Browsers drop background fills when printing — the black stamps must opt back in. */
 const KEEP_FILL = { WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' };
@@ -46,18 +46,28 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
   const shop = readShop(store, bill);
   const branch = bill.branch || {};
   const isPaid = (bill.status || 'paid') === 'paid';
+  // What is still owed. Bills raised before part payments existed carry no
+  // balance field at all, and those were settled in full — so absent means zero.
+  const amountDue = Number(bill.amountDue || 0);
+  // Oldest first: the slip reads down the way the money came in.
+  const instalments = [...(bill.payments || [])].sort((a, b) => new Date(a.at) - new Date(b.at));
+  /**
+   * The breakdown appears the moment a bill stops being "paid once, in full":
+   * either something is still owed, or it took more than one payment to clear.
+   * A settled-in-instalments bill keeps its history on the reprint — that is the
+   * customer's proof of what they already handed over.
+   */
+  const showInstalments = amountDue > 0 || instalments.length > 1;
 
-  // A bill rung up at a branch prints that branch's identity, not head office's —
-  // except for the address, which always comes from the store's companyAddress
-  // setting so every slip carries one consistently formatted address. The branch
-  // snapshot is machine-joined from address parts and would otherwise render in a
-  // different style on branch bills than on head-office ones.
-  const address = shop.address || branch.address;
-  const phone = branch.phone
-    ? formatContactNumber(branch.phoneCountryCode, branch.phone, '')
-    : formatContactNumber(shop.phoneCountryCode, shop.phone, '');
+  // A bill rung up at a branch prints that branch's GSTIN, not head office's.
   const gstin = branch.gstin || shop.gstin;
-  const logo = branch.logo || shop.logo;
+  // …and names the location it was raised at, under the biller. No branch means
+  // the Head Office, which is a location like any other. A store running with
+  // branch management off has none to name, so the slip stays quiet.
+  const location = shop.branchesEnabled ? branch.name || HEAD_OFFICE.name : '';
+  // The slip prints under the favicon alone — no wordmark, and nothing at all
+  // when the store has not uploaded a favicon.
+  const mark = shop.favicon;
 
   return (
     <Box
@@ -77,30 +87,15 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
     >
       <Box sx={{ px: 2.5, pt: 3, pb: 2 }}>
         {/* ── Masthead ── */}
-        <Stack direction="row" alignItems="center" justifyContent="center" spacing={1}>
-          {logo ? (
-            <Box component="img" src={logo} alt={shop.name} sx={{ height: 40 }} />
-          ) : (
-            <BottleMark />
-          )}
-          <Typography
-            component="span"
-            sx={{
-              fontFamily: "'Cormorant Garamond', serif",
-              fontWeight: 700,
-              fontSize: '2.1rem',
-              lineHeight: 1,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-            }}
-          >
-            {shop.name}
-          </Typography>
-        </Stack>
+        {mark && (
+          <Stack direction="row" alignItems="center" justifyContent="center">
+            <Box component="img" src={mark} alt={shop.name} sx={{ height: 70 }} />
+          </Stack>
+        )}
 
         <Typography
           sx={{
-            mt: 0.75,
+            mt: mark ? 0.75 : 0,
             textAlign: 'center',
             fontSize: '0.6rem',
             letterSpacing: '0.28em',
@@ -111,38 +106,16 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
           {shop.tagline}
         </Typography>
 
-        <Box sx={{ ...RULE, my: 1.25 }} />
-
-        {/* ── Contact ── */}
-        <Stack spacing={0.4} sx={{ alignItems: 'center' }}>
-          {address && (
-            <ContactLine>
-              <PinIcon />
-              {address}
-            </ContactLine>
-          )}
-          {(phone || shop.email) && (
-            <Stack direction="row" spacing={2} justifyContent="center" flexWrap="wrap">
-              {phone && (
-                <ContactLine>
-                  <PhoneIcon />
-                  {phone}
-                </ContactLine>
-              )}
-              {shop.email && (
-                <ContactLine>
-                  <MailIcon />
-                  {shop.email}
-                </ContactLine>
-              )}
-            </Stack>
-          )}
-          {gstin && (
-            <Typography sx={{ fontSize: '0.62rem', color: brand.inkSoft, letterSpacing: '0.04em' }}>
+        {gstin && (
+          <>
+            <Box sx={{ ...RULE, my: 1.25 }} />
+            <Typography
+              sx={{ textAlign: 'center', fontSize: '0.62rem', color: brand.inkSoft, letterSpacing: '0.04em' }}
+            >
               GSTIN: {gstin}
             </Typography>
-          )}
-        </Stack>
+          </>
+        )}
 
         <Box sx={{ ...DASHED, my: 1.75 }} />
 
@@ -160,7 +133,10 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
             label="Date"
             value={`${formatDate(bill.createdAt, 'medium')}, ${formatDate(bill.createdAt, 'clock').toUpperCase()}`}
           />
-          <MetaRow label="Bill By" value={bill.billedBy?.name || '—'} />
+          <MetaRow
+            label="Bill By"
+            value={`${bill.billedBy?.name || 'NA'}${location ? ` (${location})` : ''}`}
+          />
         </Box>
 
         <Box sx={{ ...DASHED, my: 1.75 }} />
@@ -169,6 +145,7 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
         <Row sx={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', color: brand.inkSoft }}>
           <span>#</span>
           <span>PERFUME</span>
+          <span style={{ textAlign: 'center' }}>SIZE</span>
           <span style={{ textAlign: 'center' }}>QTY</span>
           <span style={{ textAlign: 'right' }}>PRICE (₹)</span>
           <span style={{ textAlign: 'right' }}>AMOUNT (₹)</span>
@@ -183,12 +160,8 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
               <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, lineHeight: 1.3 }}>
                 {item.perfumeName}
               </Typography>
-              {item.variantLabel && (
-                <Typography sx={{ fontSize: '0.62rem', color: brand.inkSoft, lineHeight: 1.4 }}>
-                  {item.variantLabel}
-                </Typography>
-              )}
             </Box>
+            <span style={{ textAlign: 'center', color: brand.inkSoft }}>{item.variantLabel || '—'}</span>
             <span style={{ textAlign: 'center' }}>{item.quantity}</span>
             <span style={{ textAlign: 'right' }}>{money(item.unitPrice)}</span>
             <span style={{ textAlign: 'right', fontWeight: 700 }}>{money(item.lineTotal)}</span>
@@ -211,6 +184,39 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
             <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.1em' }}>TOTAL</Typography>
             <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>₹ {money(bill.grandTotal)}</Typography>
           </Stack>
+
+          {/* A bill settled in instalments prints each one on its own line —
+              never a single rolled-up figure. The customer has to be able to
+              match a receipt against the payment they actually made, so the
+              money taken at the counter reads "During Billing" and everything
+              collected afterwards carries the date and time it came in.
+
+              A bill paid in full in one go has nothing extra to say, so it keeps
+              the plain TOTAL it always printed. */}
+          {showInstalments && (
+            <>
+              <Box sx={{ ...RULE, my: 1, opacity: 0.35 }} />
+              {instalments.map((entry, index) => (
+                <TotalRow
+                  key={entry._id || `${entry.at}-${index}`}
+                  label={entry.atBilling ? 'Paid (During Billing)' : `Paid (${stamp(entry.at)})`}
+                  value={`₹ ${money(entry.amount)}`}
+                  plain
+                />
+              ))}
+
+              {amountDue > 0 ? (
+                <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ pt: 0.3 }}>
+                  <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.08em' }}>
+                    BALANCE DUE
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.88rem', fontWeight: 700 }}>₹ {money(amountDue)}</Typography>
+                </Stack>
+              ) : (
+                <TotalRow label="Balance Due" value="₹ 0.00" />
+              )}
+            </>
+          )}
         </Box>
 
         {/* ── Payment ── */}
@@ -250,7 +256,7 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
             <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.12em' }}>
               {(bill.status || 'paid').toUpperCase()}
             </Typography>
-            {isPaid && <TickIcon />}
+            {isPaid && <TickIcon color="#fff" mark={brand.ink} />}
           </Stack>
         </Stack>
 
@@ -287,8 +293,8 @@ const Row = ({ children, sx }) => (
   <Box
     sx={{
       display: 'grid',
-      gridTemplateColumns: '18px 1fr 30px 66px 78px',
-      columnGap: 0.75,
+      gridTemplateColumns: '16px 1fr 40px 26px 60px 72px',
+      columnGap: 0.6,
       alignItems: 'center',
       ...sx,
     }}
@@ -316,16 +322,29 @@ const MetaRow = ({ label, value, strong, width = 74, nowrap }) => (
   </Stack>
 );
 
-const TotalRow = ({ label, value }) => (
-  <Stack direction="row" justifyContent="space-between" sx={{ py: 0.3, fontSize: '0.72rem' }}>
-    <Box sx={{ letterSpacing: '0.08em', textTransform: 'uppercase', color: brand.inkSoft }}>{label}</Box>
-    <Box sx={{ fontWeight: 600 }}>{value}</Box>
-  </Stack>
-);
-
-const ContactLine = ({ children }) => (
-  <Stack direction="row" spacing={0.6} alignItems="center" sx={{ fontSize: '0.68rem', textAlign: 'center' }}>
-    {children}
+/**
+ * `plain` drops the uppercase tracking for labels that carry a date. On a 72mm
+ * roll "PAID (06 SEPT 2026, 04:49 PM)" spaced out that way wraps onto three
+ * lines and pushes the amount out of sight; sentence case at the smaller size
+ * keeps each instalment on one line beside its figure.
+ */
+const TotalRow = ({ label, value, plain }) => (
+  <Stack
+    direction="row"
+    justifyContent="space-between"
+    spacing={1}
+    sx={{ py: 0.3, fontSize: plain ? '0.62rem' : '0.72rem' }}
+  >
+    <Box
+      sx={
+        plain
+          ? { color: brand.inkSoft, minWidth: 0 }
+          : { letterSpacing: '0.08em', textTransform: 'uppercase', color: brand.inkSoft }
+      }
+    >
+      {label}
+    </Box>
+    <Box sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{value}</Box>
   </Stack>
 );
 
@@ -338,27 +357,26 @@ const Badge = ({ icon, label, divider }) => (
   </Box>
 );
 
-/* ── Glyphs: inline SVG, so the slip prints identically without an icon font ── */
+/*
+ * ── Glyphs ──
+ *
+ * Inline SVG, so the slip prints identically without an icon font, and every
+ * colour is stated rather than inherited: html2canvas serialises each SVG on its
+ * own, where `currentColor` resolves to plain black instead of the brand ink.
+ */
 
-const BottleMark = () => (
-  <svg width="30" height="42" viewBox="0 0 30 42" fill="none" aria-hidden="true">
-    <rect x="11" y="1" width="8" height="6" rx="1.5" fill="currentColor" />
-    <rect x="13" y="7" width="4" height="4" fill="currentColor" />
-    <rect x="2.5" y="11" width="25" height="30" rx="5" stroke="currentColor" strokeWidth="2.5" />
-    <rect x="8" y="19" width="8" height="14" rx="2" fill="currentColor" />
-  </svg>
-);
+const GLYPH = { display: 'inline-block', flexShrink: 0, overflow: 'visible' };
 
 const BottleGlyph = () => (
-  <svg width="17" height="22" viewBox="0 0 30 42" fill="none" aria-hidden="true">
-    <rect x="11" y="1" width="8" height="6" rx="1.5" fill="currentColor" />
-    <rect x="13" y="7" width="4" height="4" fill="currentColor" />
-    <rect x="2.5" y="11" width="25" height="30" rx="5" stroke="currentColor" strokeWidth="2.5" />
+  <svg width="17" height="22" viewBox="0 0 30 42" fill="none" aria-hidden="true" style={GLYPH}>
+    <rect x="11" y="1" width="8" height="6" rx="1.5" fill={brand.ink} />
+    <rect x="13" y="7" width="4" height="4" fill={brand.ink} />
+    <rect x="2.5" y="11" width="25" height="30" rx="5" stroke={brand.ink} strokeWidth="2.5" />
   </svg>
 );
 
 const GiftGlyph = () => (
-  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={brand.ink} strokeWidth="1.6" aria-hidden="true" style={GLYPH}>
     <rect x="2.5" y="8.5" width="19" height="12.5" rx="1.5" />
     <path d="M2.5 12.5h19M12 8.5V21" />
     <path d="M12 8.5S9.5 3 7 4.2s-.2 4.3 5 4.3zM12 8.5S14.5 3 17 4.2s.2 4.3-5 4.3z" />
@@ -366,32 +384,38 @@ const GiftGlyph = () => (
 );
 
 const HeartGlyph = () => (
-  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={brand.ink} strokeWidth="1.6" aria-hidden="true" style={GLYPH}>
     <path d="M12 20.5 3.8 12.4a4.9 4.9 0 0 1 7-6.9l1.2 1.2 1.2-1.2a4.9 4.9 0 0 1 7 6.9z" />
   </svg>
 );
 
-const PinIcon = () => (
-  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z" />
-  </svg>
-);
-
-const PhoneIcon = () => (
-  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M6.6 10.8a15.5 15.5 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.6 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11.4 11.4 0 0 0 .6 3.6 1 1 0 0 1-.25 1z" />
-  </svg>
-);
-
-const MailIcon = () => (
-  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 4-8 5-8-5V6l8 5 8-5z" />
-  </svg>
-);
-
-const TickIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1.2 14.6-4-4 1.4-1.4 2.6 2.6 5.6-5.6 1.4 1.4z" />
+/**
+ * The status stamp's tick, drawn the same on screen, on paper and in the PDF.
+ *
+ * Both colours are passed in rather than inherited: html2canvas serialises each
+ * inline SVG on its own, where `currentColor` falls back to black — on the black
+ * PAID stamp that turned the tick into a dark blob. The disc and the check are
+ * separate shapes for the same reason: a single compound path relying on the
+ * nonzero winding rule to knock the check out of the disc rasterises
+ * inconsistently at this size.
+ */
+const TickIcon = ({ color = '#fff', mark = brand.ink }) => (
+  <svg
+    width="15"
+    height="15"
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+    style={{ display: 'block', flexShrink: 0, overflow: 'visible' }}
+  >
+    <circle cx="12" cy="12" r="10" fill={color} />
+    <path
+      d="M7.4 12.4 10.6 15.6 16.8 9.4"
+      fill="none"
+      stroke={mark}
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );
 

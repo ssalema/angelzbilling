@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Card,
@@ -92,6 +92,16 @@ const PerfumeListPage = () => {
 
   const facets = useApiResource(() => perfumeApi.facets(), []);
 
+  // Deleting the last perfume of a category drops it from the facets. Holding on to the
+  // now-missing value leaves the select blank and the table empty, so fall back to
+  // "All categories" as soon as it disappears.
+  useEffect(() => {
+    if (!filters.category || !facets.data) return;
+    if (!(facets.data.categories || []).includes(filters.category)) {
+      setFilters((prev) => ({ ...prev, category: '', page: 1 }));
+    }
+  }, [facets.data, filters.category]);
+
   const patch = useCallback((changes) => {
     // Any filter change resets to page 1 — staying on page 7 of a new result set
     // is the classic way to show a user an empty table for no reason.
@@ -159,7 +169,7 @@ const PerfumeListPage = () => {
       hideBelow: 'md',
       render: (row) => (
         <Box>
-          <Typography variant="body2">{row.category || '—'}</Typography>
+          <Typography variant="body2">{row.category || 'NA'}</Typography>
           {row.subCategory && (
             <Typography variant="caption" color="text.secondary">
               {row.subCategory}
@@ -199,7 +209,7 @@ const PerfumeListPage = () => {
           />
         ) : (
           <Typography variant="caption" color="text.secondary">
-            —
+            NA
           </Typography>
         ),
     },
@@ -226,7 +236,7 @@ const PerfumeListPage = () => {
           <Chip size="small" label={`${row.variantCount} sizes`} variant="outlined" />
         ) : (
           <Typography variant="caption" color="text.secondary">
-            —
+            NA
           </Typography>
         ),
     },

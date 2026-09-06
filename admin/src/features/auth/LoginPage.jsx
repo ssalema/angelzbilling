@@ -138,7 +138,7 @@ const LoginPage = () => {
       <Box sx={{ display: 'grid', placeItems: 'center', p: { xs: 2.5, sm: 4 } }}>
         <Card sx={{ p: { xs: 3, sm: 4.5 }, width: '100%', maxWidth: 420, border: 0, boxShadow: 'none', bgcolor: 'transparent' }}>
           {logo ? (
-            <Box component="img" src={logo} alt={siteName} sx={{ height: 44, mb: 3, objectFit: 'contain' }} />
+            <Box component="img" src={logo} alt={siteName} sx={{ display: 'block', width: '100%', maxWidth: '100%', height: 'auto', mb: 1, objectFit: 'contain', objectPosition: 'left' }} />
           ) : (
             <Box sx={{ display: { md: 'none' }, mb: 3 }}>
               <Typography sx={{ fontFamily: "'Cormorant Garamond', serif", fontSize: '1.7rem', fontWeight: 700, color: brand.plum }}>

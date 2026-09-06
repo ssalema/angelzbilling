@@ -36,7 +36,7 @@ const LOCKOUT_MS = 15 * 60 * 1000;
 export const login = async ({ email, password, userAgent }) => {
   const user = await User.findOne({ email })
     .select('+password +refreshTokens +failedLoginAttempts +lockedUntil')
-    .populate('branch', 'name code address phone phoneCountryCode gstin isActive hasOwnLogo logo');
+    .populate('branch', 'name code address phone phoneCountryCode gstin isActive hasOwnLogo logo favicon');
 
   // The account brake is checked before the password so a locked account cannot
   // be probed at all, and it follows the account rather than the caller's IP.
@@ -66,7 +66,11 @@ export const login = async ({ email, password, userAgent }) => {
     throw ApiError.forbidden('Your account has been deactivated. Please contact the super admin.');
   }
 
-  if (user.branch && user.branch.isActive === false) {
+  // An out-of-service branch stops the people scoped to it from working. A
+  // Super Admin assigned to one is not scoped by it — they see the whole store
+  // either way — so this must not lock them out, least of all when the main
+  // Super Admin switches branch management off and deactivates every branch.
+  if (user.role !== 'superadmin' && user.branch && user.branch.isActive === false) {
     throw ApiError.forbidden('Your branch is currently inactive. Please contact the super admin.');
   }
 
@@ -94,7 +98,7 @@ export const refreshSession = async (token, userAgent = '') => {
 
   const user = await User.findById(payload.sub)
     .select('+refreshTokens')
-    .populate('branch', 'name code address phone phoneCountryCode gstin isActive hasOwnLogo logo');
+    .populate('branch', 'name code address phone phoneCountryCode gstin isActive hasOwnLogo logo favicon');
 
   if (!user) throw ApiError.unauthorized('This account no longer exists');
   if (!user.isActive) throw ApiError.forbidden('Your account has been deactivated.');

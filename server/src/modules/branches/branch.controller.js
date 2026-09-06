@@ -5,10 +5,21 @@ import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess, sendCreated, sendPaginated } from '../../utils/ApiResponse.js';
 import { getPagination, getSort, escapeRegex } from '../../utils/query.js';
-import { assertBranchAccess } from '../../middlewares/authorize.js';
+import { assertBranchAccess, assertBranchWrite, isGlobalSuperAdmin } from '../../middlewares/authorize.js';
 import { uploadBuffer, destroyAsset } from '../../config/cloudinary.js';
 
 const SORTABLE = ['createdAt', 'name', 'code'];
+
+/** The two marks a branch can carry, named the way the store names them. */
+const BRANDING = { logo: 'Logo', favicon: 'Favicon' };
+
+/** Resolved once, here, so every picker, table and print header agrees. */
+const withBranding = (branch) => ({
+  ...branch,
+  id: branch._id,
+  effectiveLogo: branch.hasOwnLogo ? branch.logo?.url || '' : '',
+  effectiveFavicon: branch.hasOwnLogo ? branch.favicon?.url || '' : '',
+});
 
 export const listBranches = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
@@ -49,10 +60,7 @@ export const listBranches = asyncHandler(async (req, res) => {
   const billMap = Object.fromEntries(billCounts.map((r) => [String(r._id), r.count]));
 
   const enriched = items.map((b) => ({
-    ...b,
-    id: b._id,
-    // Resolved once here so every picker, table and print header agrees.
-    effectiveLogo: b.hasOwnLogo ? b.logo?.url || '' : '',
+    ...withBranding(b),
     userCount: userMap[String(b._id)] || 0,
     billCount: billMap[String(b._id)] || 0,
   }));
@@ -69,10 +77,7 @@ export const getBranch = asyncHandler(async (req, res) => {
   // branch's address, phone and GSTIN.
   assertBranchAccess(req, branch._id);
 
-  return sendSuccess(res, {
-    message: 'Branch loaded',
-    data: { ...branch, id: branch._id, effectiveLogo: branch.hasOwnLogo ? branch.logo?.url || '' : '' },
-  });
+  return sendSuccess(res, { message: 'Branch loaded', data: withBranding(branch) });
 });
 
 export const createBranch = asyncHandler(async (req, res) => {
@@ -88,6 +93,20 @@ export const createBranch = asyncHandler(async (req, res) => {
 export const updateBranch = asyncHandler(async (req, res) => {
   const branch = await Branch.findById(req.params.id);
   if (!branch) throw ApiError.notFound('Branch not found');
+
+  // Reading every branch is fine for any Super Admin; editing one is not.
+  assertBranchWrite(req, branch._id);
+
+  // Activation is store-wide, and the edit form carries an isActive switch —
+  // without this, a branch Super Admin could close their own location through
+  // the form after being refused at the status route.
+  if (
+    !isGlobalSuperAdmin(req.user) &&
+    req.body.isActive !== undefined &&
+    req.body.isActive !== branch.isActive
+  ) {
+    throw ApiError.forbidden('Only the main Super Admin can activate or deactivate a location.');
+  }
 
   if (req.body.code && req.body.code !== branch.code) {
     const clash = await Branch.findOne({ code: req.body.code, _id: { $ne: branch._id } });
@@ -144,44 +163,57 @@ export const toggleBranchStatus = asyncHandler(async (req, res) => {
 });
 
 /**
- * A branch logo replaces the store logo everywhere that branch is shown — bill
- * headers, the branch table and a branch admin's sidebar. Uploading one turns
- * `hasOwnLogo` on, so the toggle and the asset can never disagree.
+ * A branch's own branding replaces the store's everywhere that branch is shown:
+ * the logo heads its bills and its admins' sidebar, the favicon is the mark on
+ * the printed slip and in the branch table. Uploading either turns
+ * `hasOwnLogo` on, so the toggle and the artwork can never disagree.
  */
-export const uploadBranchLogo = asyncHandler(async (req, res) => {
+export const uploadBranchBranding = asyncHandler(async (req, res) => {
+  const kind = req.params.kind; // 'logo' | 'favicon'
   const branch = await Branch.findById(req.params.id);
   if (!branch) throw ApiError.notFound('Branch not found');
+  assertBranchWrite(req, branch._id);
   if (!req.file) throw ApiError.badRequest('Choose an image to upload');
-  if (!req.file.mimetype.startsWith('image/')) throw ApiError.badRequest('A branch logo must be an image file');
+  if (!req.file.mimetype.startsWith('image/')) {
+    throw ApiError.badRequest(`A branch ${kind} must be an image file`);
+  }
 
-  const previous = branch.logo?.publicId;
+  const previous = branch[kind]?.publicId;
   const asset = await uploadBuffer(req.file.buffer, { folder: 'branding/branches', resourceType: 'image' });
 
-  branch.logo = { url: asset.url, publicId: asset.publicId };
+  branch[kind] = { url: asset.url, publicId: asset.publicId };
   branch.hasOwnLogo = true;
   await branch.save();
 
   if (previous && previous !== asset.publicId) await destroyAsset(previous, 'image');
 
   return sendSuccess(res, {
-    message: `Logo updated for "${branch.name}"`,
-    data: { ...branch.toObject(), id: branch._id, effectiveLogo: branch.logo.url },
+    message: `${BRANDING[kind]} updated for "${branch.name}"`,
+    data: withBranding(branch.toObject()),
   });
 });
 
-export const removeBranchLogo = asyncHandler(async (req, res) => {
+export const removeBranchBranding = asyncHandler(async (req, res) => {
+  const kind = req.params.kind;
   const branch = await Branch.findById(req.params.id);
   if (!branch) throw ApiError.notFound('Branch not found');
+  assertBranchWrite(req, branch._id);
 
-  const publicId = branch.logo?.publicId;
-  branch.logo = { url: '', publicId: '' };
-  branch.hasOwnLogo = false; // falls back to the store logo
+  const publicId = branch[kind]?.publicId;
+  branch[kind] = { url: '', publicId: '' };
+
+  // The switch only goes off once there is no artwork left to switch on: losing
+  // the favicon should not quietly drop the logo back to the store's as well.
+  const other = kind === 'logo' ? 'favicon' : 'logo';
+  if (!branch[other]?.url) branch.hasOwnLogo = false;
   await branch.save();
 
   if (publicId) await destroyAsset(publicId, 'image');
 
   return sendSuccess(res, {
-    message: `"${branch.name}" now uses the store logo`,
-    data: { ...branch.toObject(), id: branch._id, effectiveLogo: '' },
+    message: branch.hasOwnLogo
+      ? `${BRANDING[kind]} removed for "${branch.name}"`
+      : `"${branch.name}" now uses the store branding`,
+    data: withBranding(branch.toObject()),
   });
 });

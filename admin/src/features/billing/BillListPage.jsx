@@ -19,6 +19,7 @@ import {
   PrintOutlined,
   DownloadOutlined,
   ReceiptLongOutlined,
+  PaymentsOutlined,
 } from '@mui/icons-material';
 
 import PageHeader from '../../components/common/PageHeader.jsx';
@@ -27,6 +28,7 @@ import StatusChip from '../../components/common/StatusChip.jsx';
 import StatCard from '../dashboard/components/StatCard.jsx';
 import { EmptyState } from '../../components/common/StateViews.jsx';
 import BillPrintView from './BillPrintView.jsx';
+import CollectPaymentDialog from './CollectPaymentDialog.jsx';
 import {
   FilterBar,
   FilterSearch,
@@ -48,10 +50,12 @@ import {
   BILL_STATUSES,
   PAYMENT_METHODS,
   PAYMENT_METHOD_LABELS,
+  HEAD_OFFICE,
+  locationOf,
   DEFAULT_DATE_RANGE,
   isDefaultRange,
 } from '../../utils/constants.js';
-import { ICON, brand } from '../../theme/index.js';
+import { ICON, brand, statusColors } from '../../theme/index.js';
 
 const BillListPage = () => {
   const navigate = useNavigate();
@@ -69,6 +73,9 @@ const BillListPage = () => {
   const [downloadBill, setDownloadBill] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
   const downloadRef = useRef(null);
+
+  // The pending row whose balance is being collected, if any.
+  const [paymentBill, setPaymentBill] = useState(null);
 
   const [range, setRange] = useState(DEFAULT_DATE_RANGE);
   const [filters, setFilters] = useState({
@@ -236,10 +243,19 @@ const BillListPage = () => {
       label: 'Amount',
       align: 'right',
       sortable: true,
+      // The amount owed is what makes a pending row actionable, so it sits under
+      // the total rather than hiding behind the status pill.
       render: (row) => (
-        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-          {formatCurrency(row.grandTotal)}
-        </Typography>
+        <Box>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+            {formatCurrency(row.grandTotal)}
+          </Typography>
+          {row.amountDue > 0 && (
+            <Typography variant="caption" sx={{ color: statusColors.pending.color, fontWeight: 600 }}>
+              {formatCurrency(row.amountDue)} due
+            </Typography>
+          )}
+        </Box>
       ),
     },
     {
@@ -255,14 +271,19 @@ const BillListPage = () => {
       key: 'branch',
       label: 'Branch',
       hideBelow: 'lg',
-      render: (row) => (
-        <Box>
-          <Typography variant="body2">{row.branch?.code || '—'}</Typography>
-          <Typography variant="caption" color="text.secondary" noWrap>
-            {row.branch?.name}
-          </Typography>
-        </Box>
-      ),
+      // A bill with no branch was raised at the Head Office — the main business
+      // is a location too, so this is never blank.
+      render: (row) => {
+        const location = locationOf(row.branch);
+        return (
+          <Box>
+            <Typography variant="body2">{location.code || HEAD_OFFICE.code}</Typography>
+            <Typography variant="caption" color="text.secondary" noWrap>
+              {location.name}
+            </Typography>
+          </Box>
+        );
+      },
     },
     {
       key: 'billedBy',
@@ -270,7 +291,7 @@ const BillListPage = () => {
       hideBelow: 'lg',
       render: (row) => (
         <Typography variant="body2" noWrap>
-          {row.billedBy?.name || '—'}
+          {row.billedBy?.name || 'NA'}
         </Typography>
       ),
     },
@@ -296,6 +317,23 @@ const BillListPage = () => {
     },
     actionsColumn((row) => (
         <Stack direction="row" spacing={0.25} justifyContent="center">
+          {/* Pending only. A paid or refunded bill has nothing left to collect,
+              so it never carries this button. */}
+          {row.status === 'pending' && row.amountDue > 0 && (
+            <Tooltip title={`Update payment — ${formatCurrency(row.amountDue)} due`}>
+              <IconButton
+                size="small"
+                onClick={(event) => {
+                  // The row itself opens the bill; this opens the dialog over it.
+                  event.stopPropagation();
+                  setPaymentBill(row);
+                }}
+                sx={{ color: statusColors.pending.color }}
+              >
+                <PaymentsOutlined sx={{ fontSize: ICON.action }} />
+              </IconButton>
+            </Tooltip>
+          )}
           <Tooltip title="View bill">
             <IconButton size="small" onClick={() => navigate(`/billing/${row.id}`)}>
               <VisibilityOutlined sx={{ fontSize: ICON.action }} />
@@ -353,36 +391,39 @@ const BillListPage = () => {
             <StatCard
               label="Bills in period"
               value={formatNumber(stats.data?.totalBills)}
-              caption={`${formatNumber(stats.data?.paidCount || 0)} paid`}
+              caption={`${formatNumber(stats.data?.paidCount || 0)} paid · ${formatNumber(
+                stats.data?.pendingCount || 0
+              )} pending`}
               loading={stats.loading}
               color={brand.plum}
             />
           </Grid>
           <Grid item xs={12} sm={6} lg={3}>
             <StatCard
-              label="Revenue"
+              label="Revenue collected"
               value={formatCurrency(stats.data?.revenue)}
-              caption="paid bills only"
+              caption={`of ${formatCurrency(stats.data?.billedAmount)} billed`}
               loading={stats.loading}
               color={brand.gold}
+            />
+          </Grid>
+          {/* The other half of the revenue card: money billed but not yet in. */}
+          <Grid item xs={12} sm={6} lg={3}>
+            <StatCard
+              label="Total pending"
+              value={formatCurrency(stats.data?.outstanding)}
+              caption={`across ${formatNumber(stats.data?.pendingCount || 0)} pending bill(s)`}
+              loading={stats.loading}
+              color={statusColors.pending.color}
             />
           </Grid>
           <Grid item xs={12} sm={6} lg={3}>
             <StatCard
               label="Refunded value"
               value={formatCurrency(stats.data?.refundedAmount)}
-              caption={`across ${formatNumber(stats.data?.refundedCount || 0)} bill(s)`}
+              caption={`across ${formatNumber(stats.data?.refundedCount || 0)} bill(s) · stock returned`}
               loading={stats.loading}
               color={brand.rose}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6} lg={3}>
-            <StatCard
-              label="Refunded bills"
-              value={formatNumber(stats.data?.refundedCount)}
-              caption="stock returned to inventory"
-              loading={stats.loading}
-              color={brand.plumLight}
             />
           </Grid>
         </Grid>
@@ -431,11 +472,14 @@ const BillListPage = () => {
                 onChange={(e) => patch({ branch: e.target.value })}
               >
                 <MenuItem value="">All branches</MenuItem>
-                {(branches.data?.items || []).map((branch) => (
-                  <MenuItem key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </MenuItem>
-                ))}
+                <MenuItem value={HEAD_OFFICE.id}>{HEAD_OFFICE.name}</MenuItem>
+                {(branches.data?.items || [])
+                  .filter((branch) => branch.isActive)
+                  .map((branch) => (
+                    <MenuItem key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </MenuItem>
+                  ))}
               </FilterSelect>
             )}
 
@@ -489,6 +533,15 @@ const BillListPage = () => {
           />
         </Card>
       </Box>
+
+      {/* Collecting a balance changes both the row and the period totals, so the
+          list and its summary strip are refetched together. */}
+      <CollectPaymentDialog
+        open={Boolean(paymentBill)}
+        bill={paymentBill}
+        onClose={() => setPaymentBill(null)}
+        onCollected={refreshAll}
+      />
 
       {/* Off-screen slip — mounted only while a row is being printed. */}
       {printBill && (
