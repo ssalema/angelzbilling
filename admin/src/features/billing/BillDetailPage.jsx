@@ -44,7 +44,7 @@ import { FONT, CARD_HEAD_PAD, CARD_PAD, brand, numericText, statusColors } from 
 
 // Long bills scroll inside the items card instead of pushing the summary
 // column far off screen. One row is an avatar plus two lines of text.
-const ITEMS_BEFORE_SCROLL = 6;
+const ITEMS_BEFORE_SCROLL = 8;
 const ITEM_ROW_HEIGHT = 97;
 
 const BillDetailPage = () => {

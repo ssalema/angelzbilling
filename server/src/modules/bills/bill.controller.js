@@ -15,12 +15,43 @@ import {
   buildBillItems,
   calculateTotals,
   resolveBillBranch,
+  deductStock,
 } from './bill.service.js';
 
 const SORTABLE = ['createdAt', 'billNumber', 'grandTotal', 'status', 'amountDue'];
 
 /** The signed-in account, in the shape every audit entry is stamped with. */
 const actor = (req) => ({ id: req.user._id, name: req.user.name, email: req.user.email });
+
+/**
+ * Money and stock have to move together, and only a replica set can promise
+ * that. This runs `work` in a transaction where one is available and calls
+ * `fallback` where one is not, so the two call sites that move both do not each
+ * carry their own copy of the detection.
+ *
+ * The fallback is not equivalent and is not pretending to be: without
+ * transactions the best available is "do the reversible thing first, and undo
+ * it by hand if the second write fails". Each caller writes that unwind itself,
+ * because what needs undoing differs.
+ */
+const noTransactionSupport = (error) =>
+  /Transaction numbers are only allowed|replica set|Illegal state transition/i.test(error?.message || '');
+
+const atomically = async (work, fallback) => {
+  const session = await mongoose.startSession();
+  try {
+    let result;
+    await session.withTransaction(async () => {
+      result = await work(session);
+    });
+    return result;
+  } catch (error) {
+    if (!noTransactionSupport(error)) throw error;
+    return fallback();
+  } finally {
+    await session.endSession();
+  }
+};
 
 /** Money inside an error message, so "₹5,550.00" reads the way the slip prints it. */
 const formatMoney = (value) =>
@@ -296,27 +327,44 @@ export const createBill = asyncHandler(async (req, res) => {
     notes: req.body.notes || '',
   };
 
-  const session = await mongoose.startSession();
-  let bill;
-
-  try {
-    // A transaction keeps "bill saved" and "stock reduced" atomic on a replica
-    // set. Standalone MongoDB has no transactions, so we fall back gracefully.
-    await session.withTransaction(async () => {
+  // Stock comes off the shelf BEFORE the bill is written, in both paths.
+  //
+  // `deductStock` is the point at which this bill either has the weight or
+  // does not — the check in `buildBillItems` above was only a read, and a read
+  // taken before the counter got busy. Doing it first means the failure case
+  // is "no bill, no stock moved" rather than "bill saved, stock overdrawn".
+  //
+  // It has to be inside the transaction too, not just first: `withTransaction`
+  // retries its callback on a write conflict, and the retry has to re-test the
+  // stock against whatever the winning transaction left behind. That is exactly
+  // what the guarded filter does, and why the deduction cannot be hoisted out.
+  const bill = await atomically(
+    async (session) => {
+      await deductStock(stockOps, session);
       const [created] = await Bill.create([payload], { session });
-      await Perfume.bulkWrite(stockOps, { session });
-      bill = created;
-    });
-  } catch (error) {
-    const noTransactions =
-      /Transaction numbers are only allowed|replica set|Illegal state transition/i.test(error.message || '');
-    if (!noTransactions) throw error;
-
-    bill = await Bill.create(payload);
-    await Perfume.bulkWrite(stockOps);
-  } finally {
-    await session.endSession();
-  }
+      return created;
+    },
+    async () => {
+      // No transactions. The deduction is still atomic per perfume, so nothing
+      // can oversell — but a failure to save the bill afterwards would leave
+      // the weight off the shelf with nothing to account for it, so that one
+      // case is unwound by hand.
+      await deductStock(stockOps);
+      try {
+        return await Bill.create(payload);
+      } catch (error) {
+        await Perfume.bulkWrite(
+          stockOps.map((op) => ({
+            updateOne: {
+              filter: { _id: op.updateOne.filter._id },
+              update: { $inc: { stock: op.updateOne.filter.stock.$gte } },
+            },
+          }))
+        );
+        throw error;
+      }
+    }
+  );
 
   return sendCreated(res, {
     message: `Bill ${bill.billNumber} created`,
@@ -364,24 +412,85 @@ export const collectPayment = asyncHandler(async (req, res) => {
   const at = new Date();
   const method = req.body.method || bill.paymentMethod;
 
-  bill.payments.push({ amount, method, at, by, note: req.body.note || '' });
-  bill.amountPaid = round2(Number(bill.amountPaid || 0) + amount);
-  bill.amountDue = round2(bill.grandTotal - bill.amountPaid);
+  /**
+   * The read above was for the guards and the error wording; THIS is the write
+   * that decides whether the money lands.
+   *
+   * Read-modify-write through `bill.save()` lost money: five tills collecting
+   * the same ₹1,000 balance all succeeded, wrote five payment entries, and left
+   * `amountPaid` at ₹1,000 — the last writer's `paid = old + amount` overwrote
+   * the other four. Four ₹1,000 instalments against a ₹4,000 bill settled it
+   * "in full" having banked ₹1,000.
+   *
+   * `$inc` applies to whatever the balance actually is at write time rather
+   * than to the copy this request read, and the filter is the mutex: it insists
+   * the bill is STILL pending and still owes at least this much. A refund
+   * landing in between flips the status and this stops matching, which is what
+   * closes the refund-versus-collection race as well.
+   *
+   * The half-paisa tolerance absorbs float drift in a repeatedly `$inc`-ed
+   * balance; it is well below the smallest unit anyone can pay.
+   */
+  const EPSILON = 0.005;
+  const collected = await Bill.findOneAndUpdate(
+    { _id: bill._id, status: 'pending', amountDue: { $gte: amount - EPSILON } },
+    {
+      $push: { payments: { amount, method, at, by, note: req.body.note || '' } },
+      $inc: { amountPaid: amount, amountDue: -amount },
+    },
+    { new: true }
+  );
 
-  const settled = bill.amountDue <= 0;
-  if (settled) {
-    bill.amountDue = 0;
-    bill.status = 'paid';
-    bill.statusHistory.push({ from: 'pending', to: 'paid', at, by, note: 'Balance settled in full' });
+  if (!collected) {
+    // Something changed between the read and the write. Re-read so the message
+    // describes what actually happened rather than what we assumed.
+    const now = await Bill.findById(bill._id).lean();
+    if (now?.status === 'refunded') {
+      throw ApiError.conflict(
+        `Bill ${bill.billNumber} was refunded while you were collecting — no payment was taken.`
+      );
+    }
+    if (now?.status === 'paid') {
+      throw ApiError.conflict(
+        `Bill ${bill.billNumber} was settled by someone else while you were collecting — nothing was taken.`
+      );
+    }
+    throw ApiError.conflict(
+      `Only ${formatMoney(now?.amountDue)} is still pending on bill ${bill.billNumber} — ` +
+        `someone else collected against it while you were entering ${formatMoney(amount)}.`
+    );
   }
 
-  await bill.save();
+  /**
+   * Exactly one caller's `$inc` takes the balance to zero, and only that one
+   * sees it here — so only that one writes the settlement. The filter makes
+   * that a fact rather than a hope: a second attempt finds the status already
+   * 'paid' and matches nothing. `amountPaid` is set to the grand total rather
+   * than incremented, which clears any accumulated float drift at the one
+   * moment the exact figure is known.
+   */
+  let settledBill = collected;
+  if (collected.amountDue <= EPSILON) {
+    settledBill =
+      (await Bill.findOneAndUpdate(
+        { _id: bill._id, status: 'pending', amountDue: { $lte: EPSILON } },
+        {
+          $set: { status: 'paid', amountDue: 0, amountPaid: collected.grandTotal },
+          $push: {
+            statusHistory: { from: 'pending', to: 'paid', at, by, note: 'Balance settled in full' },
+          },
+        },
+        { new: true }
+      )) || collected;
+  }
+
+  const settled = settledBill.status === 'paid';
 
   return sendSuccess(res, {
     message: settled
-      ? `Bill ${bill.billNumber} is now fully paid`
-      : `${formatMoney(amount)} recorded — ${formatMoney(bill.amountDue)} still due on ${bill.billNumber}`,
-    data: { ...bill.toObject(), id: bill._id },
+      ? `Bill ${settledBill.billNumber} is now fully paid`
+      : `${formatMoney(amount)} recorded — ${formatMoney(settledBill.amountDue)} still due on ${settledBill.billNumber}`,
+    data: { ...settledBill.toObject(), id: settledBill._id },
   });
 });
 
@@ -423,29 +532,82 @@ export const updateBillStatus = asyncHandler(async (req, res) => {
   const restock = [...returned.entries()].map(([perfumeId, grams]) => ({
     updateOne: { filter: { _id: perfumeId }, update: { $inc: { stock: grams } } },
   }));
-  if (restock.length) await Perfume.bulkWrite(restock);
 
   const at = new Date();
-  bill.statusHistory.push({
-    from: bill.status,
-    to: status,
-    at,
-    by: actor(req),
-    note: reason || '',
-  });
+  const by = actor(req);
 
-  bill.refundedAt = at;
-  bill.refundReason = reason || '';
-  bill.status = status;
-  // The money has gone back over the counter, so a part-paid bill stops being
-  // owed anything — leaving the balance here would keep a voided sale sitting in
-  // the outstanding column forever.
-  bill.amountDue = 0;
-  await bill.save();
+  /**
+   * Claiming the status IS the lock on the refund.
+   *
+   * The checks above ran against a copy of the bill and then restocked
+   * unconditionally, so three refund clicks landing together all passed them
+   * and all put the weight back: a two-unit sale returned 200 g three times and
+   * invented 400 g of inventory that had never existed. Stock you can conjure
+   * by double-clicking is worse than stock you can oversell.
+   *
+   * `status: { $in: ['paid', 'pending'] }` lets exactly one caller move the
+   * bill out of a refundable state; everyone else matches nothing and restocks
+   * nothing. The status flip and the restock then travel together, so the two
+   * can never disagree.
+   */
+  const claim = () =>
+    Bill.findOneAndUpdate(
+      { _id: bill._id, status: { $in: ['paid', 'pending'] } },
+      {
+        $set: {
+          status,
+          refundedAt: at,
+          refundReason: reason || '',
+          // The money has gone back over the counter, so a part-paid bill stops
+          // being owed anything — leaving the balance here would keep a voided
+          // sale sitting in the outstanding column forever.
+          amountDue: 0,
+        },
+        $push: { statusHistory: { from: bill.status, to: status, at, by, note: reason || '' } },
+      },
+      { new: true }
+    );
+
+  const refunded = await atomically(
+    async (session) => {
+      const claimed = await claim().session(session);
+      if (!claimed) return null;
+      if (restock.length) await Perfume.bulkWrite(restock, { session });
+      return claimed;
+    },
+    async () => {
+      // No transactions: the claim is still an atomic mutex, so at most one
+      // caller restocks. Only the two-writes-are-not-one gap is left, and a
+      // failed restock hands the claim back rather than leaving a refunded bill
+      // whose stock was never returned.
+      const claimed = await claim();
+      if (!claimed) return null;
+      if (!restock.length) return claimed;
+      try {
+        await Perfume.bulkWrite(restock);
+        return claimed;
+      } catch (error) {
+        await Bill.updateOne(
+          { _id: bill._id },
+          {
+            $set: { status: bill.status, refundedAt: null, refundReason: '', amountDue: bill.amountDue },
+            $pop: { statusHistory: 1 },
+          }
+        );
+        throw error;
+      }
+    }
+  );
+
+  if (!refunded) {
+    throw ApiError.conflict(
+      `Bill ${bill.billNumber} was already refunded while you were working on it — the stock and the money have been put back once.`
+    );
+  }
 
   return sendSuccess(res, {
-    message: `Bill ${bill.billNumber} marked as ${status}`,
-    data: { ...bill.toObject(), id: bill._id },
+    message: `Bill ${refunded.billNumber} marked as ${status}`,
+    data: { ...refunded.toObject(), id: refunded._id },
   });
 });
 

@@ -140,14 +140,70 @@ export const buildBillItems = async (items, { maxDiscountPercent = 100, canOverr
 
   // One deduction per perfume, against its single stock field — a variant has
   // no stock of its own to touch.
+  //
+  // `stock: { $gte: grams }` is not belt-and-braces on the check above, it IS
+  // the check. The loop read stock into `remaining` and validated against it;
+  // by the time this write lands another till may already have taken the same
+  // weight, and an unguarded `$inc` would happily drive stock negative — ten
+  // cashiers each selling "the last bottle" all succeeded and left the perfume
+  // at -900 g. Carrying the condition into the write itself makes the read and
+  // the deduction one atomic step, and a filter that no longer matches is how
+  // the loser finds out. See `deductStock` for what happens then.
   const stockOps = [...consumed.entries()].map(([perfumeId, grams]) => ({
     updateOne: {
-      filter: { _id: perfumeId },
+      filter: { _id: perfumeId, stock: { $gte: grams } },
       update: { $inc: { stock: -grams } },
     },
   }));
 
   return { lines, stockOps };
+};
+
+/**
+ * Applies the guarded deductions and refuses the whole bill if any of them was
+ * beaten to the stock.
+ *
+ * `modifiedCount` is the whole signal: every op is a `$gte` filter, so an op
+ * that matched nothing is a perfume that no longer has the weight this bill
+ * needs. There is no partial sale — one line short means the bill does not
+ * happen, so this throws and the caller unwinds (inside the transaction, by
+ * aborting it; outside one, by putting back what it already took).
+ *
+ * The failing perfume is looked up afterwards purely to name it in the message:
+ * "someone else just bought it" is only useful if it says what.
+ */
+export const deductStock = async (stockOps, session = null) => {
+  if (!stockOps.length) return;
+
+  const options = session ? { session, ordered: false } : { ordered: false };
+  const result = await Perfume.bulkWrite(stockOps, options);
+
+  if (result.modifiedCount === stockOps.length) return;
+
+  const ids = stockOps.map((op) => op.updateOne.filter._id);
+  const current = await Perfume.find({ _id: { $in: ids } })
+    .select('name stock')
+    .session(session)
+    .lean();
+  const stockById = new Map(current.map((p) => [String(p._id), p]));
+
+  const short = stockOps
+    .filter((op) => {
+      const perfume = stockById.get(String(op.updateOne.filter._id));
+      return !perfume || perfume.stock < op.updateOne.filter.stock.$gte;
+    })
+    .map((op) => {
+      const perfume = stockById.get(String(op.updateOne.filter._id));
+      const needed = op.updateOne.filter.stock.$gte;
+      return perfume
+        ? `"${perfume.name}" (${formatGrams(needed)} needed, ${formatGrams(perfume.stock)} left)`
+        : 'a perfume that no longer exists';
+    });
+
+  throw ApiError.conflict(
+    `Stock ran out while this bill was being saved — ${short.join(', ')}. ` +
+      'Someone else billed it first. Reload the stock and try again.'
+  );
 };
 
 /** Single place where money is added up, so preview and save can never disagree. */
