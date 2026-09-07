@@ -2,6 +2,9 @@ import { z } from 'zod';
 
 const objectId = z.string().regex(/^[a-f\d]{24}$/i, 'Invalid id');
 
+/** Ceiling on any single stock movement — 10,000 kg, in grams. */
+const MAX_STOCK_GRAMS = 10_000_000;
+
 const mediaSchema = z.object({
   url: z.string().url('Media must be a valid URL'),
   publicId: z.string().optional().default(''),
@@ -186,14 +189,101 @@ export const lookupQuerySchema = z.object({
 
 export const statusBodySchema = z.object({ status: z.enum(['draft', 'published', 'archived']) });
 
-export const stockBodySchema = z.object({
-  /**
-   * Grams on hand after the correction, not a bottle count. There is no
-   * variantSku here on purpose: a perfume has exactly one stock figure.
-   */
-  stock: z.coerce.number().min(0, 'Stock cannot be negative'),
-  /** Optional — lets the same inline editor retune the alert weight. */
-  lowStockThreshold: z.coerce.number().min(0).optional(),
+/** Grams, with a sane ceiling — a stock line is weight, not a mistyped barcode. */
+// The min/max also fence off Infinity, which `z.number()` alone lets through.
+const gramsDelta = z.coerce
+  .number()
+  .min(-MAX_STOCK_GRAMS, 'That much stock cannot be removed at once')
+  .max(MAX_STOCK_GRAMS, 'That is more stock than one update can add');
+
+export const stockBodySchema = z
+  .object({
+    /**
+     * Grams on hand after the correction, not a bottle count. There is no
+     * variantSku here on purpose: a perfume has exactly one stock figure.
+     */
+    stock: z.coerce.number().min(0, 'Stock cannot be negative').optional(),
+    /**
+     * Grams arriving, added to whatever is on hand. The stock update screen
+     * sends this rather than a total it worked out itself, so a bottle sold
+     * while the admin was typing is not quietly written back over.
+     */
+    addStock: gramsDelta.optional(),
+    /** Optional — lets the same inline editor retune the alert weight. */
+    lowStockThreshold: z.coerce.number().min(0).optional(),
+  })
+  .refine((data) => data.stock !== undefined || data.addStock !== undefined, {
+    path: ['stock'],
+    message: 'Send either a new stock total or the grams to add',
+  });
+
+/**
+ * The stock screen's type-ahead. With no term it answers with the perfumes that
+ * actually need restocking, so the box is useful before anything is typed.
+ */
+export const stockSearchQuerySchema = z.object({
+  q: z.string().trim().max(100, 'Search term is too long').optional().default(''),
+  limit: z.coerce.number().int().min(1).max(50).optional().default(20),
+});
+
+/**
+ * One request matches every row of an uploaded sheet against the catalogue.
+ * The cap is the sheet size the bulk screen accepts — comfortably inside the
+ * 2mb body limit, and far more than a restock run ever carries.
+ */
+export const MAX_BULK_STOCK_ROWS = 2000;
+
+export const resolveStockNamesSchema = z.object({
+  names: z
+    .array(z.string().trim().min(1).max(180))
+    .min(1, 'Nothing to match')
+    .max(MAX_BULK_STOCK_ROWS, `Up to ${MAX_BULK_STOCK_ROWS} rows can be matched at once`),
+});
+
+export const bulkStockSchema = z.object({
+  items: z
+    .array(z.object({ id: objectId, addStock: gramsDelta }))
+    .min(1, 'Nothing to update')
+    .max(MAX_BULK_STOCK_ROWS, `Up to ${MAX_BULK_STOCK_ROWS} perfumes can be updated at once`),
 });
 
 export const idParamSchema = z.object({ id: objectId });
+
+/* ───────────────────────── Price ladder updates ─────────────────────────
+ * The repricing screen sends a BASE price — what a perfume costs per kilo —
+ * and never the per-size figures it previewed. The server runs the ladder
+ * itself, so a tampered or stale preview cannot write a price nobody approved.
+ */
+
+/** Mirrors MIN/MAX_BASE_PRICE in utils/priceLadder.js. */
+const basePrice = z.coerce
+  .number()
+  .min(1, 'Price must be at least ₹1')
+  .max(10_000_000, 'That price is far higher than any perfume in the catalogue');
+
+/** The repricing screen's type-ahead — the same shape as the stock one. */
+export const priceSearchQuerySchema = z.object({
+  q: z.string().trim().max(100, 'Search term is too long').optional().default(''),
+  limit: z.coerce.number().int().min(1).max(50).optional().default(20),
+});
+
+/**
+ * One request matches every row of an uploaded sheet against the catalogue.
+ * The cap is the sheet size the bulk screen accepts — comfortably inside the
+ * 2mb body limit, and larger than the catalogue itself.
+ */
+export const MAX_BULK_PRICE_ROWS = 2000;
+
+export const resolvePriceNamesSchema = z.object({
+  names: z
+    .array(z.string().trim().min(1).max(180))
+    .min(1, 'Nothing to match')
+    .max(MAX_BULK_PRICE_ROWS, `Up to ${MAX_BULK_PRICE_ROWS} rows can be matched at once`),
+});
+
+export const bulkPriceSchema = z.object({
+  items: z
+    .array(z.object({ id: objectId, basePrice }))
+    .min(1, 'Nothing to update')
+    .max(MAX_BULK_PRICE_ROWS, `Up to ${MAX_BULK_PRICE_ROWS} perfumes can be repriced at once`),
+});

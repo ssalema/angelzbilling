@@ -26,10 +26,19 @@ const BranchBrandingField = ({
   onUploaded,
   disabled,
   frameHeight,
+  /**
+   * A held-back file being uploaded by the dialog once the branch exists —
+   * the work is out of this component's hands, so its progress comes in.
+   */
+  uploading = false,
+  uploadProgress = null,
 }) => {
   const inputRef = useRef(null);
   const snackbar = useSnackbar();
   const [busy, setBusy] = useState(false);
+  // Null except while a file is on the wire — a removal is busy with nothing to
+  // measure, so it leaves this alone and the frame runs an indeterminate bar.
+  const [progress, setProgress] = useState(null);
   const [pendingUrl, setPendingUrl] = useState('');
 
   useEffect(() => {
@@ -60,14 +69,16 @@ const BranchBrandingField = ({
     }
 
     setBusy(true);
+    setProgress(0);
     try {
-      const result = await branchApi.uploadBranding(branchId, kind, file);
+      const result = await branchApi.uploadBranding(branchId, kind, file, setProgress);
       snackbar.success(result.message);
       onUploaded?.(result.data);
     } catch (error) {
       snackbar.error(error.message);
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   };
 
@@ -104,7 +115,8 @@ const BranchBrandingField = ({
         openRef={inputRef}
         value={preview}
         alt={label}
-        busy={busy}
+        busy={busy || uploading}
+        progress={busy ? progress : uploadProgress}
         disabled={disabled}
         height={frameHeight}
         onFiles={(files) => choose(files?.[0])}

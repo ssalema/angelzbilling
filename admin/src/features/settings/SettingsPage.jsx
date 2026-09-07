@@ -173,6 +173,10 @@ const SettingsPage = () => {
   const [branding, setBranding] = useState({});
   const brandingDirty = Object.keys(branding).length > 0;
 
+  // Percentage per slot while the save is uploading it — the slot shows the
+  // same spinner-and-bar readout the perfume media grid does.
+  const [brandingProgress, setBrandingProgress] = useState({});
+
   const stageBranding = (kind, value) => setBranding((current) => ({ ...current, [kind]: value }));
 
   const discard = () => {
@@ -191,9 +195,19 @@ const SettingsPage = () => {
       for (const kind of ['logo', 'favicon']) {
         if (!(kind in branding)) continue;
         const file = branding[kind];
-        const uploaded = file
-          ? await settingsApi.uploadBranding(kind, file)
-          : await settingsApi.removeBranding(kind);
+        let uploaded;
+        if (file) {
+          setBrandingProgress((current) => ({ ...current, [kind]: 0 }));
+          try {
+            uploaded = await settingsApi.uploadBranding(kind, file, (value) =>
+              setBrandingProgress((current) => ({ ...current, [kind]: value }))
+            );
+          } finally {
+            setBrandingProgress((current) => ({ ...current, [kind]: null }));
+          }
+        } else {
+          uploaded = await settingsApi.removeBranding(kind);
+        }
         data = uploaded.data;
       }
 
@@ -514,6 +528,7 @@ const SettingsPage = () => {
                     pending={branding}
                     onPending={stageBranding}
                     onResetPending={() => setBranding({})}
+                    progress={brandingProgress}
                     disabled={isSubmitting}
                   />
                 </Grid>

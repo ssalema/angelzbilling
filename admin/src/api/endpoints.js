@@ -41,6 +41,27 @@ export const perfumeApi = {
   update: (id, payload) => api.patch(`/perfumes/${id}`, payload).then((r) => r.data),
   setStatus: (id, status) => api.patch(`/perfumes/${id}/status`, { status }).then((r) => r.data),
   remove: (id) => api.delete(`/perfumes/${id}`).then((r) => r.data),
+
+  /* ── Stock top-ups ──
+   * Every one of these ADDS grams to what is on hand; none of them sets a
+   * total. The bulk pair carries rows the browser read out of a spreadsheet —
+   * the file itself is never uploaded and never leaves the admin's machine.
+   */
+  // One row per perfume; with no `q` it answers with what needs restocking.
+  stockSearch: (params) => api.get('/perfumes/stock/search', { params }).then(unwrapFull),
+  addStock: (id, payload) => api.patch(`/perfumes/${id}/stock`, payload).then((r) => r.data),
+  resolveStockNames: (names) => api.post('/perfumes/stock/resolve', { names }).then(unwrap),
+  bulkAddStock: (items) => api.post('/perfumes/stock/bulk', { items }).then((r) => r.data),
+
+  /* ── Repricing ──
+   * Each of these carries a BASE price — what a kilo of the perfume costs —
+   * and never the per-size figures the screen previewed: the server runs the
+   * size ladder itself and writes what the rule says. As with stock, a bulk
+   * sheet is parsed in the browser and only its rows are ever sent.
+   */
+  priceSearch: (params) => api.get('/perfumes/price/search', { params }).then(unwrapFull),
+  resolvePriceNames: (names) => api.post('/perfumes/price/resolve', { names }).then(unwrap),
+  bulkUpdatePrices: (items) => api.post('/perfumes/price/bulk', { items }).then((r) => r.data),
 };
 
 /* ─────────────────────────────── Bills ─────────────────────────────── */
@@ -68,6 +89,20 @@ export const userApi = {
   remove: (id) => api.delete(`/users/${id}`).then((r) => r.data),
 };
 
+/**
+ * Axios config that reports upload percentage. The branding slots and the
+ * perfume media grid all show the same "Uploading… 42%" frame, so they all
+ * report it the same way from here.
+ */
+const withProgress = (onProgress) =>
+  onProgress
+    ? {
+        onUploadProgress: (event) => {
+          if (event.total) onProgress(Math.round((event.loaded * 100) / event.total));
+        },
+      }
+    : undefined;
+
 /* ─────────────────────────────── Branches ─────────────────────────────── */
 export const branchApi = {
   list: (params) => api.get('/branches', { params }).then(unwrapFull),
@@ -77,10 +112,12 @@ export const branchApi = {
   toggleStatus: (id) => api.patch(`/branches/${id}/status`).then((r) => r.data),
   remove: (id) => api.delete(`/branches/${id}`).then((r) => r.data),
   // kind is 'logo' | 'favicon' — the same pair the store carries.
-  uploadBranding: (id, kind, file) => {
+  uploadBranding: (id, kind, file, onProgress) => {
     const form = new FormData();
     form.append('file', file);
-    return api.post(`/branches/${id}/branding/${kind}`, form).then((r) => r.data);
+    return api
+      .post(`/branches/${id}/branding/${kind}`, form, withProgress(onProgress))
+      .then((r) => r.data);
   },
   removeBranding: (id, kind) => api.delete(`/branches/${id}/branding/${kind}`).then((r) => r.data),
 };
@@ -97,10 +134,12 @@ export const settingsApi = {
   get: () => api.get('/settings').then(unwrap),
   getPublic: () => api.get('/settings/public').then(unwrap),
   update: (payload) => api.patch('/settings', payload).then((r) => r.data),
-  uploadBranding: (kind, file) => {
+  uploadBranding: (kind, file, onProgress) => {
     const form = new FormData();
     form.append('file', file);
-    return api.post(`/settings/branding/${kind}`, form).then((r) => r.data);
+    return api
+      .post(`/settings/branding/${kind}`, form, withProgress(onProgress))
+      .then((r) => r.data);
   },
   removeBranding: (kind) => api.delete(`/settings/branding/${kind}`).then((r) => r.data),
 };
@@ -111,13 +150,7 @@ export const uploadApi = {
     const form = new FormData();
     [...files].forEach((file) => form.append('files', file));
     form.append('folder', folder);
-    return api
-      .post('/uploads', form, {
-        onUploadProgress: (event) => {
-          if (onProgress && event.total) onProgress(Math.round((event.loaded * 100) / event.total));
-        },
-      })
-      .then(unwrap);
+    return api.post('/uploads', form, withProgress(onProgress)).then(unwrap);
   },
   remove: (publicId, resourceType = 'image') =>
     api.delete('/uploads', { data: { publicId, resourceType } }).then((r) => r.data),

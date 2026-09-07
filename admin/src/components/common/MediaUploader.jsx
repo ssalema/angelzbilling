@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   Box,
   Typography,
@@ -31,7 +31,6 @@ import { IMG } from '../../utils/image.js';
  * image, and reordering is a pure array operation.
  */
 const MediaUploader = ({ images = [], onImagesChange, maxImages = 5, folder = 'perfumes' }) => {
-  const inputRef = useRef(null);
   const snackbar = useSnackbar();
   const [progress, setProgress] = useState(null);
 
@@ -102,40 +101,41 @@ const MediaUploader = ({ images = [], onImagesChange, maxImages = 5, folder = 'p
 
   return (
     <Box>
-      <Dropzone
-        openRef={inputRef}
-        multiple
-        accept={IMAGE_TYPES}
-        disabled={uploading || full}
-        label={full ? 'All image slots are full' : 'Add perfume images'}
-        onFiles={handleFiles}
-        sx={{ py: 4, px: 3 }}
-      >
-        {uploading ? (
-          <Stack alignItems="center" spacing={1.5}>
-            <CircularProgress size={30} />
-            <Typography variant="body2" color="text.secondary">
-              Uploading… {progress}%
-            </Typography>
-            <LinearProgress variant="determinate" value={progress} sx={{ width: '60%', borderRadius: 2 }} />
-          </Stack>
-        ) : (
-          <>
-            <CloudUpload sx={{ fontSize: ICON.illustration, color: brand.plumLight, mb: 1 }} />
-            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-              {full ? 'All image slots are full' : 'Drag & drop perfume images here'}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              {full
-                ? 'Remove an image to add another'
-                : `or click to browse · ${Math.max(0, imageSlots)} image slot${imageSlots === 1 ? '' : 's'} remaining`}
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
-              JPEG, JFIF, PNG, WEBP or GIF up to 5MB · {maxImages} images maximum
-            </Typography>
-          </>
-        )}
-      </Dropzone>
+      {/* The wide panel is the empty state only — once a tile exists, the grid's
+          own 'Add image' dropzone takes over so the two never compete. */}
+      {images.length === 0 && (
+        <Dropzone
+          multiple
+          accept={IMAGE_TYPES}
+          disabled={uploading}
+          label="Add perfume images"
+          onFiles={handleFiles}
+          sx={{ py: 4, px: 3 }}
+        >
+          {uploading ? (
+            <Stack alignItems="center" spacing={1.5}>
+              <CircularProgress size={30} />
+              <Typography variant="body2" color="text.secondary">
+                Uploading… {progress}%
+              </Typography>
+              <LinearProgress variant="determinate" value={progress} sx={{ width: '60%', borderRadius: 2 }} />
+            </Stack>
+          ) : (
+            <>
+              <CloudUpload sx={{ fontSize: ICON.illustration, color: brand.plumLight, mb: 1 }} />
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                Drag & drop perfume images here
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                or click to browse · {maxImages} image slot{maxImages === 1 ? '' : 's'} remaining
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                JPEG, JFIF, PNG, WEBP or GIF up to 5MB · {maxImages} images maximum
+              </Typography>
+            </>
+          )}
+        </Dropzone>
+      )}
 
       {/* Image grid — first tile is the primary */}
       {images.length > 0 && (
@@ -223,33 +223,50 @@ const MediaUploader = ({ images = [], onImagesChange, maxImages = 5, folder = 'p
           ))}
 
           {!full && (
-            <Box
-              component="button"
-              type="button"
-              aria-label="Add another image"
-              onClick={() => inputRef.current?.()}
+            <Dropzone
+              multiple
+              accept={IMAGE_TYPES}
+              variant="tile"
+              disabled={uploading}
+              label="Add another image"
+              onFiles={handleFiles}
               sx={{
-                borderRadius: 2.5,
-                border: '1.5px dashed',
-                borderColor: 'divider',
                 display: 'grid',
                 placeItems: 'center',
                 aspectRatio: '1',
-                cursor: 'pointer',
-                font: 'inherit',
-                p: 0,
+                px: 1.5,
                 color: 'text.secondary',
-                '&:hover': { borderColor: 'secondary.main' },
-                '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
               }}
             >
-              <Stack alignItems="center" spacing={0.5}>
-                <AddPhotoAlternateOutlined />
-                <Typography variant="caption">Add image</Typography>
-              </Stack>
-            </Box>
+              {uploading ? (
+                <Stack alignItems="center" spacing={1} sx={{ width: '100%' }}>
+                  <CircularProgress size={24} />
+                  <Typography variant="caption" color="text.secondary">
+                    Uploading… {progress}%
+                  </Typography>
+                  <LinearProgress
+                    variant="determinate"
+                    value={progress}
+                    sx={{ width: '80%', borderRadius: 2 }}
+                  />
+                </Stack>
+              ) : (
+                <Stack alignItems="center" spacing={0.5}>
+                  <AddPhotoAlternateOutlined />
+                  <Typography variant="caption">Add image</Typography>
+                </Stack>
+              )}
+            </Dropzone>
           )}
         </Box>
+      )}
+
+      {images.length > 0 && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+          {full
+            ? `All ${maxImages} image slots are full — remove an image to add another`
+            : `Drop or click the empty tile to add more · ${imageSlots} image slot${imageSlots === 1 ? '' : 's'} remaining · JPEG, JFIF, PNG, WEBP or GIF up to 5MB`}
+        </Typography>
       )}
     </Box>
   );

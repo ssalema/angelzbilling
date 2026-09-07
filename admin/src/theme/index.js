@@ -45,6 +45,17 @@ export const surface = {
   inkOverlay: alpha(brand.ink, 0.78),
 };
 
+/**
+ * The corner a Card turns, in px.
+ *
+ * A bordered block that is not a `<Card>` — a table in a dialog, a specimen
+ * panel — still has to turn the same corner, or the panel reads as two design
+ * systems stacked. `sx: { borderRadius: 2.5 }` was the usual guess and resolves
+ * to 30px, which is more than twice a Card's, so this is the number to reach
+ * for instead. The MuiCard and MuiPaper overrides below take it from here too.
+ */
+export const CARD_RADIUS = 14;
+
 /** Elevation is a token too, so a toast and a sticky bar cast the same light. */
 export const SHADOW = {
   card: `0 1px 2px ${alpha(brand.ink, 0.04)}`,
@@ -262,7 +273,7 @@ const theme = createTheme({
     MuiPaper: {
       styleOverrides: {
         root: { backgroundImage: 'none' },
-        rounded: { borderRadius: 14 },
+        rounded: { borderRadius: CARD_RADIUS },
       },
     },
 
@@ -271,7 +282,7 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           border: `1px solid ${brand.line}`,
-          borderRadius: 14,
+          borderRadius: CARD_RADIUS,
           boxShadow: '0 1px 2px rgba(36,24,38,0.04)',
         },
       },

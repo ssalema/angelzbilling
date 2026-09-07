@@ -132,6 +132,9 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
   // A branch being created has no id yet, so its artwork waits here until it does.
   const [pendingAssets, setPendingAssets] = useState({ logo: null, favicon: null });
   const [dialogAssets, setDialogAssets] = useState({ logo: '', favicon: '' });
+  // Percentage per slot while the save uploads the artwork it held back, so the
+  // frames report the same "Uploading… 42%" the field shows on its own uploads.
+  const [assetProgress, setAssetProgress] = useState({ logo: null, favicon: null });
   const [togglingFeature, setTogglingFeature] = useState(false);
   // Branches come back in one call; the bar keeps a long list navigable.
   const [page, setPage] = useState(1);
@@ -154,6 +157,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
   useEffect(() => {
     if (formBranch === undefined) return;
     setPendingAssets({ logo: null, favicon: null });
+    setAssetProgress({ logo: null, favicon: null });
     setDialogAssets({ logo: formBranch?.logo?.url || '', favicon: formBranch?.favicon?.url || '' });
     reset(
       formBranch
@@ -177,7 +181,14 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
         const branchId = formBranch?.id || result.data?.id || result.data?._id;
         for (const kind of BRANDING_SLOTS.map((slot) => slot.kind)) {
           if (branchId && pendingAssets[kind]) {
-            await branchApi.uploadBranding(branchId, kind, pendingAssets[kind]);
+            setAssetProgress((current) => ({ ...current, [kind]: 0 }));
+            try {
+              await branchApi.uploadBranding(branchId, kind, pendingAssets[kind], (value) =>
+                setAssetProgress((current) => ({ ...current, [kind]: value }))
+              );
+            } finally {
+              setAssetProgress((current) => ({ ...current, [kind]: null }));
+            }
           }
         }
       }
@@ -544,6 +555,8 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
                         branchId={formBranch?.id}
                         current={dialogAssets[slot.kind]}
                         pendingFile={pendingAssets[slot.kind]}
+                        uploading={assetProgress[slot.kind] !== null}
+                        uploadProgress={assetProgress[slot.kind]}
                         onPendingFile={(file) =>
                           setPendingAssets((current) => ({ ...current, [slot.kind]: file }))
                         }

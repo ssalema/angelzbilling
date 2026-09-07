@@ -1,4 +1,4 @@
-import { Box, Typography, Stack, CircularProgress } from '@mui/material';
+import { Box, Typography, Stack, CircularProgress, LinearProgress } from '@mui/material';
 import AddPhotoAlternateOutlined from '@mui/icons-material/AddPhotoAlternateOutlined';
 
 import Dropzone from './Dropzone.jsx';
@@ -24,6 +24,12 @@ const LogoDropzone = ({
   value,
   alt = 'Logo',
   busy = false,
+  /**
+   * Upload percentage, 0–100, while `busy`. Absent means the work has no
+   * measurable progress — a removal, say — and the bar runs indeterminate
+   * rather than sitting frozen at zero.
+   */
+  progress = null,
   disabled = false,
   onFiles,
   onRemove,
@@ -75,7 +81,19 @@ const LogoDropzone = ({
         }}
       >
         {busy ? (
-          <CircularProgress size={26} />
+          // The same readout the perfume media grid shows — spinner, percentage,
+          // bar — so an upload looks like an upload wherever it is happening.
+          <Stack alignItems="center" spacing={1} sx={{ width: '100%', px: 2 }}>
+            <CircularProgress size={26} />
+            <Typography variant="caption" color="text.secondary">
+              {Number.isFinite(progress) ? `Uploading… ${progress}%` : 'Uploading…'}
+            </Typography>
+            <LinearProgress
+              variant={Number.isFinite(progress) ? 'determinate' : 'indeterminate'}
+              value={Number.isFinite(progress) ? progress : undefined}
+              sx={{ width: '80%', borderRadius: 2 }}
+            />
+          </Stack>
         ) : value ? (
           <Box component="img" src={IMG.logo(value)} alt={alt} sx={LOGO_FRAME.preview} />
         ) : (

@@ -17,8 +17,12 @@ import VisibilityOutlined from '@mui/icons-material/VisibilityOutlined';
 import EditOutlined from '@mui/icons-material/EditOutlined';
 import DeleteOutline from '@mui/icons-material/DeleteOutline';
 import Inventory2Outlined from '@mui/icons-material/Inventory2Outlined';
+import AddchartOutlined from '@mui/icons-material/AddchartOutlined';
+import SellOutlined from '@mui/icons-material/SellOutlined';
 
 import PageHeader from '../../components/common/PageHeader.jsx';
+import UpdateStockDialog from './stock/UpdateStockDialog.jsx';
+import UpdatePriceDialog from './pricing/UpdatePriceDialog.jsx';
 import DataTable, { actionsColumn } from '../../components/common/DataTable.jsx';
 import StatusChip from '../../components/common/StatusChip.jsx';
 import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
@@ -73,6 +77,8 @@ const PerfumeListPage = () => {
   });
 
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [stockOpen, setStockOpen] = useState(false);
+  const [priceOpen, setPriceOpen] = useState(false);
   const debouncedSearch = useDebounce(filters.search, 400);
 
   const perfumes = useApiResource(
@@ -309,9 +315,21 @@ const PerfumeListPage = () => {
         breadcrumbs={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Perfumes' }]}
         action={
           isAdmin && (
-            <Button component={RouterLink} to="/perfumes/new" variant="contained" startIcon={<AddRounded />}>
-              Add perfume
-            </Button>
+            <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1.25, justifyContent: { sm: 'flex-end' } }}>
+              {/* Restocking is a routine job of its own, so it sits beside
+                  "Add perfume" rather than being buried a perfume at a time. */}
+              <Button variant="outlined" startIcon={<AddchartOutlined />} onClick={() => setStockOpen(true)}>
+                Update stock
+              </Button>
+              {/* Repricing is the same kind of routine, catalogue-wide job as
+                  restocking, and just as painful one perfume at a time. */}
+              <Button variant="outlined" startIcon={<SellOutlined />} onClick={() => setPriceOpen(true)}>
+                Update price
+              </Button>
+              <Button component={RouterLink} to="/perfumes/new" variant="contained" startIcon={<AddRounded />}>
+                Add perfume
+              </Button>
+            </Stack>
           )
         }
       />
@@ -411,6 +429,22 @@ const PerfumeListPage = () => {
           }
         />
       </Card>
+
+      <UpdatePriceDialog
+        open={priceOpen}
+        onClose={() => setPriceOpen(false)}
+        // Every row shows a price and a final-price range, so a repricing has
+        // to be reflected behind the dialog rather than on the next visit.
+        onUpdated={perfumes.reload}
+      />
+
+      <UpdateStockDialog
+        open={stockOpen}
+        onClose={() => setStockOpen(false)}
+        // The table shows grams and a stock pill on every row, so a top-up has
+        // to be reflected behind the dialog rather than on the next visit.
+        onUpdated={perfumes.reload}
+      />
 
       <ConfirmDialog
         open={Boolean(confirmDelete)}

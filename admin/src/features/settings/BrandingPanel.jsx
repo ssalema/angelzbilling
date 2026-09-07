@@ -20,7 +20,19 @@ import { CARD_PAD, LOGO_FRAME } from '../../theme/index.js';
  * untouched — `undefined` cannot say "remove this", which is why absent and
  * null are different states here.
  */
-const BrandingSlot = ({ kind, label, hint, current, pending, onPending, disabled, frameHeight, grow }) => {
+const BrandingSlot = ({
+  kind,
+  label,
+  hint,
+  current,
+  pending,
+  onPending,
+  disabled,
+  frameHeight,
+  grow,
+  /** Percentage while the page's save is uploading this slot; null otherwise. */
+  progress = null,
+}) => {
   const inputRef = useRef(null);
   const snackbar = useSnackbar();
   const [pendingUrl, setPendingUrl] = useState('');
@@ -61,7 +73,7 @@ const BrandingSlot = ({ kind, label, hint, current, pending, onPending, disabled
       <Stack direction="row" justifyContent="space-between" alignItems="baseline" spacing={1} sx={{ mb: 0.75 }}>
         <Typography variant="subtitle2">{label}</Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'right' }}>
-          {pending === undefined ? hint : 'Uploads when you save'}
+          {progress !== null ? 'Uploading…' : pending === undefined ? hint : 'Uploads when you save'}
         </Typography>
       </Stack>
 
@@ -70,6 +82,8 @@ const BrandingSlot = ({ kind, label, hint, current, pending, onPending, disabled
         value={preview}
         alt={label}
         disabled={disabled}
+        busy={progress !== null}
+        progress={progress}
         height={frameHeight}
         fill={grow}
         onFiles={(files) => choose(files?.[0])}
@@ -81,7 +95,16 @@ const BrandingSlot = ({ kind, label, hint, current, pending, onPending, disabled
   );
 };
 
-const BrandingPanel = ({ settings, pending, onPending, onResetPending, canEdit, disabled }) => {
+const BrandingPanel = ({
+  settings,
+  pending,
+  onPending,
+  onResetPending,
+  canEdit,
+  disabled,
+  /** `{ logo, favicon }` percentages the page's save reports while uploading. */
+  progress = {},
+}) => {
   const logo = settings?.branding?.logo;
   const favicon = settings?.branding?.favicon;
 
@@ -129,6 +152,7 @@ const BrandingPanel = ({ settings, pending, onPending, onResetPending, canEdit, 
         current={logo}
         pending={pending?.logo}
         onPending={onPending}
+        progress={progress?.logo ?? null}
         disabled={!canEdit || disabled}
       />
       <BrandingSlot
@@ -144,6 +168,7 @@ const BrandingPanel = ({ settings, pending, onPending, onResetPending, canEdit, 
         current={favicon}
         pending={pending?.favicon}
         onPending={onPending}
+        progress={progress?.favicon ?? null}
         disabled={!canEdit || disabled}
       />
 
