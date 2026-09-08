@@ -8,7 +8,14 @@
 
 /** The two columns the sheet must carry, spelled exactly like this. */
 export const COLUMN_NAME = 'Perfume Name';
-export const COLUMN_STOCK = 'Stock';
+/** Spelled with its unit, because a column headed "Stock" invites "1.5 kg". */
+export const COLUMN_STOCK = 'Stock (GM)';
+
+/**
+ * Headings that also mean the stock column. A sheet written before the heading
+ * carried its unit still reads correctly — the figure was always grams.
+ */
+const STOCK_ALIASES = [COLUMN_STOCK, 'Stock', 'Stock GM', 'Stock in GM', 'Stock (gm)'];
 
 /** The rules shown above the dropzone, in the order they are checked. */
 export const SHEET_RULES = [
@@ -24,8 +31,9 @@ const headerKey = (value) => String(value ?? '').trim().replace(/\s+/g, ' ').toL
 
 /** The sheet's own spelling of each required column, or null if it is missing. */
 export const findColumns = (headers = []) => {
-  const match = (wanted) => headers.find((header) => headerKey(header) === headerKey(wanted)) ?? null;
-  return { name: match(COLUMN_NAME), stock: match(COLUMN_STOCK) };
+  const match = (...wanted) =>
+    headers.find((header) => wanted.some((name) => headerKey(header) === headerKey(name))) ?? null;
+  return { name: match(COLUMN_NAME), stock: match(...STOCK_ALIASES) };
 };
 
 /**
