@@ -57,7 +57,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { applyServerErrors } from '../../api/client.js';
-import { formatCurrency, formatGrams, formatNumber, unitsFromGrams } from '../../utils/format.js';
+import { currencySymbol, formatCurrency, formatGrams, formatNumber, unitsFromGrams } from '../../utils/format.js';
 import { PAYMENT_METHODS, PAYMENT_TERMS, HEAD_OFFICE, locationOf, locationOptions } from '../../utils/constants.js';
 import { downloadBillPdf } from '../../utils/downloadBill.js';
 import { FONT, CARD_HEAD_PAD, CARD_PAD, ICON, brand, numericText, statusColors, surface } from '../../theme/index.js';
@@ -113,7 +113,7 @@ const CreateBillPage = () => {
   const slipStore = useMemo(
     () => ({
       ...settings,
-      currencySymbol: settings?.billing?.currencySymbol || '₹',
+      currencySymbol: currencySymbol(),
       favicon:
         (!atHeadOffice && billLocation.effectiveFavicon) || settings?.branding?.favicon?.url || '',
     }),
@@ -678,7 +678,7 @@ const CreateBillPage = () => {
                 )}
 
                 <Stack direction="row" spacing={1.5} sx={{ my: 2 }}>
-                  <RHFNumberField name="extraDiscount" label="Extra discount" prefix="₹" inputProps={{ min: 0 }} />
+                  <RHFNumberField name="extraDiscount" label="Extra discount" prefix={currencySymbol()} inputProps={{ min: 0 }} />
                   <RHFNumberField name="taxPercent" label="Tax" suffix="%" inputProps={{ min: 0, max: 100 }} />
                 </Stack>
 
@@ -768,7 +768,7 @@ const CreateBillPage = () => {
                     <RHFNumberField
                       name="amountPaid"
                       label="Amount received *"
-                      prefix="₹"
+                      prefix={currencySymbol()}
                       fullWidth
                       inputProps={{ min: 0, max: totals.grandTotal }}
                       helperText="The balance stays on this bill and can be collected later"

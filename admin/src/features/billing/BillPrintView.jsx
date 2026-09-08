@@ -1,10 +1,11 @@
 import { forwardRef } from 'react';
 import { Box, Typography, Stack } from '@mui/material';
-import { formatDate } from '../../utils/format.js';
+import { formatAmount, formatDate, currencySymbol } from '../../utils/format.js';
 import { PAYMENT_METHOD_LABELS, HEAD_OFFICE } from '../../utils/constants.js';
 import { formatContactNumber } from '../../utils/countries.js';
 import { brand } from '../../theme/index.js';
 import { IMG } from '../../utils/image.js';
+import { cachedSiteName } from '../../utils/branding.js';
 
 /**
  * The printable bill — a thermal receipt slip, not an A4 invoice.
@@ -18,19 +19,24 @@ import { IMG } from '../../utils/image.js';
 const readShop = (store, bill) => {
   const s = store || bill?.store || {};
   return {
-    name: s.siteName || 'Angelz Perfume',
-    tagline: s.tagline || 'More than a fragrance',
+    name: s.siteName || cachedSiteName(),
+    // No literal fallbacks below this line: a tagline and a slip footer are the
+    // store's own words. An unset one prints nothing rather than someone else's
+    // slogan — the blocks that render them are conditional for that reason.
+    tagline: s.tagline || '',
     favicon: s.favicon || s.branding?.favicon?.url || '',
     gstin: s.gstin || '',
-    footer: s.invoiceFooter || s.billing?.invoiceFooter || 'Keep Smelling Amazing!',
+    footer: s.invoiceFooter || s.billing?.invoiceFooter || '',
     terms: s.termsAndConditions || s.billing?.termsAndConditions || '',
+    // Settings > Billing. Falls back to whatever the app is already formatting
+    // money with, so a reprint never disagrees with the screen behind it.
+    currency: s.currencySymbol || s.billing?.currencySymbol || currencySymbol(),
     branchesEnabled: s.features?.branches !== false,
   };
 };
 
-/** Line columns carry no symbol — their headers already say (₹). */
-const money = (value) =>
-  Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/** Line columns carry no symbol — their headers already name the currency. */
+const money = (value) => formatAmount(value);
 
 /** How a collected instalment is dated on the slip: "06 Sept 2026, 04:49 PM". */
 const stamp = (at) => `${formatDate(at, 'medium')}, ${formatDate(at, 'clock').toUpperCase()}`;
@@ -45,6 +51,7 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
   if (!bill) return null;
 
   const shop = readShop(store, bill);
+  const cur = shop.currency;
   const branch = bill.branch || {};
   const isPaid = (bill.status || 'paid') === 'paid';
   // What is still owed. Bills raised before part payments existed carry no
@@ -94,18 +101,20 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
           </Stack>
         )}
 
-        <Typography
-          sx={{
-            mt: mark ? 0.75 : 0,
-            textAlign: 'center',
-            fontSize: '0.6rem',
-            letterSpacing: '0.28em',
-            textTransform: 'uppercase',
-            color: brand.inkSoft,
-          }}
-        >
-          {shop.tagline}
-        </Typography>
+        {shop.tagline && (
+          <Typography
+            sx={{
+              mt: mark ? 0.75 : 0,
+              textAlign: 'center',
+              fontSize: '0.6rem',
+              letterSpacing: '0.28em',
+              textTransform: 'uppercase',
+              color: brand.inkSoft,
+            }}
+          >
+            {shop.tagline}
+          </Typography>
+        )}
 
         {gstin && (
           <>
@@ -148,8 +157,8 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
           <span>PERFUME</span>
           <span style={{ textAlign: 'center' }}>SIZE</span>
           <span style={{ textAlign: 'center' }}>QTY</span>
-          <span style={{ textAlign: 'right' }}>PRICE (₹)</span>
-          <span style={{ textAlign: 'right' }}>AMOUNT (₹)</span>
+          <span style={{ textAlign: 'right' }}>{`PRICE (${cur})`}</span>
+          <span style={{ textAlign: 'right' }}>{`AMOUNT (${cur})`}</span>
         </Row>
 
         <Box sx={{ ...RULE, mt: 0.75 }} />
@@ -173,17 +182,17 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
 
         {/* ── Totals ── */}
         <Box sx={{ pl: '32%' }}>
-          <TotalRow label="Subtotal" value={`₹ ${money(bill.subtotal)}`} />
-          {bill.totalDiscount > 0 && <TotalRow label="Discount" value={`- ₹ ${money(bill.totalDiscount)}`} />}
+          <TotalRow label="Subtotal" value={`${cur} ${money(bill.subtotal)}`} />
+          {bill.totalDiscount > 0 && <TotalRow label="Discount" value={`- ${cur} ${money(bill.totalDiscount)}`} />}
           {bill.taxAmount > 0 && (
-            <TotalRow label={`Tax (${bill.taxPercent}%)`} value={`₹ ${money(bill.taxAmount)}`} />
+            <TotalRow label={`Tax (${bill.taxPercent}%)`} value={`${cur} ${money(bill.taxAmount)}`} />
           )}
 
           <Box sx={{ ...RULE, my: 1, opacity: 0.35 }} />
 
           <Stack direction="row" justifyContent="space-between" alignItems="baseline">
             <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.1em' }}>TOTAL</Typography>
-            <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>₹ {money(bill.grandTotal)}</Typography>
+            <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>{`${cur} ${money(bill.grandTotal)}`}</Typography>
           </Stack>
 
           {/* A bill settled in instalments prints each one on its own line —
@@ -201,7 +210,7 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
                 <TotalRow
                   key={entry._id || `${entry.at}-${index}`}
                   label={entry.atBilling ? 'Paid (During Billing)' : `Paid (${stamp(entry.at)})`}
-                  value={`₹ ${money(entry.amount)}`}
+                  value={`${cur} ${money(entry.amount)}`}
                   plain
                 />
               ))}
@@ -211,10 +220,10 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
                   <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.08em' }}>
                     BALANCE DUE
                   </Typography>
-                  <Typography sx={{ fontSize: '0.88rem', fontWeight: 700 }}>₹ {money(amountDue)}</Typography>
+                  <Typography sx={{ fontSize: '0.88rem', fontWeight: 700 }}>{`${cur} ${money(amountDue)}`}</Typography>
                 </Stack>
               ) : (
-                <TotalRow label="Balance Due" value="₹ 0.00" />
+                <TotalRow label="Balance Due" value={`${cur} ${money(0)}`} />
               )}
             </>
           )}
@@ -268,7 +277,9 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
           >
             Thank You!
           </Typography>
-          <Typography sx={{ mt: 0.5, fontSize: '0.8rem', fontWeight: 600 }}>{shop.footer}</Typography>
+          {shop.footer && (
+            <Typography sx={{ mt: 0.5, fontSize: '0.8rem', fontWeight: 600 }}>{shop.footer}</Typography>
+          )}
           {shop.terms && (
             <Typography sx={{ mt: 1, fontSize: '0.58rem', color: brand.inkSoft, whiteSpace: 'pre-line' }}>
               {shop.terms}

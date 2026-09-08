@@ -9,7 +9,7 @@
  * as an explicit per-size list, and the server writes those and nothing else.
  */
 
-import { formatCurrency } from '../../../utils/format.js';
+import { currencySymbol, formatCurrency } from '../../../utils/format.js';
 import { sizeGramsFor } from '../perfumeSchema.js';
 
 /** The fills the catalogue sells, smallest first, in grams. */
@@ -18,14 +18,19 @@ export const SIZE_GRAMS = [25, 50, 100, 250, 500, 1000];
 export const MIN_PRICE = 1;
 export const MAX_PRICE = 10_000_000;
 
+/** Escaped for a character class — the symbol is any string the admin typed. */
+const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
+
 /**
  * A price typed into a box, or read out of a spreadsheet cell.
- * Thousands separators and a leading ₹ are the two things a real sheet carries
- * that `Number()` alone would choke on.
+ * Thousands separators and a leading currency symbol are the two things a real
+ * sheet carries that a bare `Number()` would choke on. The symbol is whatever
+ * Settings > Billing configures, so it is read rather than assumed.
  */
 export const parsePrice = (raw) => {
   if (raw === '' || raw === null || raw === undefined) return NaN;
-  const text = String(raw).trim().replace(/[₹,\s]/g, '').replace(/\/-$/, '');
+  const strip = new RegExp(`[${escapeRe(currencySymbol())},\\s]`, 'g');
+  const text = String(raw).trim().replace(strip, '').replace(/\/-$/, '');
   if (!text) return NaN;
   const value = Number(text);
   return Number.isFinite(value) ? value : NaN;
@@ -35,7 +40,7 @@ export const parsePrice = (raw) => {
 export const priceIssue = (value) => {
   if (Number.isNaN(value)) return 'Enter the price as a number';
   if (value <= 0) return 'Price must be more than zero';
-  if (value < MIN_PRICE) return `Price must be at least ₹${MIN_PRICE}`;
+  if (value < MIN_PRICE) return `Price must be at least ${formatCurrency(MIN_PRICE)}`;
   if (value > MAX_PRICE) return 'That price is far higher than any perfume in the catalogue';
   return '';
 };
@@ -83,7 +88,7 @@ export const rangeOf = (values = []) => {
   return { min: Math.min(...priced), max: Math.max(...priced) };
 };
 
-/** "₹185 – ₹7,000", or a single figure when every size costs the same. */
+/** "185 – 7,000" under the store's symbol, or one figure when every size matches. */
 export const formatRange = (range) => {
   if (!range) return 'NA';
   if (range.min === range.max) return formatCurrency(range.min);

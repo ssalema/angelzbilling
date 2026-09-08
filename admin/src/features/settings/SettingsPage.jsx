@@ -65,6 +65,13 @@ const schema = z
     linkedin: urlOrEmpty('LinkedIn'),
   }),
   billing: z.object({
+    currency: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .max(8)
+      .regex(/^[A-Z]*$/, 'Use the 3-letter code, e.g. INR')
+      .default('INR'),
     currencySymbol: z.string().trim().max(4).default('₹'),
     billPrefix: z
       .string()
@@ -119,6 +126,55 @@ const TABS = [
   { value: 'social', label: 'Social profiles', icon: <ShareOutlined sx={{ fontSize: ICON.action }} /> },
 ];
 
+/**
+ * The currency pair an admin may type either half of. Codes are ISO 4217; when
+ * several share a symbol the first one listed is what that symbol resolves back
+ * to, so "$" reads as USD and "¥" as JPY.
+ */
+const CODE_TO_SYMBOL = {
+  INR: '₹',
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  JPY: '¥',
+  CNY: '¥',
+  AED: 'د.إ',
+  SAR: '﷼',
+  QAR: '﷼',
+  OMR: '﷼',
+  KWD: 'د.ك',
+  BHD: '.د.ب',
+  PKR: '₨',
+  LKR: '₨',
+  NPR: '₨',
+  BDT: '৳',
+  AUD: 'A$',
+  CAD: 'C$',
+  NZD: 'NZ$',
+  SGD: 'S$',
+  HKD: 'HK$',
+  MYR: 'RM',
+  IDR: 'Rp',
+  THB: '฿',
+  PHP: '₱',
+  VND: '₫',
+  KRW: '₩',
+  CHF: 'CHF',
+  RUB: '₽',
+  TRY: '₺',
+  ILS: '₪',
+  ZAR: 'R',
+  BRL: 'R$',
+  NGN: '₦',
+  KES: 'KSh',
+  EGP: 'E£',
+};
+
+const SYMBOL_TO_CODE = Object.entries(CODE_TO_SYMBOL).reduce((map, [code, symbol]) => {
+  if (!(symbol in map)) map[symbol] = code;
+  return map;
+}, {});
+
 const SettingsPage = () => {
   const snackbar = useSnackbar();
   // The General, Billing, Social and Branding panels all write the ONE main
@@ -134,6 +190,7 @@ const SettingsPage = () => {
     handleSubmit,
     reset,
     setError,
+    setValue,
     formState: { isSubmitting, isDirty },
   } = methods;
 
@@ -155,6 +212,7 @@ const SettingsPage = () => {
         linkedin: data.social?.linkedin || '',
       },
       billing: {
+        currency: data.billing?.currency || 'INR',
         currencySymbol: data.billing?.currencySymbol || '₹',
         billPrefix: data.billing?.billPrefix || 'AP',
         defaultTaxPercent: data.billing?.defaultTaxPercent ?? 0,
@@ -164,6 +222,25 @@ const SettingsPage = () => {
       },
     });
   }, [settings.data, reset]);
+
+  /**
+   * Code and symbol travel as a pair: typing a known code fills in its symbol
+   * and typing a known symbol fills in its code, so an admin only ever has to
+   * change one of the two. Anything unrecognised is left exactly as typed and
+   * the other field keeps what it held.
+   */
+  const syncCurrency = (edited, raw) => {
+    const options = { shouldDirty: true, shouldValidate: true };
+    if (edited === 'code') {
+      setValue('billing.currency', raw, options);
+      const symbol = CODE_TO_SYMBOL[raw.trim().toUpperCase()];
+      if (symbol) setValue('billing.currencySymbol', symbol, options);
+      return;
+    }
+    setValue('billing.currencySymbol', raw, options);
+    const code = SYMBOL_TO_CODE[raw.trim()];
+    if (code) setValue('billing.currency', code, options);
+  };
 
   /**
    * Branding waits here until the form is saved, so the logo behaves like every
@@ -393,7 +470,19 @@ const SettingsPage = () => {
                           name="billing.currencySymbol"
                           label="Currency symbol"
                           disabled={!isMainSuperAdmin}
+                          helperText="Printed beside every amount"
                           inputProps={{ maxLength: 4 }}
+                          onChange={(event) => syncCurrency('symbol', event.target.value)}
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <RHFTextField
+                          name="billing.currency"
+                          label="Currency code"
+                          disabled={!isMainSuperAdmin}
+                          helperText="Sets how figures are grouped — INR gives 12,34,567"
+                          inputProps={{ style: { textTransform: 'uppercase' }, maxLength: 8 }}
+                          onChange={(event) => syncCurrency('code', event.target.value)}
                         />
                       </Grid>
                       <Grid item xs={12} sm={4}>

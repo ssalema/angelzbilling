@@ -16,6 +16,8 @@ import {
   priceSearchQuerySchema,
   resolvePriceNamesSchema,
   bulkPriceSchema,
+  previewBulkCreateSchema,
+  bulkCreateSchema,
   idParamSchema,
 } from './perfume.validation.js';
 import {
@@ -34,6 +36,8 @@ import {
   searchPriceTargets,
   resolvePriceNames,
   bulkUpdatePrices,
+  previewBulkCreate,
+  bulkCreatePerfumes,
   deletePerfume,
 } from './perfume.controller.js';
 
@@ -44,7 +48,7 @@ router.use(authenticate);
 // `/stock/resolve` and `/price/resolve` are exempt: both are lookups that only
 // take a POST because they carry a sheet's worth of names in the body, and
 // neither changes anything.
-router.use(invalidateDashboardOnWrite({ except: ['/stock/resolve', '/price/resolve'] }));
+router.use(invalidateDashboardOnWrite({ except: ['/stock/resolve', '/price/resolve', '/bulk/preview'] }));
 
 // Read: any signed-in user (billing staff need the catalogue to raise a bill).
 router.get('/', validate({ query: listPerfumeQuerySchema }), listPerfumes);
@@ -109,6 +113,30 @@ router.post(
   validate({ body: bulkPriceSchema }),
   bulkUpdatePrices
 );
+
+/**
+ * Bulk catalogue upload. The spreadsheet is read in the browser, exactly as
+ * the stock and price sheets are — what reaches here is the rows the admin
+ * reviewed, and the file itself is never uploaded or stored.
+ *
+ * `/bulk/preview` only looks: it says which names are still free and what SKU
+ * each new perfume would be given, so the review screen shows real numbers.
+ * `/bulk` is the write, and it re-checks both for itself rather than trusting
+ * a preview the admin may have left open for a while.
+ */
+router.post(
+  '/bulk/preview',
+  authorize('superadmin', 'admin'),
+  validate({ body: previewBulkCreateSchema }),
+  previewBulkCreate
+);
+router.post(
+  '/bulk',
+  authorize('superadmin', 'admin'),
+  validate({ body: bulkCreateSchema }),
+  bulkCreatePerfumes
+);
+
 router.patch(
   '/:id',
   authorize('superadmin', 'admin'),

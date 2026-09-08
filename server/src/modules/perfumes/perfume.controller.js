@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import slugify from 'slugify';
 import Perfume, { computeFinalPrice } from '../../models/Perfume.js';
 import Bill from '../../models/Bill.js';
 import ApiError from '../../utils/ApiError.js';
@@ -8,7 +9,7 @@ import { getPagination, getSort, escapeRegex, round2 } from '../../utils/query.j
 import { destroyAsset } from '../../config/cloudinary.js';
 import { resolveSizeGrams, unitsFromGrams, smallestFillGrams, formatGrams } from '../../utils/grams.js';
 import { pricesBySize } from '../../utils/sizePricing.js';
-import { generateSku, getSkuPrefix } from './perfume.service.js';
+import { generateSku, generateSkuBlock, getSkuPrefix } from './perfume.service.js';
 
 const SORTABLE = ['createdAt', 'name', 'mrp', 'finalPrice', 'stock', 'status'];
 
@@ -876,4 +877,260 @@ export const deletePerfume = asyncHandler(async (req, res) => {
 
   await perfume.deleteOne();
   return sendSuccess(res, { message: `"${perfume.name}" deleted` });
+});
+
+/* ───────────────────────── Bulk catalogue upload ─────────────────────────
+ * Creating a whole catalogue from a spreadsheet, rather than a perfume at a
+ * time through the wizard. The wizard is untouched: this is a second door to
+ * the same collection, not a replacement for it.
+ *
+ * As with the stock and price sheets, the file never reaches the server. The
+ * browser reads it, the admin reviews the rows, and only the reviewed values
+ * are posted here.
+ *
+ * Two things are the server's alone to decide: the SKU each new perfume gets,
+ * and whether its name is already taken. Both are answered twice — once for the
+ * review screen (`previewBulkCreate`) and again, authoritatively, at the moment
+ * of writing.
+ */
+
+/** Names already in the catalogue, as a Set of normalised keys. */
+const takenNames = async () => {
+  const rows = await Perfume.find().select('name').lean();
+  return new Set(rows.map((row) => normaliseName(row.name)));
+};
+
+/**
+ * What the review screen shows before anything is created: which sheet rows can
+ * be created, and the SKU each one would get.
+ *
+ * The numbers here are a projection, not a reservation. Nothing is written, so
+ * a perfume added by someone else in the meantime can shift them — which is why
+ * the create below numbers the rows again itself rather than trusting these.
+ */
+export const previewBulkCreate = asyncHandler(async (req, res) => {
+  const [taken, prefix] = await Promise.all([takenNames(), getSkuPrefix()]);
+
+  const seen = new Set();
+  const rows = req.body.names.map((name) => {
+    const key = normaliseName(name);
+
+    if (taken.has(key)) {
+      return { name, available: false, reason: 'A perfume with this name is already in the catalogue' };
+    }
+    if (seen.has(key)) return { name, available: false, reason: 'Listed more than once in this sheet' };
+    seen.add(key);
+
+    return { name, available: true };
+  });
+
+  // Only the rows that will actually be created consume a number, so the run
+  // the admin reviews is the run the catalogue ends up with.
+  const skus = await generateSkuBlock(rows.filter((row) => row.available).length, prefix);
+  let next = 0;
+  rows.forEach((row) => {
+    if (row.available) row.sku = skus[next++];
+  });
+
+  return sendSuccess(res, {
+    message: 'Rows checked',
+    data: rows,
+    meta: { prefix, creatable: next, total: rows.length },
+  });
+});
+
+/**
+ * One reviewed row as a complete perfume document.
+ *
+ * Every field the wizard would have written is written here too, including the
+ * ones the `pre('save')` hook normally derives — `insertMany` does not run save
+ * middleware, and a catalogue whose slugs and selling prices were only
+ * sometimes filled in would be a slow, quiet mess to find later.
+ *
+ * Sizes come straight from the sheet: a fill with no price in the file simply
+ * does not become a variant. No price is ever worked out from another one.
+ */
+const bulkPerfumeDoc = (item, sku, userId) => {
+  const variants = [...pricesBySize(item.prices).entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([sizeGrams, mrp]) => ({
+      label: `${sizeGrams}gm`,
+      options: { Size: `${sizeGrams}gm` },
+      // The same suffix the wizard builds — AP-925 + 50gm -> AP-925-50GM.
+      sku: `${sku}-${sizeGrams}GM`,
+      mrp,
+      discountPercent: 0,
+      sellingPrice: computeFinalPrice(mrp, 0),
+      sizeGrams,
+      isActive: true,
+      image: { url: '', publicId: '' },
+      barcode: '',
+      hsnCode: '',
+    }));
+
+  // The perfume's own price is the cheapest size it sells, matching what the
+  // wizard writes and what a listing reads as "from ₹…".
+  const cheapest = variants.reduce((best, v) => (v.sellingPrice < best.sellingPrice ? v : best), variants[0]);
+
+  const images = item.image
+    ? [{ url: item.image, publicId: item.imagePublicId || '', alt: item.name }]
+    : [];
+
+  return {
+    name: item.name,
+    slug: slugify(item.name, { lower: true, strict: true, trim: true }),
+    sku,
+    brand: item.brand || '',
+    category: item.category || '',
+    stock: item.stock || 0,
+    lowStockThreshold: 100,
+    images,
+    hasVariants: true,
+    variantAttributes: [
+      { name: 'Size', selectorStyle: 'automatic', values: variants.map((variant) => variant.label) },
+    ],
+    variants,
+    mrp: cheapest.mrp,
+    discountPercent: 0,
+    finalPrice: cheapest.sellingPrice,
+    // A perfume cannot be published without an image — the same rule the wizard
+    // and the status endpoint enforce — so a row with no photo lands as a draft
+    // and waits for one rather than being rejected outright.
+    status: images.length ? 'published' : 'draft',
+    createdBy: userId,
+    updatedBy: userId,
+  };
+};
+
+/** Rows are written in batches so one enormous sheet is not one enormous write. */
+const INSERT_BATCH = 200;
+
+/**
+ * Inserts the documents, returning what went in and which ones bounced.
+ *
+ * `ordered: false` means a rejected row does not stop the ones behind it, and
+ * the write errors carry the index of each failure — that index is how a
+ * duplicate SKU gets a second number below instead of being lost.
+ */
+const insertPerfumes = async (docs) => {
+  const inserted = [];
+  const failed = [];
+
+  for (let start = 0; start < docs.length; start += INSERT_BATCH) {
+    const batch = docs.slice(start, start + INSERT_BATCH);
+    try {
+      // Sequential on purpose: a thousand-row sheet firing every batch at once
+      // is a burst the database gains nothing from.
+      // eslint-disable-next-line no-await-in-loop
+      const rows = await Perfume.insertMany(batch, { ordered: false });
+      inserted.push(...rows);
+    } catch (error) {
+      // A partial failure still inserts the rest; both halves are reported.
+      (error.insertedDocs || []).forEach((row) => inserted.push(row));
+
+      const errors = error.writeErrors || (error.code ? [error] : []);
+      if (!errors.length) throw error;
+
+      errors.forEach((writeError) => {
+        const index = writeError.index ?? writeError.err?.index ?? 0;
+        failed.push({ doc: batch[index], duplicate: (writeError.code ?? writeError.err?.code) === 11000 });
+      });
+    }
+  }
+
+  return { inserted, failed };
+};
+
+/** A written document back in the shape `bulkPerfumeDoc` accepts, for a retry. */
+const asBulkItem = (doc) => ({
+  name: doc.name,
+  brand: doc.brand,
+  category: doc.category,
+  stock: doc.stock,
+  image: doc.images?.[0]?.url || '',
+  imagePublicId: doc.images?.[0]?.publicId || '',
+  prices: doc.variants.map((variant) => ({ sizeGrams: variant.sizeGrams, mrp: variant.mrp })),
+});
+
+/**
+ * Creates the reviewed perfumes.
+ *
+ * The checks the preview ran are run again here rather than trusted: minutes
+ * can pass on the review screen, and in that time another admin can add a
+ * perfume with one of these names or take one of these numbers.
+ */
+export const bulkCreatePerfumes = asyncHandler(async (req, res) => {
+  const { items } = req.body;
+
+  const taken = await takenNames();
+  const seen = new Set();
+  const skipped = [];
+  const accepted = [];
+
+  items.forEach((item) => {
+    const key = normaliseName(item.name);
+
+    if (taken.has(key)) {
+      skipped.push({ name: item.name, reason: 'A perfume with this name is already in the catalogue' });
+      return;
+    }
+    if (seen.has(key)) {
+      skipped.push({ name: item.name, reason: 'Listed more than once — only the first row was used' });
+      return;
+    }
+    seen.add(key);
+    accepted.push(item);
+  });
+
+  const userId = req.user._id;
+  let created = [];
+
+  if (accepted.length) {
+    const skus = await generateSkuBlock(accepted.length);
+    const docs = accepted.map((item, index) => bulkPerfumeDoc(item, skus[index], userId));
+
+    const first = await insertPerfumes(docs);
+    created = first.inserted;
+
+    // A number taken by a simultaneous upload is ours to re-roll — the admin
+    // never chose it. Anything else is reported as it happened.
+    const clashed = first.failed.filter((row) => row.duplicate).map((row) => row.doc);
+    first.failed
+      .filter((row) => !row.duplicate)
+      .forEach((row) => skipped.push({ name: row.doc?.name || '', reason: 'This perfume could not be saved' }));
+
+    if (clashed.length) {
+      const retrySkus = await generateSkuBlock(clashed.length);
+      const retryDocs = clashed.map((doc, index) => bulkPerfumeDoc(asBulkItem(doc), retrySkus[index], userId));
+
+      const second = await insertPerfumes(retryDocs);
+      created = created.concat(second.inserted);
+      second.failed.forEach((row) =>
+        skipped.push({ name: row.doc?.name || '', reason: 'Another upload took this SKU — try this row again' })
+      );
+    }
+  }
+
+  const published = created.filter((perfume) => perfume.status === 'published').length;
+
+  return sendSuccess(res, {
+    message: created.length
+      ? `${created.length} perfume${created.length === 1 ? '' : 's'} added to your catalogue`
+      : 'No perfumes were added',
+    data: {
+      created: created.length,
+      published,
+      drafts: created.length - published,
+      skipped: skipped.length,
+      failed: skipped,
+      // What actually got written, so the finished screen can show real SKUs
+      // rather than the ones the review projected.
+      perfumes: created.map((perfume) => ({
+        id: perfume._id,
+        name: perfume.name,
+        sku: perfume.sku,
+        status: perfume.status,
+      })),
+    },
+  });
 });

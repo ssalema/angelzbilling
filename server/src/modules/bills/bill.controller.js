@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
 import Bill from '../../models/Bill.js';
 import Perfume from '../../models/Perfume.js';
-import Settings from '../../models/Settings.js';
+import Settings, { DEFAULT_BILL_PREFIX } from '../../models/Settings.js';
+import { moneyFormatter } from '../../utils/money.js';
 import Branch from '../../models/Branch.js';
 import ApiError from '../../utils/ApiError.js';
 import asyncHandler from '../../utils/asyncHandler.js';
@@ -52,10 +53,6 @@ const atomically = async (work, fallback) => {
     await session.endSession();
   }
 };
-
-/** Money inside an error message, so "₹5,550.00" reads the way the slip prints it. */
-const formatMoney = (value) =>
-  `₹${Number(value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /**
  * Splits a grand total into what was taken now and what is still owed.
@@ -282,7 +279,7 @@ export const createBill = asyncHandler(async (req, res) => {
     ...limits,
   });
 
-  const billNumber = await generateBillNumber({ prefix: settings.billing?.billPrefix || 'AP' });
+  const billNumber = await generateBillNumber({ prefix: settings.billing?.billPrefix || DEFAULT_BILL_PREFIX });
 
   // Full Paid or Partial Paid is settled here, once, from the total the server
   // itself arrived at. A part payment is the SAME bill — same number, same
@@ -384,6 +381,11 @@ export const createBill = asyncHandler(async (req, res) => {
 export const collectPayment = asyncHandler(async (req, res) => {
   const bill = await Bill.findById(req.params.id);
   if (!bill) throw ApiError.notFound('Bill not found');
+
+  // Every figure this handler quotes back is money the customer sees, so it
+  // reads the store's configured symbol rather than assuming one. Cached, so
+  // this is not a database round trip on the payment path.
+  const formatMoney = moneyFormatter(await Settings.getCached());
 
   // Money against a bill is a write, so this is the write guard.
   assertBranchWrite(req, bill.branch?.id);

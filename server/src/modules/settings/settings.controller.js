@@ -114,6 +114,7 @@ export const getPublicSettings = asyncHandler(async (_req, res) => {
       tagline: settings.tagline,
       logo: settings.branding?.logo?.url || '',
       favicon: settings.branding?.favicon?.url || '',
+      currency: settings.billing?.currency || 'INR',
       currencySymbol: settings.billing?.currencySymbol || '₹',
       features: { branches: settings.features?.branches !== false },
     },
@@ -132,10 +133,17 @@ export const updateSettings = asyncHandler(async (req, res) => {
   if (nextBranches === false && currentBranches) {
     await Branch.updateMany({ isActive: true }, { $set: { isActive: false, deactivatedByFeature: true } });
   } else if (nextBranches === true && !currentBranches) {
-    await Branch.updateMany(
+    const restored = await Branch.updateMany(
       { deactivatedByFeature: true },
       { $set: { isActive: true, deactivatedByFeature: false } }
     );
+    // The switch also goes off on its own once the last location is deactivated
+    // by hand, and those branches carry no `deactivatedByFeature` flag to
+    // restore. Turning it back on with nothing reopened would leave the store
+    // with branches "on" and no branch to bill against, so reopen them all.
+    if (!restored.modifiedCount && (await Branch.countDocuments({ isActive: true })) === 0) {
+      await Branch.updateMany({}, { $set: { isActive: true, deactivatedByFeature: false } });
+    }
   }
 
   applyPatch(settings, req.body);

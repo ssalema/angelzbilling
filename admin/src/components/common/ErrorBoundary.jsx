@@ -3,6 +3,7 @@ import { Box, Typography, Button, Stack, Alert, AlertTitle } from '@mui/material
 import RefreshRounded from '@mui/icons-material/RefreshRounded';
 import HomeOutlined from '@mui/icons-material/HomeOutlined';
 import { FONT, brand } from '../../theme/index.js';
+import { cachedSiteName } from '../../utils/branding.js';
 
 /**
  * Last line of defence. A render crash anywhere shows this rather than a blank
@@ -39,7 +40,7 @@ class ErrorBoundary extends Component {
               mb: 2,
             }}
           >
-            Angelz Perfume
+            {cachedSiteName()}
           </Typography>
 
           <Typography variant="h3" sx={{ mb: 1 }}>

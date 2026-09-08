@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -195,10 +195,24 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
 
       snackbar.success(result.message);
       branches.reload();
+      refreshSettings();
       setFormBranch(undefined);
     } catch (error) {
       applyServerErrors(error, setError);
       snackbar.error(error.message);
+    }
+  };
+
+  /**
+   * The switch follows the list: the server turns branch management on the
+   * moment a location is activated and off when the last one closes, so any
+   * change to a branch can move it. Pull the settings back rather than assume.
+   */
+  const refreshSettings = async () => {
+    try {
+      onSettingsChange?.(await settingsApi.get());
+    } catch {
+      /* the branch change itself already succeeded */
     }
   };
 
@@ -207,6 +221,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
       const result = await action();
       if (result?.message) snackbar.success(result.message);
       branches.reload();
+      refreshSettings();
     } catch (error) {
       snackbar.error(error.message);
     }
@@ -215,8 +230,24 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
   const items = branches.data?.items || [];
 
   // Single-location stores switch branches off entirely. Nothing is deleted — the
-  // server deactivates every branch, and switching back on reactivates them.
+  // server deactivates every branch, and switching back on reactivates them. The
+  // switch tracks that state rather than sitting apart from it: it is on exactly
+  // while at least one branch is active.
   const branchesEnabled = settings?.features?.branches !== false;
+
+  /**
+   * Listing the branches repairs a switch that had drifted out of step with
+   * them, so a page opened on the old state is holding settings the server has
+   * since corrected. Pull them once when the two disagree.
+   */
+  const healedRef = useRef(false);
+  useEffect(() => {
+    if (!branches.data || !items.length || healedRef.current) return;
+    if (items.some((row) => row.isActive) === branchesEnabled) return;
+    healedRef.current = true;
+    refreshSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branches.data, branchesEnabled]);
 
   const setBranchesEnabled = async (enabled) => {
     setTogglingFeature(true);

@@ -3,7 +3,7 @@
  *
  * Two generations of seed data exist in this database: an older run on the
  * @angelperfume.com domain and the current @angelzperfume.com one. Both are
- * matched here. Real records — the imported catalogue (AP-020 and up), bills
+ * matched here. Real records — the imported catalogue (AP-001 and up), bills
  * written by real accounts, and any branch a real bill was raised against —
  * are left exactly as they are.
  *

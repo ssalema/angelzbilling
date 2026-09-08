@@ -42,11 +42,11 @@ const LOW_STOCK_GRAMS = 100;
 
 const SKU_PREFIX = 'AP';
 /**
- * The catalogue already ran to AP-019 before this sheet arrived, so the import
- * numbers on from there rather than colliding with it. Bump this if more
- * perfumes are added by hand ahead of the next import.
+ * The catalogue that ran ahead of this sheet has since been deleted, so the
+ * import owns the numbering from AP-001. Bump this if perfumes are added by
+ * hand ahead of the next import and their numbers must be left free.
  */
-const SKU_START = 20;
+const SKU_START = 1;
 const HSN_CODE = '33030090';
 const CLOUDINARY_FOLDER = 'perfumes';
 

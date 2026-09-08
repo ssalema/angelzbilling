@@ -35,7 +35,7 @@ import { RHFTextField, RHFSelect, RHFChipInput, RHFNumberField } from '../../../
 import { EmptyState } from '../../../components/common/StateViews.jsx';
 import SectionTitle from '../../../components/common/SectionTitle.jsx';
 import { PERFUME_SIZES, SELECTOR_STYLES } from '../../../utils/constants.js';
-import { formatCurrency, formatGrams, formatNumber, unitsFromGrams } from '../../../utils/format.js';
+import { currencySymbol, formatCurrency, formatGrams, formatNumber, unitsFromGrams } from '../../../utils/format.js';
 import { computeFinalPrice, sizeGramsFor } from '../perfumeSchema.js';
 import { FONT, CARD_HEAD_PAD, CARD_PAD, ICON, brand, numericText, surface } from '../../../theme/index.js';
 
@@ -242,7 +242,7 @@ const BasePricing = () => {
           <RHFNumberField
             name="mrp"
             label="MRP / Price *"
-            prefix="₹"
+            prefix={currencySymbol()}
             inputProps={{ min: 0, step: '0.01' }}
             helperText="Before any discount"
           />

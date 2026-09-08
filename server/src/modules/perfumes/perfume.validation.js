@@ -258,7 +258,9 @@ export const idParamSchema = z.object({ id: objectId });
 /** Mirrors MIN/MAX_PRICE in utils/sizePricing.js. */
 const sizePrice = z.coerce
   .number()
-  .min(1, 'Price must be at least ₹1')
+  // No currency symbol: the symbol is a store setting and this schema is built
+  // once at import time, long before any settings document is read.
+  .min(1, 'Price must be at least 1')
   .max(10_000_000, 'That price is far higher than any perfume in the catalogue');
 
 /** The repricing screen's type-ahead — the same shape as the stock one. */
@@ -300,4 +302,78 @@ export const bulkPriceSchema = z.object({
     )
     .min(1, 'Nothing to update')
     .max(MAX_BULK_PRICE_ROWS, `Up to ${MAX_BULK_PRICE_ROWS} perfumes can be repriced at once`),
+});
+
+/* ───────────────────────── Bulk catalogue upload ─────────────────────────
+ * Creating perfumes from a spreadsheet. The sheet itself is read in the
+ * browser; what arrives here is one object per perfume the admin reviewed.
+ *
+ * SKUs are deliberately absent: the whole point of the screen is that the
+ * catalogue numbers its own new rows, so a client-supplied SKU is not accepted
+ * even if one is sent.
+ *
+ * `prices` carries only the fills the sheet actually filled in. A size left out
+ * is a size this perfume does not sell — nothing is derived from a neighbouring
+ * price, here or anywhere else (see utils/sizePricing.js).
+ */
+
+/** A sheet this long is a catalogue import, not a typo — and still one request. */
+export const MAX_BULK_CREATE_ROWS = 2000;
+
+export const previewBulkCreateSchema = z.object({
+  names: z
+    .array(z.string().trim().min(1).max(180))
+    .min(1, 'Nothing to check')
+    .max(MAX_BULK_CREATE_ROWS, `Up to ${MAX_BULK_CREATE_ROWS} perfumes can be uploaded at once`),
+});
+
+const bulkCreateItem = z.object({
+  name: z.string().trim().min(2, 'Perfume name must be at least 2 characters').max(180),
+  category: z.string().trim().max(80).optional().default(''),
+  brand: z.string().trim().max(80).optional().default(''),
+  /** Bulk weight in grams — the one inventory figure a perfume carries. */
+  stock: z.coerce
+    .number()
+    .min(0, 'Stock cannot be negative')
+    .max(MAX_STOCK_GRAMS, 'That is more stock than one upload can add')
+    .optional()
+    .default(0),
+  /**
+   * The photograph, already uploaded from the review screen — the spreadsheet
+   * never carries one, so this is a media-library link and not a sheet cell.
+   *
+   * Empty is allowed and means "no photo": that row is created as a draft
+   * rather than rejected, since a perfume cannot be published without an image
+   * and the admin may well be photographing the shelf afterwards.
+   */
+  image: z
+    .union([
+      z.literal(''),
+      z
+        .string()
+        .trim()
+        .url('The photo must be a link starting with http')
+        .max(2000)
+        // `url()` alone accepts any scheme, so "C:\photos\zumar.jpg" parses as a
+        // "c:" URL and would be stored as an image the catalogue can never load.
+        .refine((value) => /^https?:\/\//i.test(value), 'A photo must be an http:// or https:// link'),
+    ])
+    .optional()
+    .default(''),
+  /**
+   * The Cloudinary id behind that photo, so the perfume owns its upload: it is
+   * cleaned up with the perfume, exactly as an image added in the wizard is.
+   */
+  imagePublicId: z.string().trim().max(300).optional().default(''),
+  prices: z
+    .array(z.object({ sizeGrams: z.coerce.number().positive('A fill size must be above zero grams'), mrp: sizePrice }))
+    .min(1, 'Give a price for at least one size')
+    .max(40, 'A perfume cannot be created with this many sizes'),
+});
+
+export const bulkCreateSchema = z.object({
+  items: z
+    .array(bulkCreateItem)
+    .min(1, 'Nothing to create')
+    .max(MAX_BULK_CREATE_ROWS, `Up to ${MAX_BULK_CREATE_ROWS} perfumes can be created at once`),
 });

@@ -8,12 +8,24 @@ const imageSchema = new mongoose.Schema(
   { _id: false }
 );
 
+/**
+ * The bill/SKU prefix a fresh install starts on, and the one fallback every
+ * reader defers to. It lives HERE, beside the schema default it fills in, so
+ * the prefix is stated once — a store that renames itself changes the setting,
+ * and nothing in the codebase still spells out the old initials.
+ */
+export const DEFAULT_BILL_PREFIX = 'AP';
+
 /** Singleton document — there is exactly one settings row, keyed 'general'. */
 const settingsSchema = new mongoose.Schema(
   {
     key: { type: String, default: 'general', unique: true, immutable: true },
 
-    siteName: { type: String, trim: true, default: 'Angelz Perfume', maxlength: 120 },
+    // Blank on a fresh install on purpose — this app is deployed per store, and
+    // the schema is the wrong place to assert whose store it is. The admin names
+    // it on first run (Settings > Store name is required); until then the UI
+    // falls back to a neutral word rather than someone else's brand.
+    siteName: { type: String, trim: true, default: '', maxlength: 120 },
     tagline: { type: String, trim: true, default: '', maxlength: 200 },
     contactEmail: { type: String, trim: true, lowercase: true, default: '' },
     contactNumber: { type: String, trim: true, default: '' },
@@ -41,7 +53,7 @@ const settingsSchema = new mongoose.Schema(
     billing: {
       currency: { type: String, default: 'INR' },
       currencySymbol: { type: String, default: '₹' },
-      billPrefix: { type: String, default: 'AP', uppercase: true, trim: true, maxlength: 6 },
+      billPrefix: { type: String, default: DEFAULT_BILL_PREFIX, uppercase: true, trim: true, maxlength: 6 },
       defaultTaxPercent: { type: Number, default: 0, min: 0, max: 100 },
       /**
        * The most a Billing Staff account may discount a line, and the most of a

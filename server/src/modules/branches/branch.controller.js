@@ -1,4 +1,5 @@
 import Branch from '../../models/Branch.js';
+import Settings from '../../models/Settings.js';
 import User from '../../models/User.js';
 import Bill from '../../models/Bill.js';
 import ApiError from '../../utils/ApiError.js';
@@ -7,8 +8,45 @@ import { sendSuccess, sendCreated, sendPaginated } from '../../utils/ApiResponse
 import { getPagination, getSort, escapeRegex } from '../../utils/query.js';
 import { assertBranchAccess, assertBranchWrite, isGlobalSuperAdmin } from '../../middlewares/authorize.js';
 import { uploadBuffer, destroyAsset } from '../../config/cloudinary.js';
+import { refreshFeatures } from '../../utils/featureFlags.js';
 
 const SORTABLE = ['createdAt', 'name', 'code'];
+
+/**
+ * The branch switch and the branch list are two views of one fact: branch
+ * management is on exactly while at least one location is active. Activating a
+ * branch by hand therefore switches it back on, and deactivating the last
+ * active one switches it off — without this the panel read "Branches off" over
+ * a table of active branches, and the rest of the app kept its branch columns,
+ * filters and pickers hidden while branches were live.
+ *
+ * A store with no branches at all is left alone: the switch is then the admin's
+ * own choice, and forcing it off would hide the button that adds the first one.
+ */
+const syncBranchesFeature = async () => {
+  const [total, active] = await Promise.all([
+    Branch.countDocuments({}),
+    Branch.countDocuments({ isActive: true }),
+  ]);
+  if (total === 0) return;
+
+  const settings = await Settings.getSingleton();
+  const current = settings.features?.branches !== false;
+  const next = active > 0;
+  if (current === next) return;
+
+  settings.set('features.branches', next);
+  // Mongoose Map keys may not carry a dot, so the audit map escapes it the same
+  // way the settings controller does.
+  settings.updatedFields.set('features:branches', new Date());
+  await settings.save();
+
+  // Branch scoping reads a cached copy of this flag and the print header a
+  // cached copy of the document; both go, so the next request already sees the
+  // switch in its new position.
+  refreshFeatures();
+  Settings.invalidateCache();
+};
 
 /** The two marks a branch can carry, named the way the store names them. */
 const BRANDING = { logo: 'Logo', favicon: 'Favicon' };
@@ -65,6 +103,11 @@ export const listBranches = asyncHandler(async (req, res) => {
     billCount: billMap[String(b._id)] || 0,
   }));
 
+  // Records written before the switch followed the list — or edited straight in
+  // the database — can still disagree with it. The check is a no-op once they
+  // agree, so listing the branches quietly repairs the switch.
+  if (isGlobalSuperAdmin(req.user)) await syncBranchesFeature();
+
   return sendPaginated(res, { message: 'Branches loaded', items: enriched, page, limit, total });
 });
 
@@ -87,6 +130,7 @@ export const createBranch = asyncHandler(async (req, res) => {
   ]);
 
   const branch = await Branch.create(req.body);
+  await syncBranchesFeature();
   return sendCreated(res, { message: `Branch "${branch.name}" created`, data: branch });
 });
 
@@ -117,6 +161,7 @@ export const updateBranch = asyncHandler(async (req, res) => {
 
   Object.assign(branch, req.body);
   await branch.save();
+  await syncBranchesFeature();
 
   return sendSuccess(res, { message: `Branch "${branch.name}" updated`, data: branch });
 });
@@ -141,6 +186,7 @@ export const deleteBranch = asyncHandler(async (req, res) => {
 
   const logoId = branch.logo?.publicId;
   await branch.deleteOne();
+  await syncBranchesFeature();
   if (logoId) await destroyAsset(logoId, 'image');
 
   return sendSuccess(res, { message: `Branch "${branch.name}" deleted` });
@@ -155,6 +201,9 @@ export const toggleBranchStatus = asyncHandler(async (req, res) => {
   // management back on must not undo it.
   branch.deactivatedByFeature = false;
   await branch.save();
+  // The last branch closing switches branch management off; the first reopening
+  // switches it back on.
+  await syncBranchesFeature();
 
   return sendSuccess(res, {
     message: `Branch "${branch.name}" ${branch.isActive ? 'activated' : 'deactivated'}`,

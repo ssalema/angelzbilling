@@ -22,6 +22,32 @@ const SliceTooltip = ({ active, payload }) => {
   );
 };
 
+const RADIAN = Math.PI / 180;
+
+/**
+ * Percentage labels sit just outside the arc. Recharts' default placement pushes
+ * them past the chart box, so the slice at the top of the circle gets clipped by
+ * the card edge. Position them ourselves and keep the radii small enough to fit.
+ */
+const renderPercentLabel = ({ cx, cy, midAngle, outerRadius, percentage, index }) => {
+  if (percentage < 8) return null;
+  const radius = outerRadius + 16;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  return (
+    <text
+      x={x}
+      y={y}
+      fill={chartPalette[index % chartPalette.length]}
+      textAnchor={x > cx + 4 ? 'start' : x < cx - 4 ? 'end' : 'middle'}
+      dominantBaseline="central"
+      style={{ fontSize: FONT.small, fontWeight: 700 }}
+    >
+      {Math.round(percentage)}%
+    </text>
+  );
+};
+
 /**
  * Shared donut/pie card used for both "Bill status" and "Payment preference".
  * `donut` toggles the hole, matching the two reference charts.
@@ -67,22 +93,22 @@ const BreakdownChart = ({
           <EmptyState compact title="Nothing to chart yet" description={emptyMessage} />
         ) : (
           <>
-            <ResponsiveContainer width="100%" height={230}>
-              <PieChart>
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart margin={{ top: 12, right: 12, bottom: 12, left: 12 }}>
                 <Pie
                   data={segments}
                   dataKey="count"
                   nameKey="label"
                   cx="50%"
                   cy="50%"
-                  innerRadius={donut ? 58 : 0}
-                  outerRadius={90}
+                  innerRadius={donut ? 52 : 0}
+                  outerRadius={80}
                   paddingAngle={donut ? 2 : 0}
                   startAngle={90}
                   endAngle={-270}
                   stroke="#fff"
                   strokeWidth={2}
-                  label={({ percentage }) => (percentage >= 8 ? `${Math.round(percentage)}%` : '')}
+                  label={renderPercentLabel}
                   labelLine={false}
                 >
                   {segments.map((segment, index) => (

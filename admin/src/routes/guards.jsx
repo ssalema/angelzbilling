@@ -3,6 +3,7 @@ import { Box, CircularProgress, Typography, Button, Stack } from '@mui/material'
 import { useAuth } from '../context/AuthContext.jsx';
 import { PermissionDenied } from '../components/common/StateViews.jsx';
 import { ICON, brand } from '../theme/index.js';
+import { cachedSiteName } from '../utils/branding.js';
 
 /** Shown while the refresh cookie is being exchanged on a hard reload. */
 const BootScreen = () => (
@@ -17,7 +18,7 @@ const BootScreen = () => (
           fontSize: ICON.nav,
         }}
       >
-        Angelz Perfume
+        {cachedSiteName()}
       </Typography>
       <CircularProgress size={24} sx={{ color: brand.gold }} />
     </Stack>

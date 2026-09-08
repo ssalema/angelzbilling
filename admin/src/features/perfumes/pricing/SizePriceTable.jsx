@@ -12,7 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 
-import { formatCurrency } from '../../../utils/format.js';
+import { currencySymbol, formatCurrency } from '../../../utils/format.js';
 import { CARD_RADIUS, FONT, numericText, surface } from '../../../theme/index.js';
 
 /**
@@ -124,7 +124,7 @@ const SizePriceTable = ({ rows, dense = false, editable = false, onEdit, disable
                     // shift. Inline-flex lets it sit under the column heading.
                     fullWidth={false}
                     inputProps={{ step: 'any', min: 0, style: { textAlign: 'right' } }}
-                    InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
+                    InputProps={{ startAdornment: <InputAdornment position="start">{currencySymbol()}</InputAdornment> }}
                     sx={{ width: 150, verticalAlign: 'middle' }}
                   />
                 ) : (

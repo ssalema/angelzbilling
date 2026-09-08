@@ -19,10 +19,12 @@ import DeleteOutline from '@mui/icons-material/DeleteOutline';
 import Inventory2Outlined from '@mui/icons-material/Inventory2Outlined';
 import AddchartOutlined from '@mui/icons-material/AddchartOutlined';
 import SellOutlined from '@mui/icons-material/SellOutlined';
+import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined';
 
 import PageHeader from '../../components/common/PageHeader.jsx';
 import UpdateStockDialog from './stock/UpdateStockDialog.jsx';
 import UpdatePriceDialog from './pricing/UpdatePriceDialog.jsx';
+import BulkUploadDialog from './bulk/BulkUploadDialog.jsx';
 import DataTable, { actionsColumn } from '../../components/common/DataTable.jsx';
 import StatusChip from '../../components/common/StatusChip.jsx';
 import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
@@ -83,6 +85,7 @@ const PerfumeListPage = () => {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [stockOpen, setStockOpen] = useState(false);
   const [priceOpen, setPriceOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const debouncedSearch = useDebounce(filters.search, 400);
 
   const perfumes = useApiResource(
@@ -330,6 +333,12 @@ const PerfumeListPage = () => {
               <Button variant="outlined" startIcon={<SellOutlined />} onClick={() => setPriceOpen(true)}>
                 Update price
               </Button>
+              {/* Filling a catalogue is a job of its own — a thousand fragrances
+                  is a spreadsheet, not a thousand trips through the wizard. The
+                  wizard itself is untouched and still the way to add one. */}
+              <Button variant="outlined" startIcon={<UploadFileOutlined />} onClick={() => setBulkOpen(true)}>
+                Bulk upload
+              </Button>
               <Button component={RouterLink} to="/perfumes/new" variant="contained" startIcon={<AddRounded />}>
                 Add perfume
               </Button>
@@ -440,6 +449,17 @@ const PerfumeListPage = () => {
         // Every row shows a price and a final-price range, so a repricing has
         // to be reflected behind the dialog rather than on the next visit.
         onUpdated={perfumes.reload}
+      />
+
+      <BulkUploadDialog
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        // A run of new perfumes changes both the table and the category filter
+        // behind the dialog, so both are reloaded rather than left stale.
+        onCreated={() => {
+          perfumes.reload();
+          facets.reload();
+        }}
       />
 
       <UpdateStockDialog

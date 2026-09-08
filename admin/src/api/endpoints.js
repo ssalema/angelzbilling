@@ -62,6 +62,15 @@ export const perfumeApi = {
   priceSearch: (params) => api.get('/perfumes/price/search', { params }).then(unwrapFull),
   resolvePriceNames: (names) => api.post('/perfumes/price/resolve', { names }).then(unwrap),
   bulkUpdatePrices: (items) => api.post('/perfumes/price/bulk', { items }).then((r) => r.data),
+
+  /* ── Bulk catalogue upload ──
+   * Creating perfumes from a sheet, rather than one at a time in the wizard.
+   * Same shape as the two above: the file is read in the browser, the names are
+   * checked (`/bulk/preview`, which also says what SKU each new perfume would
+   * be given), and the rows are created only once the admin has reviewed them.
+   */
+  previewBulkCreate: (names) => api.post('/perfumes/bulk/preview', { names }).then(unwrap),
+  bulkCreatePerfumes: (items) => api.post('/perfumes/bulk', { items }).then((r) => r.data),
 };
 
 /* ─────────────────────────────── Bills ─────────────────────────────── */

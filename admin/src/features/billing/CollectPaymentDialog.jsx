@@ -21,7 +21,7 @@ import SectionTitle from '../../components/common/SectionTitle.jsx';
 import DialogCloseButton from '../../components/common/DialogCloseButton.jsx';
 import { billApi } from '../../api/endpoints.js';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
-import { formatCurrency } from '../../utils/format.js';
+import { currencySymbol, formatCurrency } from '../../utils/format.js';
 import { PAYMENT_METHODS } from '../../utils/constants.js';
 import { FONT, numericText, statusColors, surface } from '../../theme/index.js';
 
@@ -125,7 +125,7 @@ const CollectPaymentDialog = ({ open, bill, onClose, onCollected }) => {
           error={Boolean(error)}
           helperText={error || 'Leave it at the full balance, or type what the customer paid today'}
           inputProps={{ min: 0, max: due, step: '0.01' }}
-          InputProps={{ startAdornment: <InputAdornment position="start">₹</InputAdornment> }}
+          InputProps={{ startAdornment: <InputAdornment position="start">{currencySymbol()}</InputAdornment> }}
         />
 
         <Typography variant="subtitle2" sx={{ mt: 2.25, mb: 1 }}>

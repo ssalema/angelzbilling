@@ -1,6 +1,7 @@
 import Perfume from '../../models/Perfume.js';
 import Branch from '../../models/Branch.js';
 import Counter from '../../models/Counter.js';
+import { DEFAULT_BILL_PREFIX } from '../../models/Settings.js';
 import ApiError from '../../utils/ApiError.js';
 import { round2 } from '../../utils/query.js';
 import { resolveSizeGrams, gramsForQuantity, unitsFromGrams, formatGrams } from '../../utils/grams.js';
@@ -22,7 +23,7 @@ export const financialYearKey = (date = new Date()) => {
   return `${startYear}-${String((startYear + 1) % 100).padStart(2, '0')}`;
 };
 
-export const generateBillNumber = async ({ prefix = 'AP', at = new Date() } = {}) => {
+export const generateBillNumber = async ({ prefix = DEFAULT_BILL_PREFIX, at = new Date() } = {}) => {
   const stamp = `${String(at.getFullYear()).slice(-2)}${String(at.getMonth() + 1).padStart(2, '0')}`;
   // The prefix is left out of the counter key on purpose: renaming the prefix
   // mid-year is a cosmetic change, and keying on it would drop the serial back

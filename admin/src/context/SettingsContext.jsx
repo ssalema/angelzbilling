@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import { settingsApi } from '../api/endpoints.js';
 import { useAuth } from './AuthContext.jsx';
+import { configureCurrency, currencySymbol as configuredSymbol } from '../utils/format.js';
+import { cacheSiteName, cachedSiteName } from '../utils/branding.js';
 
 const SettingsContext = createContext(null);
 
@@ -51,7 +53,10 @@ export const SettingsProvider = ({ children }) => {
 
   // Reflect the configured branding in the browser tab.
   useEffect(() => {
-    if (settings?.siteName) document.title = `${settings.siteName} — Admin`;
+    if (settings?.siteName) {
+      document.title = `${settings.siteName} — Admin`;
+      cacheSiteName(settings.siteName); // brands the next boot splash
+    }
     const favicon = settings?.branding?.favicon?.url || settings?.favicon;
     if (favicon) {
       const link = document.querySelector("link[rel='icon']");
@@ -59,15 +64,30 @@ export const SettingsProvider = ({ children }) => {
     }
   }, [settings]);
 
+  /**
+   * The shared money formatters are plain functions, not hooks, so the store's
+   * currency has to be pushed into them.
+   *
+   * Deliberately during render rather than in an effect: an effect runs AFTER
+   * the children have painted, so the first screen of the session would render
+   * its amounts under the default symbol and never re-render to correct itself.
+   * The call is idempotent and returns early when nothing changed.
+   */
+  configureCurrency({
+    // Nested from /settings, flat from the signed-out /settings/public payload.
+    currency: settings?.billing?.currency || settings?.currency,
+    currencySymbol: settings?.billing?.currencySymbol || settings?.currencySymbol,
+  });
+
   const value = useMemo(
     () => ({
       settings,
       loading,
       reload: load,
       setSettings,
-      siteName: settings?.siteName || 'Angelz Perfume',
+      siteName: settings?.siteName || cachedSiteName(),
       logo: settings?.branding?.logo?.url || settings?.logo || '',
-      currencySymbol: settings?.billing?.currencySymbol || settings?.currencySymbol || '₹',
+      currencySymbol: configuredSymbol(),
       defaultTaxPercent: settings?.billing?.defaultTaxPercent ?? 0,
       // Off for single-location stores: every branch column, filter and chip hides.
       branchesEnabled: settings?.features?.branches !== false,

@@ -1,33 +1,88 @@
 /** Formatting helpers shared by every screen — one place to change the locale. */
 
-const inr = new Intl.NumberFormat('en-IN', {
-  style: 'currency',
-  currency: 'INR',
-  maximumFractionDigits: 0,
-});
+/**
+ * Currency is a store setting, not a constant: Settings > Billing carries the
+ * symbol the store prints and the ISO code it trades in. `configureCurrency` is
+ * called by the settings provider as soon as those land, so every screen that
+ * already calls `formatCurrency` picks them up without knowing where they came
+ * from — these helpers are plain functions used well outside React.
+ *
+ * The SYMBOL is authoritative, so an amount is built as "<symbol><number>"
+ * rather than through `style: 'currency'` — otherwise the ISO code would
+ * quietly override a symbol the admin typed by hand.
+ *
+ * The code only picks the grouping locale, which is the one thing it can be
+ * trusted for: 12,34,567 in India, 1,234,567 nearly everywhere else.
+ */
+const CURRENCY_LOCALES = { INR: 'en-IN' };
+const DEFAULT_LOCALE = 'en-IN';
+const FOREIGN_LOCALE = 'en-US';
+const DEFAULT_SYMBOL = '₹';
 
-const inrPrecise = new Intl.NumberFormat('en-IN', {
-  style: 'currency',
-  currency: 'INR',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
+/**
+ * Indian grouping is this app's starting point, not its assumption: an UNSET
+ * code means settings have not loaded yet and the boot default stands, while a
+ * code that is set and is not INR groups the way the rest of the world does.
+ */
+const localeFor = (currency) => {
+  const code = String(currency || '').toUpperCase();
+  if (!code) return DEFAULT_LOCALE;
+  return CURRENCY_LOCALES[code] || FOREIGN_LOCALE;
+};
+
+let symbol = DEFAULT_SYMBOL;
+let locale = DEFAULT_LOCALE;
+let whole;
+let precise2;
+let plain;
+
+const buildFormatters = () => {
+  whole = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
+  precise2 = new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  plain = new Intl.NumberFormat(locale);
+};
+buildFormatters();
+
+/** Applied once at boot, and again whenever Settings > Billing is saved. */
+export const configureCurrency = ({ currency, currencySymbol: nextSymbolRaw } = {}) => {
+  const nextSymbol = nextSymbolRaw || DEFAULT_SYMBOL;
+  const nextLocale = localeFor(currency);
+  if (nextSymbol === symbol && nextLocale === locale) return;
+  symbol = nextSymbol;
+  locale = nextLocale;
+  buildFormatters();
+};
+
+/**
+ * The configured symbol on its own, for the places that render it apart from an
+ * amount — a field adornment, a column heading.
+ */
+export const currencySymbol = () => symbol;
 
 export const formatCurrency = (value, { precise = false } = {}) => {
   const number = Number(value || 0);
-  return precise ? inrPrecise.format(number) : inr.format(number);
+  return `${symbol}${(precise ? precise2 : whole).format(number)}`;
 };
 
-/** Compact axis labels: 8293 -> ₹8.3K */
+/** A grouped amount with no symbol, for a layout whose heading already carries one. */
+export const formatAmount = (value) => precise2.format(Number(value || 0));
+
+/** Compact axis labels: 8293 -> ₹8.3K. Lakh and crore only where they are read. */
 export const formatCompactCurrency = (value) => {
   const n = Number(value || 0);
-  if (Math.abs(n) >= 10000000) return `₹${(n / 10000000).toFixed(1)}Cr`;
-  if (Math.abs(n) >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
-  if (Math.abs(n) >= 1000) return `₹${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}K`;
-  return `₹${Math.round(n)}`;
+  const size = Math.abs(n);
+  if (locale === 'en-IN') {
+    if (size >= 10000000) return `${symbol}${(n / 10000000).toFixed(1)}Cr`;
+    if (size >= 100000) return `${symbol}${(n / 100000).toFixed(1)}L`;
+  } else {
+    if (size >= 1000000000) return `${symbol}${(n / 1000000000).toFixed(1)}B`;
+    if (size >= 1000000) return `${symbol}${(n / 1000000).toFixed(1)}M`;
+  }
+  if (size >= 1000) return `${symbol}${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}K`;
+  return `${symbol}${Math.round(n)}`;
 };
 
-export const formatNumber = (value) => new Intl.NumberFormat('en-IN').format(Number(value || 0));
+export const formatNumber = (value) => plain.format(Number(value || 0));
 
 
 /**

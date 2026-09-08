@@ -15,7 +15,8 @@
     "test:race": "node tests/race.e2e.mjs",
     "test:race:standalone": "node tests/race.e2e.mjs --standalone",
     "migrate:indexes": "node src/seed/syncIndexes.js",
-    "purge:seed": "node src/seed/purge.js"
+    "purge:seed": "node src/seed/purge.js",
+    "renumber:skus": "node src/seed/renumberSkus.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

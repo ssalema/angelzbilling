@@ -125,7 +125,7 @@ const LoginPage = () => {
 
         <Box sx={{ position: 'relative', zIndex: 1, maxWidth: 420 }}>
           <Typography variant="h2" sx={{ fontSize: '2.4rem', lineHeight: 1.2, mb: 2 }}>
-            Every bottle, every bill, in one place.
+            Every Perfume, every bottle, every bill, in one place.
           </Typography>
           <Typography sx={{ color: onPlum.textMuted, fontSize: FONT.lead, lineHeight: 1.7 }}>
             Track revenue across branches, manage your fragrance catalogue with per-size variants, and raise a
