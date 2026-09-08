@@ -1,24 +1,15 @@
 /**
- * Seeds the minimum a fresh install needs: one super admin account and the
- * store settings singleton. No demo branches, perfumes, staff or bills — the
- * catalogue and everything downstream of it is created through the app.
+ * Creates the one account a fresh install cannot start without: the super
+ * admin. Nothing else is seeded — branches, the catalogue, staff, settings and
+ * bills are all created through the app.
  *
- *   npm run seed              — creates the super admin if it is missing
- *   npm run seed -- --fresh   — wipes users, branches, perfumes, bills,
- *                               counters and settings first, then reseeds
+ *   npm run seed   — creates the super admin if it is missing
  */
 import mongoose from 'mongoose';
 import env from '../config/env.js';
 import logger from '../config/logger.js';
 import connectDB, { disconnectDB } from '../config/db.js';
 import User from '../models/User.js';
-import Branch from '../models/Branch.js';
-import Perfume from '../models/Perfume.js';
-import Bill from '../models/Bill.js';
-import Counter from '../models/Counter.js';
-import Settings from '../models/Settings.js';
-
-const FRESH = process.argv.includes('--fresh');
 
 /**
  * This script writes an account that can sign in, so it must never run against
@@ -50,37 +41,12 @@ const ADMIN = {
 const run = async () => {
   await connectDB();
 
-  if (FRESH) {
-    logger.warn('--fresh flag detected: clearing users, branches, perfumes, bills, counters and settings');
-    await Promise.all([
-      User.deleteMany({}),
-      Branch.deleteMany({}),
-      Perfume.deleteMany({}),
-      Bill.deleteMany({}),
-      Counter.deleteMany({}),
-      Settings.deleteMany({}),
-    ]);
-  }
-
-  // ── Super admin ──
-  let superAdmin = await User.findOne({ email: ADMIN.email });
-  if (superAdmin) {
-    logger.info(`Super admin already present: ${superAdmin.email}`);
+  const existing = await User.findOne({ email: ADMIN.email });
+  if (existing) {
+    logger.info(`Super admin already present: ${existing.email}`);
   } else {
-    superAdmin = await User.create({ ...ADMIN, branch: null });
-    logger.info(`Super admin created: ${superAdmin.email}`);
-  }
-
-  // ── Settings ──
-  const settings = await Settings.getSingleton();
-  if (!settings.contactEmail) {
-    settings.set({
-      siteName: 'Angelz Perfume',
-      contactEmail: 'care@angelzperfume.com',
-      billing: { billPrefix: 'AP', currencySymbol: '₹', defaultTaxPercent: 0 },
-    });
-    await settings.save();
-    logger.info('Store settings seeded');
+    await User.create({ ...ADMIN, branch: null });
+    logger.info(`Super admin created: ${ADMIN.email}`);
   }
 
   logger.info('');

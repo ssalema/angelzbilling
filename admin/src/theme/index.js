@@ -1,7 +1,7 @@
 import { createTheme, alpha } from '@mui/material/styles';
 
 /**
- * Angelz Perfume brand system.
+ * Angelz Desire brand system.
  *
  * The palette is deliberately not SaaS blue — a fragrance house reads as
  * noir plum, champagne gold and ivory. Headings use a serif display face,

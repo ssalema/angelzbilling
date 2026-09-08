@@ -44,7 +44,7 @@ export const env = {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME,
     apiKey: process.env.CLOUDINARY_API_KEY,
     apiSecret: process.env.CLOUDINARY_API_SECRET,
-    folder: process.env.CLOUDINARY_FOLDER || 'angelzperfume',
+    folder: process.env.CLOUDINARY_FOLDER || 'angelzdesire',
     get enabled() {
       return Boolean(
         process.env.CLOUDINARY_CLOUD_NAME &&

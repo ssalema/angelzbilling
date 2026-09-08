@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, useCallback } 
 import { settingsApi } from '../api/endpoints.js';
 import { useAuth } from './AuthContext.jsx';
 import { configureCurrency, currencySymbol as configuredSymbol } from '../utils/format.js';
-import { cacheSiteName, cachedSiteName } from '../utils/branding.js';
+import { cacheSiteName, cachedSiteName, documentTitle } from '../utils/branding.js';
 
 const SettingsContext = createContext(null);
 
@@ -54,8 +54,10 @@ export const SettingsProvider = ({ children }) => {
   // Reflect the configured branding in the browser tab.
   useEffect(() => {
     if (settings?.siteName) {
-      document.title = `${settings.siteName} — Admin`;
-      cacheSiteName(settings.siteName); // brands the next boot splash
+      document.title = documentTitle(settings.siteName);
+      // Brands the next load's tab title and splash, both of which paint long
+      // before this response could arrive.
+      cacheSiteName(settings.siteName);
     }
     const favicon = settings?.branding?.favicon?.url || settings?.favicon;
     if (favicon) {

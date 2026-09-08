@@ -27,7 +27,22 @@
         rel="stylesheet"
       />
     </noscript>
+    <!--
+      The store name is a setting, so this file cannot carry one — but the
+      title below is what the browser files the bookmark and history entry
+      under, and it reads it here, long before React can correct it. So the
+      last name we saw is applied immediately, from the localStorage key
+      SettingsContext writes (see src/utils/branding.js — keep 'ab:siteName'
+      in step). A first-ever visit has nothing cached and keeps the neutral
+      title until settings land, which is the only time it is ever seen.
+    -->
     <title>Admin</title>
+    <script>
+      try {
+        var cachedName = localStorage.getItem('ab:siteName');
+        if (cachedName) document.title = cachedName + ' — Admin';
+      } catch (e) {}
+    </script>
     <style>
       /* Painted before React mounts so there is no white flash on the ivory app. */
       html, body, #root { height: 100%; margin: 0; background: #FAF7F2; }
@@ -40,12 +55,7 @@
   </head>
   <body>
     <div id="root"><div id="boot"></div></div>
-    <!--
-      The store name is a setting, so this file cannot carry one. The splash
-      paints the last name we saw instead, written to localStorage by
-      SettingsContext (see src/utils/branding.js — keep the key in step). A
-      first-ever visit has nothing cached and simply shows no wordmark.
-    -->
+    <!-- The splash wordmark, from the same cached name as the title above. -->
     <script>
       try {
         var cached = localStorage.getItem('ab:siteName');

@@ -1,9 +1,9 @@
 {
-  "name": "angelzperfume-admin",
+  "name": "angelzdesire-admin",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Angelz Perfume — Billing Admin Panel (React + Vite + MUI)",
+  "description": "Angelz Desire — Billing Admin Panel (React + Vite + MUI)",
   "scripts": {
     "start": "vite",
     "build": "vite build",

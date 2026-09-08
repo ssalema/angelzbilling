@@ -6,13 +6,21 @@
  *
  * So the last known name is kept in localStorage and reused on the next load.
  * A first-ever visit has nothing cached and falls back to a neutral word; every
- * visit after that is branded from the first frame. The same key is read by the
- * inline splash script in index.html, so keep them in step.
+ * visit after that is branded from the first frame.
+ *
+ * index.html runs the same two reads inline — the browser files a history entry
+ * and a bookmark under whatever `<title>` it sees at load, which is far too
+ * early for React to have corrected it, so the tab title cannot wait for this
+ * module. It is plain HTML and cannot import, so if you change the key or the
+ * title format here, change it there too.
  */
 export const SITE_NAME_KEY = 'ab:siteName';
 
 /** Deliberately generic — a store that has never loaded settings has no name yet. */
 export const FALLBACK_SITE_NAME = 'Admin';
+
+/** The browser tab, one format everywhere. Mirrored inline in index.html. */
+export const documentTitle = (name) => (name ? `${name} — Admin` : FALLBACK_SITE_NAME);
 
 export const cachedSiteName = () => {
   try {

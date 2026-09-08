@@ -1,22 +1,18 @@
 {
-  "name": "angelzperfume-server",
+  "name": "angelzdesire-server",
   "version": "1.0.0",
   "private": true,
-  "description": "Angelz Perfume — Billing Admin API (Node + Express + MongoDB)",
+  "description": "Angelz Desire — Billing Admin API (Node + Express + MongoDB)",
   "type": "module",
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "seed": "node src/seed/seed.js",
-    "import:perfumes": "node src/seed/importPerfumes.js",
-    "backfill:payments": "node src/seed/backfillPayments.js",
     "test": "node tests/api.e2e.mjs",
     "test:race": "node tests/race.e2e.mjs",
     "test:race:standalone": "node tests/race.e2e.mjs --standalone",
-    "migrate:indexes": "node src/seed/syncIndexes.js",
-    "purge:seed": "node src/seed/purge.js",
-    "renumber:skus": "node src/seed/renumberSkus.js"
+    "migrate:indexes": "node src/seed/syncIndexes.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
