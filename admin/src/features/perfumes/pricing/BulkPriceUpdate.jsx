@@ -26,20 +26,27 @@ import CheckCircleOutline from '@mui/icons-material/CheckCircleOutline';
 import ReportProblemOutlined from '@mui/icons-material/ReportProblemOutlined';
 import RestartAltRounded from '@mui/icons-material/RestartAltRounded';
 import KeyboardArrowDownRounded from '@mui/icons-material/KeyboardArrowDownRounded';
-import ArrowForwardRounded from '@mui/icons-material/ArrowForwardRounded';
 import SellOutlined from '@mui/icons-material/SellOutlined';
 
 import Dropzone from '../../../components/common/Dropzone.jsx';
 import Pagination from '../../../components/common/Pagination.jsx';
-import PriceLadderTable from './PriceLadderTable.jsx';
+import SizePriceTable from './SizePriceTable.jsx';
 import { perfumeApi } from '../../../api/endpoints.js';
 import { useSnackbar } from '../../../context/SnackbarContext.jsx';
-import { formatCurrency, formatNumber, truncate } from '../../../utils/format.js';
+import { formatNumber, truncate } from '../../../utils/format.js';
 import { readSheet, SheetError, SHEET_TYPES } from '../../../utils/spreadsheet.js';
 import { brand, CARD_RADIUS, FONT, ICON, numericText, surface } from '../../../theme/index.js';
 import { IMG } from '../../../utils/image.js';
-import { BASE_LABEL, repriceVariants } from './priceLadder.js';
-import { COLUMN_NAME, COLUMN_PRICE, SHEET_RULES, applyMatches, buildSheetRows, findColumns } from './priceSheet.js';
+import { currentRange, formatRange, newRange } from './sizePricing.js';
+import {
+  COLUMN_NAME,
+  PRICE_COLUMNS,
+  SHEET_RULES,
+  applyMatches,
+  buildSheetRows,
+  findColumns,
+  reviewRowsFor,
+} from './priceSheet.js';
 
 /** How many review rows are drawn at once — a thousand-row sheet is normal here. */
 const PAGE_SIZE = 25;
@@ -50,13 +57,13 @@ const PAGE_SIZE = 25;
  * The file is read in the browser and thrown away: it is never uploaded, never
  * written to the media library, never parked on the server or in the database.
  * What leaves this screen is a list of names to look up, and — only after the
- * admin has reviewed and pressed the update button — a list of ids and kilo
- * prices. Close the dialog before that and nothing has happened at all.
+ * admin has reviewed and pressed the update button — a list of ids and the
+ * per-size prices they approved. Close the dialog before that and nothing has
+ * happened at all.
  *
- * The sheet carries ONE price per perfume: what a kilo costs. Every other fill
- * is derived by the size ladder, previewed per perfume here, and derived again
- * server-side on submit — the sheet never dictates a per-size figure, so a
- * hand-edited column cannot smuggle one in.
+ * The sheet carries one column per fill. Every size is independent, and a blank
+ * cell means that size keeps the price it has — never that a price should be
+ * worked out for it.
  */
 const BulkPriceUpdate = ({ onUpdated }) => {
   const snackbar = useSnackbar();
@@ -68,8 +75,6 @@ const BulkPriceUpdate = ({ onUpdated }) => {
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState(null);
   const [page, setPage] = useState(1);
-  // A Set, not one open row: reviewing a sheet means comparing perfumes, and
-  // the single tab opens the same way.
   const [expanded, setExpanded] = useState(() => new Set());
 
   const reset = () => {
@@ -111,11 +116,15 @@ const BulkPriceUpdate = ({ onUpdated }) => {
       );
 
       const columns = findColumns(headers);
-      if (!columns.name || !columns.price) {
-        const missing = [!columns.name && COLUMN_NAME, !columns.price && COLUMN_PRICE].filter(Boolean);
+      if (!columns.name) {
         throw new SheetError(
-          `This sheet has no ${missing.map((column) => `"${column}"`).join(' or ')} column. ` +
-            `Rename the header row to exactly "${COLUMN_NAME}" and "${COLUMN_PRICE}" and try again.`
+          `This sheet has no "${COLUMN_NAME}" column. Rename the header row and try again.`
+        );
+      }
+      if (!columns.sizes.length) {
+        throw new SheetError(
+          'This sheet has no size price columns. Add at least one — for example ' +
+            `"${PRICE_COLUMNS[PRICE_COLUMNS.length - 1]}" — and try again.`
         );
       }
       if (!records.length) throw new SheetError('That sheet has a header row but no perfumes under it.');
@@ -134,11 +143,11 @@ const BulkPriceUpdate = ({ onUpdated }) => {
       const matches = await perfumeApi.resolvePriceNames(names);
 
       setProgress(100);
-      // The ladder is laid over each match here so the admin reviews real
-      // per-size figures, not just the kilo price they typed into the sheet.
+      // Each match is expanded into per-size rows here so the admin reviews the
+      // real before/after for every fill, not just the cells they typed.
       setRows(
         applyMatches(sheetRows, matches).map((row) =>
-          row.matched ? { ...row, ladder: repriceVariants(row, row.basePrice) } : row
+          row.matched ? { ...row, sizes: reviewRowsFor(row) } : row
         )
       );
       setPage(1);
@@ -152,12 +161,19 @@ const BulkPriceUpdate = ({ onUpdated }) => {
   const matched = useMemo(() => rows.filter((row) => row.matched), [rows]);
   const flagged = useMemo(() => rows.filter((row) => !row.matched), [rows]);
 
-  /** Only the base price travels — the server runs the ladder itself. */
+  /** Only the sizes that actually move travel — the server leaves the rest alone. */
   const payload = useMemo(
-    () => matched.map((row) => ({ id: row.id, basePrice: row.basePrice })),
+    () =>
+      matched
+        .map((row) => ({
+          id: row.id,
+          prices: row.sizes.filter((size) => size.changed).map((s) => ({ sizeGrams: s.sizeGrams, mrp: s.newMrp })),
+        }))
+        .filter((row) => row.prices.length),
     [matched]
   );
 
+  const sizesAffected = payload.reduce((sum, row) => sum + row.prices.length, 0);
   const visible = matched.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const submit = async () => {
@@ -290,8 +306,8 @@ const BulkPriceUpdate = ({ onUpdated }) => {
         </Stack>
 
         <Alert severity="info" sx={{ mb: 2 }}>
-          Nothing has been saved yet. Each perfume below shows its new {BASE_LABEL} price — open a row to
-          see every size the ladder generated for it.
+          Nothing has been saved yet. Open a row to see every size — the ones your sheet priced, and the
+          ones left blank, which keep the price they already have.
         </Alert>
 
         {flagged.length > 0 && (
@@ -310,24 +326,29 @@ const BulkPriceUpdate = ({ onUpdated }) => {
         )}
 
         {matched.length > 0 && (
-          <Box sx={{ border: 1, borderColor: 'divider', borderRadius: `${CARD_RADIUS}px`, overflow: 'hidden' }}>
+          <Box
+            sx={{
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: `${CARD_RADIUS}px`,
+              overflow: 'hidden',
+            }}
+          >
             <Box sx={{ overflowX: 'auto' }}>
-              <Table size="small" sx={{ minWidth: 620 }}>
+              <Table size="small" sx={{ minWidth: 680 }}>
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ width: 44 }} />
                     <TableCell>Perfume name</TableCell>
-                    <TableCell align="right">Current {BASE_LABEL}</TableCell>
-                    <TableCell align="right">New {BASE_LABEL}</TableCell>
+                    <TableCell align="right">Current price range</TableCell>
+                    <TableCell align="right">New price range</TableCell>
                     <TableCell align="center">Sizes changing</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {visible.map((row) => {
                     const open = expanded.has(row.key);
-                    const changing = row.ladder.filter(
-                      (size) => size.priced && size.newMrp !== size.currentMrp
-                    ).length;
+                    const changing = row.sizes.filter((size) => size.changed).length;
 
                     return (
                       <Fragment key={row.key}>
@@ -363,23 +384,36 @@ const BulkPriceUpdate = ({ onUpdated }) => {
                                 <Typography variant="caption" color="text.secondary">
                                   {row.sku} · row {row.line}
                                 </Typography>
+                                {row.skippedSizes?.length > 0 && (
+                                  <Typography
+                                    variant="caption"
+                                    color="warning.main"
+                                    sx={{ display: 'block' }}
+                                  >
+                                    Not sold in {row.skippedSizes.join(', ')} — those cells were ignored
+                                  </Typography>
+                                )}
                               </Box>
                             </Stack>
                           </TableCell>
 
                           <TableCell align="right">
                             <Typography variant="body2" color="text.secondary">
-                              {row.currentBase > 0 ? formatCurrency(row.currentBase) : 'NA'}
+                              {formatRange(currentRange(row.sizes))}
                             </Typography>
                           </TableCell>
 
                           <TableCell align="right">
-                            <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="flex-end">
-                              <ArrowForwardRounded sx={{ fontSize: ICON.inline, color: 'text.disabled' }} />
-                              <Typography sx={{ ...numericText, fontSize: FONT.body, fontWeight: 700 }}>
-                                {formatCurrency(row.basePrice)}
-                              </Typography>
-                            </Stack>
+                            <Typography
+                              sx={{
+                                ...numericText,
+                                fontSize: FONT.body,
+                                fontWeight: changing ? 700 : 400,
+                                color: changing ? 'text.primary' : 'text.secondary',
+                              }}
+                            >
+                              {formatRange(newRange(row.sizes))}
+                            </Typography>
                           </TableCell>
 
                           <TableCell align="center">
@@ -388,7 +422,7 @@ const BulkPriceUpdate = ({ onUpdated }) => {
                                 size="small"
                                 color="primary"
                                 variant="outlined"
-                                label={`${changing} of ${row.ladder.length}`}
+                                label={`${changing} of ${row.sizes.length}`}
                               />
                             ) : (
                               <Typography variant="caption" color="text.secondary">
@@ -398,7 +432,7 @@ const BulkPriceUpdate = ({ onUpdated }) => {
                           </TableCell>
                         </TableRow>
 
-                        {/* The ladder itself, in the shared table both flows use. */}
+                        {/* The sizes themselves, in the table both flows share. */}
                         <TableRow sx={{ '&:hover': { bgcolor: 'transparent' } }}>
                           <TableCell colSpan={5} sx={{ py: 0, border: 0 }}>
                             <Collapse in={open} timeout="auto" unmountOnExit>
@@ -410,7 +444,7 @@ const BulkPriceUpdate = ({ onUpdated }) => {
                                 >
                                   What this perfume would sell at once applied
                                 </Typography>
-                                <PriceLadderTable rows={row.ladder} dense />
+                                <SizePriceTable rows={row.sizes} dense />
                               </Box>
                             </Collapse>
                           </TableCell>
@@ -444,9 +478,17 @@ const BulkPriceUpdate = ({ onUpdated }) => {
           sx={{ flexWrap: 'wrap', gap: 1.5 }}
         >
           <Typography variant="body2" color="text.secondary">
-            {payload.length
-              ? `${formatNumber(payload.length)} perfume${payload.length === 1 ? '' : 's'} ready to reprice.`
-              : 'No row matched a perfume in the catalogue.'}
+            {payload.length ? (
+              <>
+                {formatNumber(payload.length)} perfume{payload.length === 1 ? '' : 's'} ·{' '}
+                <Box component="span" sx={{ ...numericText, fontSize: FONT.body, color: 'text.primary' }}>
+                  {sizesAffected}
+                </Box>{' '}
+                size{sizesAffected === 1 ? '' : 's'} will change price.
+              </>
+            ) : (
+              'No row would change a price.'
+            )}
           </Typography>
 
           <Button
@@ -479,39 +521,54 @@ const BulkPriceUpdate = ({ onUpdated }) => {
         </Box>
       </Alert>
 
-      {/* What the sheet has to look like, rather than four more lines of prose.
-          Centred on a Card's 14px corner, same as the stock dialog's specimen. */}
-      <Box sx={{ mb: 2, mx: 'auto', maxWidth: 380 }}>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ display: 'block', textAlign: 'center', mb: 0.75 }}
-        >
-          Sample — this is how your sheet should look
-        </Typography>
-
-        <Box sx={{ border: 1, borderColor: 'divider', borderRadius: `${CARD_RADIUS}px`, overflow: 'hidden' }}>
-          <Table size="small">
+      {/* What the sheet has to look like, rather than four more lines of prose. */}
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ display: 'block', mb: 0.75, textAlign: 'center' }}
+      >
+        Sample — this is how your sheet should look. The blank 100gm cell leaves that price unchanged.
+      </Typography>
+      <Box
+        sx={{
+          mb: 2,
+          borderRadius: `${CARD_RADIUS}px`,
+          border: 1,
+          borderColor: 'divider',
+          overflow: 'hidden',
+          width: 'fit-content',
+          maxWidth: '100%',
+          // Centred under its caption: a shrink-to-fit table pinned left in a
+          // wide dialog reads as though it had drifted out of place.
+          mx: 'auto',
+        }}
+      >
+        <Box sx={{ overflowX: 'auto' }}>
+          <Table size="small" sx={{ width: 'auto' }}>
             <TableHead>
               <TableRow>
                 <TableCell>{COLUMN_NAME}</TableCell>
-                <TableCell align="right">{COLUMN_PRICE}</TableCell>
+                <TableCell align="right">25gm Price</TableCell>
+                <TableCell align="right">100gm Price</TableCell>
+                <TableCell align="right">1000gm Price</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {[
-                ['ZUMAR BY AHMED AL MAGRIBI', '34750'],
-                ['ZUBEIDA', '5500'],
-              ].map(([name, price]) => (
+                ['ZUMAR BY AHMED AL MAGRIBI', '900', '3600', '35000'],
+                ['ZUBEIDA', '150', '', '5600'],
+              ].map(([name, ...cells]) => (
                 <TableRow key={name}>
                   <TableCell>
                     <Typography variant="caption">{name}</Typography>
                   </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="caption" sx={{ ...numericText, fontSize: FONT.tiny }}>
-                      {price}
-                    </Typography>
-                  </TableCell>
+                  {cells.map((cell, index) => (
+                    <TableCell key={index} align="right">
+                      <Typography variant="caption" sx={{ ...numericText, fontSize: FONT.tiny }}>
+                        {cell}
+                      </Typography>
+                    </TableCell>
+                  ))}
                 </TableRow>
               ))}
             </TableBody>
@@ -538,7 +595,14 @@ const BulkPriceUpdate = ({ onUpdated }) => {
 /** One figure from the run — repriced, sizes touched, or skipped. */
 const SummaryTile = ({ label, value, tone }) => (
   <Box
-    sx={{ px: 3, py: 1.5, borderRadius: `${CARD_RADIUS}px`, bgcolor: surface.plumFaint, textAlign: 'center', minWidth: 120 }}
+    sx={{
+      px: 3,
+      py: 1.5,
+      borderRadius: `${CARD_RADIUS}px`,
+      bgcolor: surface.plumFaint,
+      textAlign: 'center',
+      minWidth: 120,
+    }}
   >
     <Typography sx={{ ...numericText, fontSize: FONT.figureMd, color: tone }}>
       {formatNumber(value)}

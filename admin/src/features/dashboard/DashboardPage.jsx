@@ -183,9 +183,17 @@ const DashboardPage = () => {
           <StatCard
             label="Perfumes"
             value={formatNumber(stats?.perfumes?.value)}
-            caption={`${formatNumber(stats?.perfumes?.published || 0)} published · ${formatNumber(
-              stats?.perfumes?.lowStock || 0
-            )} low stock`}
+            caption={
+              [
+                `${formatNumber(stats?.perfumes?.published || 0)} published`,
+                // Named apart: "6 low stock" reads as sellable when all six are
+                // in fact empty shelves.
+                stats?.perfumes?.lowStock ? `${formatNumber(stats.perfumes.lowStock)} low stock` : '',
+                stats?.perfumes?.outOfStock ? `${formatNumber(stats.perfumes.outOfStock)} out of stock` : '',
+              ]
+                .filter(Boolean)
+                .join(' · ')
+            }
             icon={Inventory2Outlined}
             color={brand.rose}
             loading={summary.loading}

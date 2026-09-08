@@ -99,10 +99,12 @@ export const RecentBills = ({ data, loading, error, onRetry }) => (
 export const LowStockAlerts = ({ data, loading, error, onRetry }) => (
   <Card sx={{ height: '100%' }}>
     <PanelHeader
-      title="Low stock alerts"
+      title="Low & out of stock"
       subtitle="Restock these before they sell out — figures are grams on hand"
       actionLabel="Manage"
-      actionTo="/perfumes?stock=low"
+      // The panel lists both, so the link must too: filtering on 'low' alone
+      // lands on an empty table whenever everything here is already at zero.
+      actionTo="/perfumes?stock=restock"
     />
 
     {loading ? (

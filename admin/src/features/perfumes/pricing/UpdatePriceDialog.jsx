@@ -7,7 +7,6 @@ import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined';
 import DialogCloseButton from '../../../components/common/DialogCloseButton.jsx';
 import SinglePriceUpdate from './SinglePriceUpdate.jsx';
 import BulkPriceUpdate from './BulkPriceUpdate.jsx';
-import { BASE_LABEL } from './priceLadder.js';
 import { FONT, ICON, brand } from '../../../theme/index.js';
 
 const TABS = [
@@ -48,7 +47,7 @@ const UpdatePriceDialog = ({ open, onClose, onUpdated }) => {
               Update price
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Give the {BASE_LABEL} price only — every other size is worked out for you
+              Set a new price for any size — the sizes you leave alone keep their price
             </Typography>
           </Box>
         </Stack>

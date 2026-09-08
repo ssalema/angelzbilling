@@ -178,7 +178,7 @@ export const listPerfumeQuerySchema = z.object({
   category: z.string().trim().optional().default(''),
   subCategory: z.string().trim().optional().default(''),
   status: z.enum(['all', 'draft', 'published', 'archived']).optional().default('all'),
-  stock: z.enum(['all', 'in', 'low', 'out']).optional().default('all'),
+  stock: z.enum(['all', 'in', 'low', 'out', 'restock']).optional().default('all'),
   sort: z.string().optional().default('-createdAt'),
 });
 
@@ -249,14 +249,14 @@ export const bulkStockSchema = z.object({
 
 export const idParamSchema = z.object({ id: objectId });
 
-/* ───────────────────────── Price ladder updates ─────────────────────────
- * The repricing screen sends a BASE price — what a perfume costs per kilo —
- * and never the per-size figures it previewed. The server runs the ladder
- * itself, so a tampered or stale preview cannot write a price nobody approved.
+/* ───────────────────────── Per-size repricing ─────────────────────────
+ * The repricing screen sends one price per fill the admin actually changed.
+ * A size absent from `prices` is a size that keeps what it has — the server
+ * derives nothing, so nothing can be rewritten by accident.
  */
 
-/** Mirrors MIN/MAX_BASE_PRICE in utils/priceLadder.js. */
-const basePrice = z.coerce
+/** Mirrors MIN/MAX_PRICE in utils/sizePricing.js. */
+const sizePrice = z.coerce
   .number()
   .min(1, 'Price must be at least ₹1')
   .max(10_000_000, 'That price is far higher than any perfume in the catalogue');
@@ -283,7 +283,21 @@ export const resolvePriceNamesSchema = z.object({
 
 export const bulkPriceSchema = z.object({
   items: z
-    .array(z.object({ id: objectId, basePrice }))
+    .array(
+      z.object({
+        id: objectId,
+        /** Only the fills being changed; grams identify which variant they land on. */
+        prices: z
+          .array(
+            z.object({
+              sizeGrams: z.coerce.number().positive('A fill size must be above zero grams'),
+              mrp: sizePrice,
+            })
+          )
+          .min(1, 'Give a price for at least one size')
+          .max(40, 'A perfume cannot have this many sizes repriced at once'),
+      })
+    )
     .min(1, 'Nothing to update')
     .max(MAX_BULK_PRICE_ROWS, `Up to ${MAX_BULK_PRICE_ROWS} perfumes can be repriced at once`),
 });

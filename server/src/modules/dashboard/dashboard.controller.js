@@ -155,20 +155,25 @@ const computeSummary = async (req) => {
           total: { $sum: 1 },
           published: { $sum: { $cond: [{ $eq: ['$status', 'published'] }, 1, 0] } },
           draft: { $sum: { $cond: [{ $eq: ['$status', 'draft'] }, 1, 0] } },
+          // Running dry but still sellable — counted apart from the shelves
+          // that are already empty, because the card names the two separately.
           lowStock: {
             $sum: {
               $cond: [
                 {
-                  $lte: [
+                  $and: [
                     // One bulk weight per perfume — variants share it.
-                    { $ifNull: ['$stock', 0] },
-                    { $ifNull: ['$lowStockThreshold', 100] },
+                    { $gt: [{ $ifNull: ['$stock', 0] }, 0] },
+                    { $lte: [{ $ifNull: ['$stock', 0] }, { $ifNull: ['$lowStockThreshold', 100] }] },
                   ],
                 },
                 1,
                 0,
               ],
             },
+          },
+          outOfStock: {
+            $sum: { $cond: [{ $lte: [{ $ifNull: ['$stock', 0] }, 0] }, 1, 0] },
           },
         },
       },
@@ -191,7 +196,7 @@ const computeSummary = async (req) => {
 
   const cur = currentTotals[0] || { revenue: 0, billed: 0, outstanding: 0, bills: 0, units: 0 };
   const prev = previousTotals[0] || { revenue: 0, billed: 0, outstanding: 0, bills: 0, units: 0 };
-  const perfumes = perfumeStats[0] || { total: 0, published: 0, draft: 0, lowStock: 0 };
+  const perfumes = perfumeStats[0] || { total: 0, published: 0, draft: 0, lowStock: 0, outOfStock: 0 };
   const customers = customerRows[0] || { total: 0, newInPeriod: 0 };
 
   const statusMap = Object.fromEntries(billStatusCounts.map((r) => [r._id, r.count]));
@@ -223,6 +228,7 @@ const computeSummary = async (req) => {
         published: perfumes.published,
         draft: perfumes.draft,
         lowStock: perfumes.lowStock,
+        outOfStock: perfumes.outOfStock,
       },
       customers: {
         value: customers.total,

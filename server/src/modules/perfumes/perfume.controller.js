@@ -7,7 +7,7 @@ import { sendSuccess, sendCreated, sendPaginated } from '../../utils/ApiResponse
 import { getPagination, getSort, escapeRegex, round2 } from '../../utils/query.js';
 import { destroyAsset } from '../../config/cloudinary.js';
 import { resolveSizeGrams, unitsFromGrams, smallestFillGrams, formatGrams } from '../../utils/grams.js';
-import { BASE_GRAMS, hasPriceableFill, priceLadderFrom } from '../../utils/priceLadder.js';
+import { pricesBySize } from '../../utils/sizePricing.js';
 import { generateSku, getSkuPrefix } from './perfume.service.js';
 
 const SORTABLE = ['createdAt', 'name', 'mrp', 'finalPrice', 'stock', 'status'];
@@ -90,6 +90,9 @@ export const listPerfumes = asyncHandler(async (req, res) => {
       filter.$expr = { $and: [{ $gt: [gramsOnHand, 0] }, { $lte: [gramsOnHand, threshold] }] };
     }
     if (stock === 'in') filter.$expr = { $gt: [gramsOnHand, threshold] };
+    // Everything that needs restocking — what the dashboard's alert panel lists,
+    // so its "Manage" link lands on the same set rather than only the low half.
+    if (stock === 'restock') filter.$expr = { $lte: [gramsOnHand, threshold] };
   }
 
   /**
@@ -637,15 +640,14 @@ export const bulkAdjustStock = asyncHandler(async (req, res) => {
   });
 });
 
-/* ───────────────────────── Price ladder updates ─────────────────────────
- * The three calls behind the "Update price" screen. An admin gives one figure
- * per perfume — what a kilo of it costs — and `priceLadder.js` turns that into
- * a price for every fill the perfume sells.
+/* ───────────────────────── Per-size repricing ─────────────────────────
+ * The three calls behind the "Update price" screen. An admin sets a price for
+ * whichever fills they want to change, and every other fill is left exactly as
+ * it was — there is no derivation here, and no size moves because a different
+ * size moved. See `utils/sizePricing.js` for why.
  *
  * None of them ever touches a file: a bulk sheet is read in the browser and
- * only the parsed names and kilo prices are sent here. And none of them trusts
- * a per-size figure from the client — the ladder is re-run on this side, so
- * what gets written is always what the rule says, not what a preview claimed.
+ * only the parsed names and per-size prices are sent here.
  */
 
 /** The fields the repricing screen reads, and nothing else. */
@@ -668,7 +670,7 @@ const priceOption = (perfume) => {
     }))
     .sort((a, b) => a.sizeGrams - b.sizeGrams);
 
-  const base = variants.find((variant) => variant.sizeGrams === BASE_GRAMS);
+  const priced = variants.map((v) => v.mrp).filter((mrp) => mrp > 0);
 
   return {
     id: perfume._id,
@@ -677,8 +679,9 @@ const priceOption = (perfume) => {
     brand: perfume.brand || '',
     image: perfume.images?.[0]?.url || '',
     status: perfume.status,
-    /** What a kilo costs today — the figure the admin types over. */
-    basePrice: base ? base.mrp : 0,
+    /** What the perfume sells for today, cheapest fill to dearest. */
+    priceMin: priced.length ? Math.min(...priced) : 0,
+    priceMax: priced.length ? Math.max(...priced) : 0,
     variants,
   };
 };
@@ -686,10 +689,9 @@ const priceOption = (perfume) => {
 /**
  * Type-ahead for the single repricing flow.
  *
- * Unlike the stock one there is no useful "needs attention" list to offer
- * before anything is typed — no perfume is ever overdue for a price change —
- * so an empty term answers with the catalogue in alphabetical order, which is
- * at least somewhere to start browsing from.
+ * There is no useful "needs attention" list to offer before anything is typed —
+ * no perfume is ever overdue for a price change — so an empty term answers with
+ * the catalogue in alphabetical order, which is somewhere to start browsing.
  */
 export const searchPriceTargets = asyncHandler(async (req, res) => {
   const { q, limit } = req.query;
@@ -733,8 +735,8 @@ export const resolvePriceNames = asyncHandler(async (req, res) => {
     if (hit?.ambiguous) {
       return { name, matched: false, reason: 'Two perfumes share this name — reprice them one at a time' };
     }
-    if (!hasPriceableFill(perfume)) {
-      return { name, matched: false, reason: 'This perfume sells in no size the ladder can price' };
+    if (!perfume.variants?.length) {
+      return { name, matched: false, reason: 'This perfume has no sizes to price' };
     }
 
     return { name, matched: true, ...priceOption(perfume) };
@@ -750,9 +752,10 @@ export const resolvePriceNames = asyncHandler(async (req, res) => {
 /**
  * Applies the reviewed prices — the one call in this trio that writes.
  *
- * Runs the ladder here rather than accepting the preview's numbers, then sets
- * each perfume's whole `variants` array in a single unordered `bulkWrite`: one
- * round trip for a thousand perfumes instead of a thousand saves.
+ * A perfume's whole `variants` array is set in a single unordered `bulkWrite`:
+ * one round trip for a thousand perfumes rather than a thousand saves. Only the
+ * fills named in `prices` move; every other variant is written back byte for
+ * byte, so a size the admin left blank keeps the price it had.
  *
  * Writing through `bulkWrite` skips the model's pre-save hook, so the derived
  * fields that hook maintains are computed here instead — `sellingPrice` per
@@ -764,9 +767,9 @@ export const bulkUpdatePrices = asyncHandler(async (req, res) => {
   const { items } = req.body;
 
   // The same perfume twice in one sheet is a contradiction, not an addition —
-  // the last price given wins, which is what an admin correcting a row means.
+  // the last set of prices given wins, which is what correcting a row means.
   const merged = new Map();
-  items.forEach(({ id, basePrice }) => merged.set(id, basePrice));
+  items.forEach(({ id, prices }) => merged.set(id, prices));
 
   const ids = [...merged.keys()];
   // The WHOLE variant rows, not the screen's projection: these are written back
@@ -780,33 +783,33 @@ export const bulkUpdatePrices = asyncHandler(async (req, res) => {
   let repricedSizes = 0;
 
   ids.forEach((id) => {
-    const base = merged.get(id);
     const perfume = byId.get(id);
 
     if (!perfume) {
       failed.push({ id, name: '', reason: 'This perfume no longer exists' });
       return;
     }
-    if (!hasPriceableFill(perfume)) {
-      failed.push({ id, name: perfume.name, reason: 'This perfume sells in no size the ladder can price' });
+    if (!perfume.variants?.length) {
+      failed.push({ id, name: perfume.name, reason: 'This perfume has no sizes to price' });
       return;
     }
 
-    const ladder = priceLadderFrom(base);
+    const wanted = pricesBySize(merged.get(id));
 
-    // Every variant is rewritten, but only the fills the ladder knows change
-    // price — an odd size keeps what it had rather than being guessed at.
+    // Every variant is rewritten, but only the fills actually named change —
+    // an untouched size keeps its own price rather than being recalculated.
     let moved = 0;
-    const variants = (perfume.variants || []).map((variant) => {
-      const next = ladder[resolveSizeGrams(variant)];
-      const mrp = next === undefined ? Number(variant.mrp) || 0 : next;
-      if (mrp !== (Number(variant.mrp) || 0)) moved += 1;
+    const variants = perfume.variants.map((variant) => {
+      const next = wanted.get(resolveSizeGrams(variant));
+      const current = Number(variant.mrp) || 0;
+      const mrp = next === undefined ? current : next;
+      if (mrp !== current) moved += 1;
 
       return { ...variant, mrp, sellingPrice: computeFinalPrice(mrp, variant.discountPercent) };
     });
 
     if (!moved) {
-      failed.push({ id, name: perfume.name, reason: 'Already at this price — nothing to change' });
+      failed.push({ id, name: perfume.name, reason: 'Already at these prices — nothing to change' });
       return;
     }
     repricedSizes += moved;

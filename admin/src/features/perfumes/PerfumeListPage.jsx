@@ -55,9 +55,12 @@ import { IMG } from '../../utils/image.js';
 const STOCK_FILTERS = [
   { value: 'all', label: 'Any stock level' },
   { value: 'in', label: 'In stock' },
+  { value: 'restock', label: 'Low or out of stock' },
   { value: 'low', label: 'Low stock' },
   { value: 'out', label: 'Out of stock' },
 ];
+
+const STOCK_VALUES = STOCK_FILTERS.map((f) => f.value);
 
 const PerfumeListPage = () => {
   const navigate = useNavigate();
@@ -69,8 +72,9 @@ const PerfumeListPage = () => {
     search: '',
     category: '',
     status: 'all',
-    // Deep link from the dashboard's low stock panel lands here pre-filtered.
-    stock: searchParams.get('stock') || 'all',
+    // Deep link from the dashboard's restock panel lands here pre-filtered. An
+    // unknown value in the URL falls back to showing everything.
+    stock: STOCK_VALUES.includes(searchParams.get('stock')) ? searchParams.get('stock') : 'all',
     sort: '-createdAt',
     page: 1,
     limit: 10,

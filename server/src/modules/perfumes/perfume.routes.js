@@ -89,9 +89,9 @@ router.post(
 );
 
 /**
- * Repricing. An admin sends one price per perfume — what a kilo costs — and
- * the ladder in `utils/priceLadder.js` derives every fill size from it here,
- * so a preview the browser drew can never be what actually gets written.
+ * Repricing. An admin sends one price per fill size they actually changed;
+ * every other size is left exactly as it is. Nothing is derived here, so no
+ * price can move because a different price moved.
  *
  * A bulk sheet is handled exactly like the stock one: parsed in the browser,
  * matched by name (`/price/resolve`), and applied only once the admin has
