@@ -629,7 +629,17 @@ const RowPhoto = ({ row, disabled, onPhoto }) => {
           sx={{ width: 44, height: 44, display: 'grid', placeItems: 'center', overflow: 'hidden' }}
         >
           {uploading ? (
-            <CircularProgress size={18} />
+            <Typography
+              sx={{
+                ...numericText,
+                fontSize: FONT.tiny,
+                fontWeight: 600,
+                color: 'text.secondary',
+                lineHeight: 1,
+              }}
+            >
+              {progress}%
+            </Typography>
           ) : row.photo ? (
             <Box
               component="img"

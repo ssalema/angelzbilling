@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#3E2545" />
-    <meta name="description" content="Billing and inventory admin panel" />
+    <meta name="description" content="Angelz Desire — billing and inventory Admin Panel" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -28,15 +28,25 @@
       />
     </noscript>
     <!--
-      The store name is a setting, so this file cannot carry one — but the
-      title below is what the browser files the bookmark and history entry
-      under, and it reads it here, long before React can correct it. So the
-      last name we saw is applied immediately, from the localStorage key
-      SettingsContext writes (see src/utils/branding.js — keep 'ab:siteName'
-      in step). A first-ever visit has nothing cached and keeps the neutral
-      title until settings land, which is the only time it is ever seen.
+      TWO layers, because the browser files a bookmark and a history entry
+      under whatever <title> it reads at load — far too early for React to
+      have corrected it from Settings.
+
+      1. The static title below is this deployment’s store name, written out.
+         It is the only copy of the name left in the codebase, and it exists
+         so a COLD visit (nothing cached yet: a new device, a cleared
+         browser, an incognito window) is branded on the very first frame
+         instead of reading "Admin".
+      2. The script then overrides it with the last name we actually saw,
+         from the localStorage key SettingsContext writes ('ab:siteName' —
+         see src/utils/branding.js, and keep the key and the " — Admin"
+         suffix in step). So renaming the store in Settings still wins, and
+         the static name below is only ever a first-load stand-in.
+
+      Rebranding therefore means editing the name here as well as in
+      Settings, or a cold visit shows the old one until settings land.
     -->
-    <title>Admin</title>
+    <title>Angelz Desire — Admin</title>
     <script>
       try {
         var cachedName = localStorage.getItem('ab:siteName');
@@ -54,8 +64,8 @@
     </style>
   </head>
   <body>
-    <div id="root"><div id="boot"></div></div>
-    <!-- The splash wordmark, from the same cached name as the title above. -->
+    <!-- Same two layers as the title: written-out name, cache wins over it. -->
+    <div id="root"><div id="boot">Angelz Desire</div></div>
     <script>
       try {
         var cached = localStorage.getItem('ab:siteName');
