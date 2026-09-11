@@ -14,15 +14,7 @@ import RestartAltRounded from '@mui/icons-material/RestartAltRounded';
 import { DATE_RANGES } from '../../utils/constants.js';
 import { FONT, ICON } from '../../theme/index.js';
 
-/**
- * The single Month / Year / All time / Custom control.
- *
- * It replaces four near-identical implementations that had drifted apart — one
- * of which quietly dropped "Custom" from its options, so the same dashboard
- * offered a custom date range on one card and not on the next.
- *
- * The parent owns the range object: `{ range, from, to }`.
- */
+// The single Month / Year / All time / Custom control.
 const DateRangeControl = ({
   value,
   onChange,

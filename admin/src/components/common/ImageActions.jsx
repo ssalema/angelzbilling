@@ -3,23 +3,9 @@ import SwapHorizRounded from '@mui/icons-material/SwapHorizRounded';
 import DeleteOutline from '@mui/icons-material/DeleteOutline';
 import { ICON, surface, brand } from '../../theme/index.js';
 
-/**
- * The replace/remove pill that floats over an uploaded image.
- *
- * A filled slot used to carry a "Replace" text button and a trash icon parked
- * under the frame, which cost a row of height in every card that showed one.
- * The controls now live on the image itself and only surface on hover — the
- * frame stays quiet until you reach for it.
- *
- * The pill must be a sibling of the `Dropzone` (which is itself a `<button>`),
- * never a child, so wrap both in `imageActionsHover` and let CSS do the
- * revealing — no hover state, and keyboard focus reveals it too.
- */
+// The replace/remove pill that floats over an uploaded image.
 
-/**
- * Spread onto the positioned wrapper around a preview + `<ImageActions />`.
- * Where hover does not exist (touch), the controls simply stay visible.
- */
+// Spread onto the positioned wrapper around a preview + `<ImageActions />`.
 export const imageActionsHover = {
   position: 'relative',
   '& .ImageActions': {

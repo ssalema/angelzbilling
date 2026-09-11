@@ -14,7 +14,7 @@ import {
   Alert,
   Divider,
 } from '@mui/material';
-import { RHFTextField, RHFSelect, RHFSwitch } from '../../components/form/RHFControls.jsx';
+import { RHFTextField, RHFPasswordField, RHFSelect, RHFSwitch } from '../../components/form/RHFControls.jsx';
 import DialogCloseButton from '../../components/common/DialogCloseButton.jsx';
 import RHFContactNumber from '../../components/form/RHFContactNumber.jsx';
 import { userApi } from '../../api/endpoints.js';
@@ -22,8 +22,9 @@ import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { applyServerErrors } from '../../api/client.js';
-import { ROLES, HEAD_OFFICE, locationOf, locationOptions } from '../../utils/constants.js';
+import { ROLES, HEAD_OFFICE, locationOf, locationOptions, PASSWORD_HINT } from '../../utils/constants.js';
 import { DEFAULT_DIAL_CODE, addContactNumberIssue } from '../../utils/countries.js';
+import { GUTTER } from '../../theme/index.js';
 
 const passwordRule = z
   .string()
@@ -48,9 +49,7 @@ const buildSchema = (isEdit, branchesEnabled = true) =>
       password: isEdit ? z.string().optional() : passwordRule,
     })
     .superRefine((data, ctx) => {
-      // Every account sits somewhere — the Head Office counts — so this only
-      // catches a picker that was never answered. With branches off there is
-      // nothing to scope to at all.
+      // Every account sits somewhere — the Head Office counts — so this only catches a picker that was never answered.
       if (branchesEnabled && data.role !== 'superadmin' && !data.branch) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -123,8 +122,6 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
       phoneCountryCode: values.phoneCountryCode,
       role: values.role,
       // The Head Office has no Branch record, so it goes over the wire as null.
-      // For a Super Admin that also makes them the Head Office Super Admin, the
-      // one account with authority over the whole business.
       branch: !values.branch || values.branch === HEAD_OFFICE.id ? null : values.branch,
       isActive: values.isActive,
     };
@@ -165,7 +162,7 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
       <FormProvider {...methods}>
         <form onSubmit={handleSubmit(onSubmit)} noValidate>
           <DialogContent dividers>
-            <Grid container spacing={2.25}>
+            <Grid container spacing={GUTTER.cards}>
               <Grid item xs={12} sm={6}>
                 <RHFTextField name="name" label="Full name *" autoFocus />
               </Grid>
@@ -220,11 +217,13 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
 
               {!isEdit && (
                 <Grid item xs={12}>
-                  <RHFTextField
+                  <RHFPasswordField
                     name="password"
                     label="Temporary password *"
-                    type="text"
-                    helperText="At least 8 characters with an uppercase letter, a lowercase letter and a number. Share it securely — they can change it from their profile."
+                    /* Set for someone else and read back to hand over, so it
+                       starts legible — and can now be hidden again. */
+                    defaultVisible
+                    helperText={`${PASSWORD_HINT}. Share it securely — they can change it from their profile.`}
                   />
                 </Grid>
               )}

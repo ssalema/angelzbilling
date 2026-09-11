@@ -11,16 +11,8 @@ import {
 import { TableSkeleton, EmptyState, ErrorState } from './StateViews.jsx';
 import Pagination from './Pagination.jsx';
 
-/**
- * Table shell that owns the loading / empty / error states so no list screen
- * has to re-implement them.
- *
- * columns: [{ key, label, align, width, sortable, render(row), hideBelow }]
- *
- * The actions column is the same everywhere: use `actionsColumn(render)` below
- * so its header, alignment and width never drift between lists.
- */
-export const ACTIONS_WIDTH = 120;
+// Table shell that owns the loading / empty / error states so no list screen has to re-implement them.
+const ACTIONS_WIDTH = 120;
 
 export const actionsColumn = (render) => ({
   key: 'actions',
@@ -98,10 +90,7 @@ const DataTable = ({
       <TableRow
         key={getRowKey(row, index)}
         hover
-        // A clickable row is also a keyboard target — Enter opens it, exactly
-        // as clicking does. The actions cell stops the event so its buttons never
-        // open the row behind them, and any column marked `stopRowClick` does the
-        // same for a control it carries — an inline dropdown, say.
+        // A clickable row is also a keyboard target — Enter opens it, exactly as clicking does.
         onClick={onRowClick ? () => onRowClick(row) : undefined}
         onKeyDown={
           onRowClick

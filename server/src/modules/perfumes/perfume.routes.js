@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import authenticate from '../../middlewares/authenticate.js';
-import { invalidateDashboardOnWrite } from '../../middlewares/cache.js';
+import { invalidateDashboardOnWrite, cacheResponse, catalogueCache } from '../../middlewares/cache.js';
+import { announceOnWrite } from '../../middlewares/realtime.js';
 import { authorize } from '../../middlewares/authorize.js';
 import validate from '../../middlewares/validate.js';
 import {
@@ -43,16 +44,26 @@ import {
 
 const router = Router();
 router.use(authenticate);
-// Bills, stock and staff counts all feed dashboard figures — any write here
-// makes the cached analytics wrong, so it drops them.
-// `/stock/resolve` and `/price/resolve` are exempt: both are lookups that only
-// take a POST because they carry a sheet's worth of names in the body, and
-// neither changes anything.
-router.use(invalidateDashboardOnWrite({ except: ['/stock/resolve', '/price/resolve', '/bulk/preview'] }));
+router.use(
+  invalidateDashboardOnWrite({
+    except: ['/stock/resolve', '/price/resolve', '/bulk/preview'],
+    // A catalogue write also moves the facet dropdowns cached below — a new
+    // brand, a renamed category, a status flip changing the counts.
+    catalogue: true,
+  })
+);
+// Stock and prices move while other people are mid-bill, so the catalogue screens
+// hear about every write. See middlewares/realtime.js.
+router.use(
+  announceOnWrite({
+    resource: 'perfumes',
+    except: ['/stock/resolve', '/price/resolve', '/bulk/preview'],
+  })
+);
 
 // Read: any signed-in user (billing staff need the catalogue to raise a bill).
 router.get('/', validate({ query: listPerfumeQuerySchema }), listPerfumes);
-router.get('/facets', getPerfumeFacets);
+router.get('/facets', cacheResponse({ cache: catalogueCache }), getPerfumeFacets);
 router.get('/lookup', validate({ query: lookupQuerySchema }), lookupPerfumes);
 // Before /:id, or "next-sku" would be read as an id.
 router.get('/next-sku', authorize('superadmin', 'admin'), getNextSku);
@@ -74,11 +85,7 @@ router.get('/:id', validate({ params: idParamSchema }), getPerfume);
 // Write: catalogue management belongs to admins and above.
 router.post('/', authorize('superadmin', 'admin'), validate({ body: createPerfumeSchema }), createPerfume);
 
-/**
- * Bulk stock top-up. The spreadsheet itself never reaches the server: the
- * browser parses it, the admin reviews the rows, and only the matched names
- * (`/stock/resolve`) and the confirmed grams (`/stock/bulk`) are ever posted.
- */
+// Bulk stock top-up.
 router.post(
   '/stock/resolve',
   authorize('superadmin', 'admin'),
@@ -92,15 +99,7 @@ router.post(
   bulkAdjustStock
 );
 
-/**
- * Repricing. An admin sends one price per fill size they actually changed;
- * every other size is left exactly as it is. Nothing is derived here, so no
- * price can move because a different price moved.
- *
- * A bulk sheet is handled exactly like the stock one: parsed in the browser,
- * matched by name (`/price/resolve`), and applied only once the admin has
- * reviewed it (`/price/bulk`). The file itself never reaches the server.
- */
+// Repricing.
 router.post(
   '/price/resolve',
   authorize('superadmin', 'admin'),
@@ -114,16 +113,7 @@ router.post(
   bulkUpdatePrices
 );
 
-/**
- * Bulk catalogue upload. The spreadsheet is read in the browser, exactly as
- * the stock and price sheets are — what reaches here is the rows the admin
- * reviewed, and the file itself is never uploaded or stored.
- *
- * `/bulk/preview` only looks: it says which names are still free and what SKU
- * each new perfume would be given, so the review screen shows real numbers.
- * `/bulk` is the write, and it re-checks both for itself rather than trusting
- * a preview the admin may have left open for a while.
- */
+// Bulk catalogue upload.
 router.post(
   '/bulk/preview',
   authorize('superadmin', 'admin'),

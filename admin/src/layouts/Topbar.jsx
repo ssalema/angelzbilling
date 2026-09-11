@@ -24,9 +24,10 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useSettings } from '../context/SettingsContext.jsx';
 import { useSnackbar } from '../context/SnackbarContext.jsx';
+import { useRealtime } from '../context/RealtimeContext.jsx';
 import ConfirmDialog from '../components/common/ConfirmDialog.jsx';
 import { ROLE_LABELS, locationLabel } from '../utils/constants.js';
-import { ICON, brand, surface } from '../theme/index.js';
+import { CARD_RADIUS, ICON, brand, surface } from '../theme/index.js';
 import { IMG } from '../utils/image.js';
 
 const Topbar = ({ onMenuClick }) => {
@@ -34,6 +35,7 @@ const Topbar = ({ onMenuClick }) => {
   const { branchesEnabled } = useSettings();
   const navigate = useNavigate();
   const snackbar = useSnackbar();
+  const { connected } = useRealtime();
   const [anchor, setAnchor] = useState(null);
   const [confirmLogout, setConfirmLogout] = useState(false);
 
@@ -86,6 +88,22 @@ const Topbar = ({ onMenuClick }) => {
 
           <Box sx={{ flexGrow: 1 }} />
 
+          {/* Whether the screen is being kept up to date, or is only as fresh as
+              its last request. */}
+          <Tooltip title={connected ? 'Live — updates arrive as they happen' : 'Offline — reconnecting'}>
+            <Box
+              aria-label={connected ? 'Live' : 'Offline'}
+              sx={{
+                width: 9,
+                height: 9,
+                mr: 0.5,
+                borderRadius: '50%',
+                bgcolor: connected ? 'success.main' : 'text.disabled',
+                transition: 'background-color 200ms',
+              }}
+            />
+          </Tooltip>
+
           {/* The app's primary action stays reachable on a phone at the
               counter — the full button on wider screens, the same action as an
               icon button below `sm`, never nothing. */}
@@ -132,7 +150,7 @@ const Topbar = ({ onMenuClick }) => {
         onClose={() => setAnchor(null)}
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-        slotProps={{ paper: { sx: { minWidth: 235, mt: 1, borderRadius: 2.5 } } }}
+        slotProps={{ paper: { sx: { minWidth: 235, mt: 1, borderRadius: `${CARD_RADIUS}px` } } }}
       >
         <Box sx={{ px: 2, py: 1.5 }}>
           <Typography variant="subtitle2" noWrap>

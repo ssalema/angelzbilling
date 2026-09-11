@@ -8,38 +8,35 @@ import morgan from 'morgan';
 
 import env from './config/env.js';
 import { httpLogStream } from './config/logger.js';
-import { apiLimiter, xssSanitizer } from './middlewares/security.js';
+import allowedOrigins, { isAllowedOrigin } from './config/origins.js';
+import { apiLimiter, xssSanitizer, verifyOrigin } from './middlewares/security.js';
+import { collectMetrics, startLagSampler } from './middlewares/metrics.js';
 import { notFound, errorHandler } from './middlewares/error.js';
+import ApiError from './utils/ApiError.js';
 import routes from './routes/index.js';
 
 const app = express();
 
-// Behind a proxy (Render / Nginx) so secure cookies and rate limiting see real
-// IPs. Must match the real hop count: trusting more proxies than exist lets a
-// caller forge X-Forwarded-For and walk straight through every rate limiter.
+// Behind a proxy (Render / Nginx) so secure cookies and rate limiting see real IPs.
 app.set('trust proxy', env.trustProxy);
 app.disable('x-powered-by');
 
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' }, // Cloudinary images
-    contentSecurityPolicy: env.isProd ? undefined : false,
+    // Its own switch rather than a read of NODE_ENV, and on unless a local
+    // developer asks for it to be off. See config/env.js.
+    contentSecurityPolicy: env.cspEnabled ? undefined : false,
   })
 );
-
-const allowedOrigins = env.adminUrl.split(',').map((o) => o.trim()).filter(Boolean);
-
-// Outside production the Vite dev server takes whatever port is free, so pinning
-// one localhost origin breaks the moment 5173 is taken. Never relaxed in prod.
-const isLocalOrigin = (origin) => /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
 
 app.use(
   cors({
     origin(origin, callback) {
       // Same-origin / curl / server-to-server requests have no Origin header.
-      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-      if (!env.isProd && isLocalOrigin(origin)) return callback(null, true);
-      return callback(new Error(`Origin ${origin} is not allowed by CORS`));
+      // The websocket handshake is held to the same list. See config/origins.js.
+      if (isAllowedOrigin(origin)) return callback(null, true);
+      return callback(ApiError.forbidden(`Origin ${origin} is not allowed to call this API.`));
     },
     credentials: true, // required for the httpOnly refresh cookie
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
@@ -51,11 +48,46 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(cookieParser());
 
+app.use(verifyOrigin(allowedOrigins));
+
 // NoSQL injection: strips $ and . operators out of user supplied objects.
 app.use(mongoSanitize({ replaceWith: '_' }));
 app.use(xssSanitizer);
 
-app.use(morgan(env.isProd ? 'combined' : 'dev', { stream: httpLogStream }));
+// Access logging, with the personal data left out of it.
+const SENSITIVE_QUERY_KEYS = new Set(['mobile', 'q', 'search', 'code', 'email', 'phone', 'token']);
+
+const redactUrl = (value) => {
+  const raw = String(value || '');
+  const split = raw.indexOf('?');
+  if (split === -1) return raw;
+
+  const params = new URLSearchParams(raw.slice(split + 1));
+  let touched = false;
+  for (const key of [...params.keys()]) {
+    if (SENSITIVE_QUERY_KEYS.has(key.toLowerCase()) && params.get(key)) {
+      params.set(key, '[redacted]');
+      touched = true;
+    }
+  }
+  return touched ? `${raw.slice(0, split)}?${decodeURIComponent(params.toString())}` : raw;
+};
+
+morgan.token('safe-url', (req) => redactUrl(req.originalUrl || req.url));
+// Who made the call.
+morgan.token('actor', (req) => (req.user ? `${req.user._id}:${req.user.role}` : '-'));
+
+const ACCESS_LOG_FORMAT = env.isProd
+  ? ':remote-addr :actor ":method :safe-url HTTP/:http-version" :status :res[content-length] :response-time ms'
+  : ':method :safe-url :status :response-time ms - :res[content-length]';
+
+app.use(morgan(ACCESS_LOG_FORMAT, { stream: httpLogStream }));
+
+// Ahead of the limiter so a rejected request is counted too — a flood of 429s is
+// exactly the thing worth being able to see. See middlewares/metrics.js.
+app.use(env.apiPrefix, collectMetrics);
+startLagSampler();
+
 app.use(env.apiPrefix, apiLimiter);
 
 app.get('/', (_req, res) => res.type('text/plain').send('Server is Working'));

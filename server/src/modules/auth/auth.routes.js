@@ -2,6 +2,7 @@ import { Router } from 'express';
 import validate from '../../middlewares/validate.js';
 import authenticate from '../../middlewares/authenticate.js';
 import { authLimiter, refreshLimiter } from '../../middlewares/security.js';
+import { invalidateAccountOnWrite } from '../../middlewares/cache.js';
 import { loginSchema, changePasswordSchema, updateProfileSchema } from './auth.validation.js';
 import {
   loginController,
@@ -21,10 +22,19 @@ router.post('/refresh', refreshLimiter, refreshController);
 router.post('/logout', authenticate, logoutController);
 
 router.get('/me', authenticate, meController);
-router.patch('/me', authenticate, validate({ body: updateProfileSchema }), updateProfileController);
+const evictSelf = invalidateAccountOnWrite({ target: 'self' });
+
+router.patch(
+  '/me',
+  authenticate,
+  evictSelf,
+  validate({ body: updateProfileSchema }),
+  updateProfileController
+);
 router.post(
   '/change-password',
   authenticate,
+  evictSelf,
   authLimiter,
   validate({ body: changePasswordSchema }),
   changePasswordController

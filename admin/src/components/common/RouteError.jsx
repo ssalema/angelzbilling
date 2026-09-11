@@ -5,11 +5,6 @@ import HomeOutlined from '@mui/icons-material/HomeOutlined';
 import ErrorOutline from '@mui/icons-material/ErrorOutline';
 import { FONT, ICON, brand, surface } from '../../theme/index.js';
 
-/**
- * A stale deploy leaves the browser asking for chunk names that no longer
- * exist; the only real fix is a reload, so we say that instead of showing a
- * generic stack trace.
- */
 const isChunkLoadError = (error) =>
   /dynamically imported module|Importing a module script failed|ChunkLoadError|Loading chunk/i.test(
     error?.message || ''
@@ -35,11 +30,7 @@ const describe = (error) => {
   };
 };
 
-/**
- * Route-level error screen. React Router renders the nearest `errorElement`,
- * so mounting this on the individual routes keeps the sidebar, topbar and
- * every other page alive when one feature fails.
- */
+// Route-level error screen.
 const RouteError = ({ fullHeight = false }) => {
   const error = useRouteError();
   const navigate = useNavigate();

@@ -1,7 +1,9 @@
 import mongoose from 'mongoose';
+
 import Bill from '../../models/Bill.js';
 import Perfume from '../../models/Perfume.js';
 import User from '../../models/User.js';
+import Customer from '../../models/Customer.js';
 import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/ApiResponse.js';
 import {
@@ -13,31 +15,19 @@ import {
 } from '../../utils/query.js';
 import { resolveBranchScope } from '../../middlewares/authorize.js';
 import { lifetimeCache } from '../../middlewares/cache.js';
-import { locationFilter } from '../../utils/locations.js';
+import { locationFilter, HEAD_OFFICE_ID } from '../../utils/locations.js';
 import { branchesOn } from '../../utils/featureFlags.js';
 
 /** Every figure on this page is computed here — nothing is hardcoded. */
 
-/**
- * Which bills count towards the shop's figures, and what they are worth.
- *
- * A refund hands the money back, so a refunded bill is worth nothing and is the
- * only status excluded. Everything else earns — but only what was actually
- * collected: a ₹15,000 bill settled with ₹9,450 is ₹9,450 of revenue, and the
- * ₹5,550 balance is outstanding, not income. `EARNING` is the match, `COLLECTED`
- * the money, `BILLED` the face value the two are reconciled against.
- */
+// Which bills count towards the shop's figures, and what they are worth.
 const EARNING = { status: { $ne: 'refunded' } };
 const COLLECTED = '$amountPaid';
 const BILLED = '$grandTotal';
 /** Only a pending bill is owed anything; a refund zeroes its balance on the way out. */
 const OUTSTANDING = { $cond: [{ $eq: ['$status', 'pending'] }, '$amountDue', 0] };
 
-/**
- * A customer is identified by country code + number together, so +65 91234567
- * and +91 91234567 are two people. Bills written before country codes existed
- * fall back to +91, which is what they were.
- */
+// A customer is identified by country code + number together, so +65 91234567 and +91 91234567 are two people.
 const CUSTOMER_KEY = {
   $concat: [{ $ifNull: ['$customer.mobileCountryCode', '+91'] }, '$customer.mobile'],
 };
@@ -53,59 +43,43 @@ const growth = (current, previous) => {
   return round2(((current - previous) / previous) * 100);
 };
 
-/**
- * Distinct customers ever billed, and how many of them first appeared inside
- * the current window.
- *
- * This is the most expensive query in the application and the only one that
- * cannot be narrowed by a date filter — the question is literally "everyone,
- * ever", so it groups the whole bills collection every time it runs. Left
- * uncached behind the 30 second analytics cache it was a full scan roughly
- * eight times a minute with a handful of staff on the dashboard, and the cost
- * grew with every bill ever written.
- *
- * It is also the figure that moves least: a new customer changes the total by
- * one. So it gets its own hour-long cache that ordinary bill writes do NOT
- * clear, which is the whole reason `lifetimeCache` exists separately from the
- * dashboard one. The trade is a lifetime customer count that can lag by up to
- * an hour; `newInPeriod` is derived from the same scan and lags with it.
- *
- * The key carries the branch scope and the window, because `newInPeriod` is
- * window-dependent even though `total` is not.
- */
+// Distinct customers ever billed, and how many of them first appeared inside the current window.
+const CUSTOMER_COUNT_TTL_MS = 60_000;
+
+/** A resolved scope as the branch value stored on a customer's location entry. */
+const customerBranchValue = (scope) => {
+  if (scope === null || scope === undefined) return undefined; // every location
+  if (String(scope) === HEAD_OFFICE_ID) return null; // the main business itself
+  return new mongoose.Types.ObjectId(String(scope));
+};
+
 const countCustomers = async (scope, window) => {
-  const key = `customers :: ${JSON.stringify(scope)} :: ${window.start?.getTime() || 'x'}-${window.end?.getTime() || 'x'}`;
+  const key = `customers :: ${scope ?? 'all'} :: ${window.start?.getTime() || 'x'}-${window.end?.getTime() || 'x'}`;
 
   const cached = lifetimeCache.get(key);
   if (cached) return cached;
 
-  const rows = await Bill.aggregate([
-    { $match: { ...scope, ...EARNING } },
-    // Only these three fields are needed downstream. Projecting first keeps the
-    // documents flowing through the group small — a bill carries its whole
-    // items array, payment history and status history otherwise.
-    { $project: { 'customer.mobile': 1, 'customer.mobileCountryCode': 1, createdAt: 1 } },
-    { $group: { _id: CUSTOMER_KEY, firstSeen: { $min: '$createdAt' } } },
-    {
-      $group: {
-        _id: null,
-        total: { $sum: 1 },
-        newInPeriod: {
-          $sum: {
-            $cond: [
-              window.start
-                ? { $and: [{ $gte: ['$firstSeen', window.start] }, { $lte: ['$firstSeen', window.end] }] }
-                : true,
-              1,
-              0,
-            ],
-          },
-        },
-      },
-    },
+  const branch = customerBranchValue(scope);
+  const storeWide = branch === undefined;
+
+  const totalFilter = storeWide ? {} : { 'branches.branch': branch };
+
+  let newFilter = null;
+  if (window.start) {
+    const between = { $gte: window.start, $lte: window.end };
+    newFilter = storeWide
+      ? { firstSeenAt: between }
+      : { branches: { $elemMatch: { branch, firstSeenAt: between } } };
+  }
+
+  const [total, newInPeriod] = await Promise.all([
+    Customer.countDocuments(totalFilter),
+    newFilter ? Customer.countDocuments(newFilter) : Customer.countDocuments(totalFilter),
   ]);
 
-  lifetimeCache.set(key, rows);
+  // Kept in the shape the aggregation returned, so the caller is unchanged.
+  const rows = [{ total, newInPeriod }];
+  lifetimeCache.set(key, rows, CUSTOMER_COUNT_TTL_MS);
   return rows;
 };
 
@@ -125,9 +99,7 @@ const computeSummary = async (req) => {
       $group: {
         _id: null,
         revenue: { $sum: COLLECTED },
-        // The face value of what was sold. AOV is an *order* value, so it is
-        // measured against this rather than against how much of it has been
-        // collected so far — otherwise a slow payer shrinks the basket size.
+        // The face value of what was sold.
         billed: { $sum: BILLED },
         outstanding: { $sum: OUTSTANDING },
         bills: { $sum: 1 },
@@ -178,19 +150,12 @@ const computeSummary = async (req) => {
         },
       },
     ]),
-    // "Customers" = distinct contact numbers that have ever been billed. The
-    // country code is part of the identity: +65 91234567 is not +91 91234567.
-    countCustomers(scope, window),
-    previous
-      ? Bill.aggregate([
-          { $match: { ...scope, ...buildDateMatch(prior), ...EARNING } },
-          // Date-bounded, so this one is cheap — but the projection still keeps
-          // the items array out of the pipeline on the way to the group.
-          { $project: { 'customer.mobile': 1, 'customer.mobileCountryCode': 1 } },
-          { $group: { _id: CUSTOMER_KEY } },
-          { $count: 'total' },
-        ])
-      : Promise.resolve([]),
+    // "Customers" = distinct contact numbers that have ever been billed.
+    countCustomers(resolveBranchScope(req), window),
+    // The same question asked of the window before, so the two figures the card
+    // compares are the same measurement. Comparing a lifetime total against one
+    // period's customers, as this once did, reads as growth on every load.
+    prior.start ? countCustomers(resolveBranchScope(req), prior) : Promise.resolve([]),
     User.countDocuments({ isActive: true }),
   ]);
 
@@ -231,9 +196,10 @@ const computeSummary = async (req) => {
         outOfStock: perfumes.outOfStock,
       },
       customers: {
+        // Everyone ever billed, with the period's new faces beside it.
         value: customers.total,
         newInPeriod: customers.newInPeriod,
-        growth: growth(customers.total, previousCustomerRows[0]?.total || 0),
+        growth: growth(customers.newInPeriod, previousCustomerRows[0]?.newInPeriod || 0),
       },
       averageOrderValue: {
         // Measured on what was billed: the size of a basket does not change
@@ -253,11 +219,45 @@ const computeSummary = async (req) => {
 
 /* ────────────────── Revenue / Bills / Customers / AOV chart ────────────────── */
 
+/**
+ * The server's current UTC offset, as `+05:30`.
+ *
+ * A fixed offset rather than an Olson name on purpose: Mongo raises on a zone it
+ * does not recognise, and an empty chart is a worse failure than an hour's drift
+ * in the two weeks a DST region is out of step.
+ */
+const utcOffset = () => {
+  const minutes = -new Date().getTimezoneOffset();
+  const sign = minutes < 0 ? '-' : '+';
+  const size = Math.abs(minutes);
+  return `${sign}${String(Math.floor(size / 60)).padStart(2, '0')}:${String(size % 60).padStart(2, '0')}`;
+};
+
+const TIMEZONE = utcOffset();
+
+/** A runaway custom range must not be able to ask for a million points. */
+const MAX_POINTS = 2000;
+
 const computeSeries = async (req) => {
   const scope = branchMatch(req);
   const window = windowFromQuery(req);
-  const granularity = pickGranularity(window);
   const metric = req.query.metric || 'revenue';
+
+  // "All time" has no bounds of its own, so the trading history supplies them.
+  // Without this the range is bucketed by month whatever it holds, and a shop
+  // three weeks old draws its whole history as one dot.
+  let span = window;
+  if (!window.start || !window.end) {
+    const [extent] = await Bill.aggregate([
+      { $match: { ...scope, ...EARNING } },
+      { $group: { _id: null, start: { $min: '$createdAt' }, end: { $max: '$createdAt' } } },
+    ]);
+    if (extent?.start) span = { start: extent.start, end: extent.end };
+  }
+
+  // `range` is left off deliberately: the span decides the bucket size here, and
+  // naming the range would send 'all' back down the fixed-month path.
+  const granularity = pickGranularity({ start: span.start, end: span.end });
 
   const formats = { day: '%Y-%m-%d', month: '%Y-%m', year: '%Y' };
 
@@ -265,7 +265,11 @@ const computeSeries = async (req) => {
     { $match: { ...scope, ...buildDateMatch(window), ...EARNING } },
     {
       $group: {
-        _id: { $dateToString: { format: formats[granularity], date: '$createdAt' } },
+        // Bucketed on the same clock the window and the fill loop below use.
+        // Left in UTC, an evening bill east of Greenwich lands in the previous
+        // day's bucket, whose key the fill loop never produces — so its revenue
+        // disappears from the chart while still counting on the summary card.
+        _id: { $dateToString: { format: formats[granularity], date: '$createdAt', timezone: TIMEZONE } },
         revenue: { $sum: COLLECTED },
         billed: { $sum: BILLED },
         bills: { $sum: 1 },
@@ -289,16 +293,49 @@ const computeSeries = async (req) => {
   const filled = [];
   const byKey = Object.fromEntries(rows.map((r) => [r._id, r]));
 
-  if (window.start && window.end) {
-    const cursor = new Date(window.start);
-    const stamp = (d) => {
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return granularity === 'day' ? `${y}-${m}-${day}` : granularity === 'month' ? `${y}-${m}` : `${y}`;
-    };
+  const stamp = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return granularity === 'day' ? `${y}-${m}-${day}` : granularity === 'month' ? `${y}-${m}` : `${y}`;
+  };
 
-    while (cursor <= window.end) {
+  // The cursor has to sit on the first instant of its bucket before it is
+  // stepped: adding a month to the 31st skips the month that has no 31st, which
+  // dropped whole buckets out of the middle of the line.
+  const startOfBucket = (d) => {
+    const at = new Date(d);
+    at.setHours(0, 0, 0, 0);
+    if (granularity !== 'day') at.setDate(1);
+    if (granularity === 'year') at.setMonth(0);
+    return at;
+  };
+
+  const advance = (d) => {
+    if (granularity === 'day') d.setDate(d.getDate() + 1);
+    else if (granularity === 'month') d.setMonth(d.getMonth() + 1);
+    else d.setFullYear(d.getFullYear() + 1);
+  };
+
+  // A key is zero-padded, so comparing two of them as text is comparing dates.
+  const keyToDate = (key) => {
+    const [y, m = '1', d = '1'] = String(key).split('-');
+    return new Date(Number(y), Number(m) - 1, Number(d));
+  };
+
+  // The span resolved above, falling back to what the rows themselves cover for
+  // an all-time range on a shop that has not billed anything yet.
+  const bounds = (() => {
+    if (span.start && span.end) return { start: span.start, end: span.end };
+    if (!rows.length) return null;
+    return { start: keyToDate(rows[0]._id), end: keyToDate(rows[rows.length - 1]._id) };
+  })();
+
+  if (bounds) {
+    const cursor = startOfBucket(bounds.start);
+    const lastKey = stamp(bounds.end);
+
+    while (stamp(cursor) <= lastKey && filled.length < MAX_POINTS) {
       const key = stamp(cursor);
       const row = byKey[key];
       filled.push({
@@ -310,15 +347,28 @@ const computeSeries = async (req) => {
         aov: row?.aov || 0,
       });
 
-      if (granularity === 'day') cursor.setDate(cursor.getDate() + 1);
-      else if (granularity === 'month') cursor.setMonth(cursor.getMonth() + 1);
-      else cursor.setFullYear(cursor.getFullYear() + 1);
+      advance(cursor);
     }
-  } else {
-    rows.forEach((r) =>
-      filled.push({ key: r._id, date: null, revenue: r.revenue, bills: r.bills, customers: r.customers, aov: r.aov })
-    );
   }
+
+  // Nothing above should be able to drop a bucket that holds bills, but a point
+  // silently missing from the line is the kind of wrong that looks right — so
+  // anything the walk did not emit is put back rather than lost.
+  const emitted = new Set(filled.map((point) => point.key));
+  rows
+    .filter((r) => !emitted.has(r._id))
+    .forEach((r) =>
+      filled.push({
+        key: r._id,
+        date: keyToDate(r._id),
+        revenue: r.revenue,
+        bills: r.bills,
+        customers: r.customers,
+        aov: r.aov,
+      })
+    );
+
+  filled.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 
   const total = filled.reduce((sum, point) => sum + (point[metric] || 0), 0);
 
@@ -422,22 +472,16 @@ const computeLowStock = async (req) => {
   const limit = Math.min(50, Number.parseInt(req.query.limit, 10) || 8);
 
   const rows = await Perfume.aggregate([
-    { $match: { status: { $ne: 'archived' } } },
-    {
-      $addFields: {
-        // The perfume's single bulk weight; variants hold no stock of their own.
-        totalStock: { $ifNull: ['$stock', 0] },
-      },
-    },
-    { $match: { $expr: { $lte: ['$totalStock', '$lowStockThreshold'] } } },
-    { $sort: { totalStock: 1 } },
+    { $match: { status: { $ne: 'archived' }, stockMargin: { $lte: 0 } } },
+    { $sort: { stock: 1 } },
     { $limit: limit },
     {
       $project: {
         name: 1,
         sku: 1,
         brand: 1,
-        totalStock: 1,
+        // The perfume's single bulk weight; variants hold no stock of their own.
+        totalStock: { $ifNull: ['$stock', 0] },
         lowStockThreshold: 1,
         status: 1,
         image: { $ifNull: [{ $first: '$images.url' }, ''] },
@@ -489,14 +533,7 @@ const computeBranchPerformance = async (req) => {
 
 /* ─────────────────────────── Bill status donut ─────────────────────────── */
 
-/**
- * How the period's bills settled: fully paid, still owed, or handed back.
- *
- * Counts, not money — the money version of this question is the revenue card and
- * its outstanding figure. A status with nothing in it is left out entirely so a
- * shop that never refunds does not carry a permanent empty slice, but the order
- * is fixed so Paid always wears the same colour from one period to the next.
- */
+// How the period's bills settled: fully paid, still owed, or handed back.
 const BILL_STATUS_SEGMENTS = [
   { key: 'paid', label: 'Paid' },
   { key: 'pending', label: 'Pending' },
@@ -543,12 +580,6 @@ const computeBillStatusBreakdown = async (req) => {
 
 /* ─────────────────────────── Route handlers ─────────────────────────── */
 
-/**
- * Each widget keeps its own endpoint, because each owns its own date range in
- * the UI — changing the range on the payment donut must not refetch the whole
- * page. These are thin wrappers; all the work lives in the compute functions
- * above, which the combined endpoint below reuses directly.
- */
 const handlerFor = (compute) => asyncHandler(async (req, res) => sendSuccess(res, await compute(req)));
 
 export const getSummary = handlerFor(computeSummary);
@@ -562,32 +593,9 @@ export const getBillStatusBreakdown = handlerFor(computeBillStatusBreakdown);
 
 /* ─────────────────────────── Combined first load ─────────────────────────── */
 
-/**
- * Every widget on the dashboard, for one range, in a single response.
- *
- * Opening the page used to fire eight requests at once. Each one separately
- * paid TLS and HTTP overhead, JWT verification, rate-limit accounting and a
- * cache lookup, and the browser caps how many it will run in parallel to one
- * origin — so the last widgets queued behind the first. The figures were
- * already cheap by then; the per-request overhead was the cost.
- *
- * This serves the case that actually happens on load: every widget sitting at
- * the same default range. The moment a user changes one widget's range that
- * widget goes back to its own endpoint, which is why those still exist and why
- * this does not try to accept eight different ranges.
- *
- * The computes run concurrently and each is independently cached, so a hit on
- * this endpoint and a hit on a single-widget one return identical figures.
- */
+// Every widget on the dashboard, for one range, in a single response.
 export const getOverview = asyncHandler(async (req, res) => {
-  /**
-   * The list widgets each want a different row count, but the shared query
-   * schema carries only one `limit`. So each gets a stand-in request with its
-   * own — carrying exactly the four things the computes read off a request
-   * (`user`, `query`, `body`, `features`), which is what `resolveBranchScope`
-   * and the pipelines need and nothing more. Spreading the Express request
-   * itself would copy its prototype badly; this states the contract instead.
-   */
+  // The list widgets each want a different row count, but the shared query schema carries only one `limit`.
   const withLimit = (limit) => ({
     user: req.user,
     body: req.body,
@@ -609,9 +617,6 @@ export const getOverview = asyncHandler(async (req, res) => {
 
   return sendSuccess(res, {
     message: 'Dashboard loaded',
-    // Keyed by widget, each holding exactly what that widget's own endpoint
-    // returns in its `data` — so the client can feed either source to the same
-    // component without a second shape to handle.
     data: {
       summary: summary.data,
       series: series.data,

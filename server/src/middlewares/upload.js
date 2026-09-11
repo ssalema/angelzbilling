@@ -7,10 +7,6 @@ const VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
 const MAX_VIDEO_BYTES = 30 * 1024 * 1024; // 30 MB
 
-/**
- * Memory storage on purpose: buffers stream straight to Cloudinary, so the API
- * writes nothing to disk and can scale horizontally without shared volumes.
- */
 const storage = multer.memoryStorage();
 
 const fileFilter = (_req, file, cb) => {
@@ -22,12 +18,6 @@ const fileFilter = (_req, file, cb) => {
   );
 };
 
-/**
- * Buffers live in memory, so multer's own limits are the real ceiling — the
- * `enforceFileLimits` check below runs only after a file has already been read
- * in, and cannot stop a large one from being held. `files` matches the largest
- * `upload.array` in the app so a request can hold at most 7 × 30 MB.
- */
 export const upload = multer({
   storage,
   fileFilter,
@@ -44,27 +34,7 @@ export const imageUpload = multer({
   limits: { fileSize: MAX_IMAGE_BYTES, files: 1, fields: 20 },
 });
 
-/**
- * Caps how many uploads may be in flight at once, across the whole process.
- *
- * Memory storage is what makes this necessary. Every byte of every in-flight
- * upload is held in the heap until Cloudinary has taken it, and the multer
- * limits above are per-REQUEST: one request can hold 7 × 30 MB, so ten
- * concurrent uploads is roughly 2 GB and the process is killed. Nothing else in
- * the stack bounds it — the rate limiter counts requests over fifteen minutes,
- * which says nothing about how many are running right now.
- *
- * So uploads queue instead of piling up. A burst is served a few at a time and
- * the rest wait their turn, which is slower for the user who clicked last and
- * survivable for everyone, rather than fast for everyone until the container
- * dies. The queue itself is bounded too: past `maxQueued` the request is
- * refused immediately with a 503 and a retry hint, because a queue that grows
- * without limit is just the same memory problem wearing a hat.
- *
- * Tune with UPLOAD_MAX_CONCURRENT. The default of 3 assumes the 512 MB-ish
- * container these apps usually run in: 3 × 30 MB of buffers leaves plenty of
- * headroom for everything else the process is doing.
- */
+// Caps how many uploads may be in flight at once, across the whole process.
 const createUploadGate = ({ maxConcurrent, maxQueued = 20, timeoutMs = 30_000 }) => {
   let active = 0;
   const queue = [];
@@ -128,7 +98,33 @@ export const uploadGate = createUploadGate({
   maxConcurrent: Number.parseInt(process.env.UPLOAD_MAX_CONCURRENT, 10) || 3,
 });
 
-/** Per-file size check — images get a tighter cap than the multer-wide limit. */
+// What the bytes actually are, as opposed to what the uploader said they are.
+const startsWith = (buffer, bytes, offset = 0) =>
+  bytes.every((byte, index) => buffer[offset + index] === byte);
+
+const ascii = (buffer, offset, text) =>
+  startsWith(buffer, [...text].map((character) => character.charCodeAt(0)), offset);
+
+const SIGNATURES = {
+  'image/jpeg': (b) => startsWith(b, [0xff, 0xd8, 0xff]),
+  'image/png': (b) => startsWith(b, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+  'image/gif': (b) => ascii(b, 0, 'GIF87a') || ascii(b, 0, 'GIF89a'),
+  'image/webp': (b) => ascii(b, 0, 'RIFF') && ascii(b, 8, 'WEBP'),
+  'video/mp4': (b) => ascii(b, 4, 'ftyp'),
+  'video/quicktime': (b) => ascii(b, 4, 'ftyp') || ascii(b, 4, 'moov') || ascii(b, 4, 'mdat'),
+  'video/webm': (b) => startsWith(b, [0x1a, 0x45, 0xdf, 0xa3]),
+};
+
+SIGNATURES['image/jpg'] = SIGNATURES['image/jpeg'];
+
+/** True when the buffer's own header agrees with the declared type. */
+const contentMatchesType = (buffer, mimetype) => {
+  const check = SIGNATURES[mimetype];
+  if (!check) return false;
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return false;
+  return check(buffer);
+};
+
 export const enforceFileLimits = (req, _res, next) => {
   const files = req.files || (req.file ? [req.file] : []);
   for (const file of files) {
@@ -142,10 +138,17 @@ export const enforceFileLimits = (req, _res, next) => {
         )
       );
     }
+
+    if (!contentMatchesType(file.buffer, file.mimetype)) {
+      return next(
+        ApiError.badRequest(
+          `"${file.originalname}" is not a valid ${isImage ? 'image' : 'video'} file. ` +
+            'Its contents do not match its file type.'
+        )
+      );
+    }
   }
   return next();
 };
 
 export const isVideo = (mimetype) => VIDEO_TYPES.includes(mimetype);
-
-export default upload;

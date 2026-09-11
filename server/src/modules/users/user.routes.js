@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import authenticate from '../../middlewares/authenticate.js';
-import { invalidateDashboardOnWrite } from '../../middlewares/cache.js';
+import { invalidateDashboardOnWrite, invalidateAccountOnWrite } from '../../middlewares/cache.js';
+import { announceOnWrite } from '../../middlewares/realtime.js';
 import { authorize } from '../../middlewares/authorize.js';
 import validate from '../../middlewares/validate.js';
 import {
@@ -26,6 +27,15 @@ const router = Router();
 router.use(authenticate, authorize('superadmin'));
 // The summary card counts active staff, so account writes invalidate it too.
 router.use(invalidateDashboardOnWrite());
+router.use(invalidateAccountOnWrite());
+// Deactivating, deleting or resetting an account also ends its open sessions —
+// the tabs it is signed in on are told to sign in again.
+router.use(
+  announceOnWrite({
+    resource: 'users',
+    revokes: ['/:id/status', '/:id', '/:id/reset-password'],
+  })
+);
 
 router.get('/', validate({ query: listUserQuerySchema }), listUsers);
 router.post('/', validate({ body: createUserSchema }), createUser);

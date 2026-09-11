@@ -50,7 +50,7 @@ import {
   addPostalCodeIssue,
   formatContactNumber,
 } from '../../utils/countries.js';
-import { CARD_HEAD_PAD, ICON, LOGO_FRAME } from '../../theme/index.js';
+import { CARD_HEAD_PAD, GUTTER, ICON, LOGO_FRAME } from '../../theme/index.js';
 import { IMG } from '../../utils/image.js';
 
 const schema = z
@@ -91,11 +91,6 @@ const schema = z
     })
   );
 
-/**
- * A branch carries the same two marks the store does, sized the same way: a wide
- * logo for bill headers and sidebars, a square favicon for the printed slip and
- * the branch table.
- */
 const BRANDING_SLOTS = [
   { kind: 'logo', label: 'Branch logo', hint: 'Transparent PNG, around 400×120px' },
   {
@@ -118,12 +113,7 @@ const emptyBranch = {
   hasOwnLogo: false,
 };
 
-/**
- * `canEdit` says the viewer is a Super Admin, so they see every branch here.
- * Authority is narrower: adding a location, taking one out of service and the
- * branch switch itself are store-wide and belong to the main Super Admin, while
- * a Super Admin assigned to a branch edits that one branch's own details.
- */
+// `canEdit` says the viewer is a Super Admin, so they see every branch here.
 const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
   const snackbar = useSnackbar();
   const { isMainSuperAdmin, canEditBranch, branchName } = useAuth();
@@ -140,7 +130,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
 
-  const branches = useApiResource(() => branchApi.list({ limit: 100 }), []);
+  const branches = useApiResource(() => branchApi.list({ limit: 100 }), [], { watch: 'branches' });
 
   const methods = useForm({ resolver: zodResolver(schema), defaultValues: emptyBranch, mode: 'onTouched' });
   const {
@@ -203,11 +193,6 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
     }
   };
 
-  /**
-   * The switch follows the list: the server turns branch management on the
-   * moment a location is activated and off when the last one closes, so any
-   * change to a branch can move it. Pull the settings back rather than assume.
-   */
   const refreshSettings = async () => {
     try {
       onSettingsChange?.(await settingsApi.get());
@@ -229,17 +214,9 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
 
   const items = branches.data?.items || [];
 
-  // Single-location stores switch branches off entirely. Nothing is deleted — the
-  // server deactivates every branch, and switching back on reactivates them. The
-  // switch tracks that state rather than sitting apart from it: it is on exactly
-  // while at least one branch is active.
+  // Single-location stores switch branches off entirely.
   const branchesEnabled = settings?.features?.branches !== false;
 
-  /**
-   * Listing the branches repairs a switch that had drifted out of step with
-   * them, so a page opened on the old state is holding settings the server has
-   * since corrected. Pull them once when the two disagree.
-   */
   const healedRef = useRef(false);
   useEffect(() => {
     if (!branches.data || !items.length || healedRef.current) return;
@@ -368,8 +345,11 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
         );
       },
     },
-    actionsColumn((row) =>
-        canEdit && (
+    // Same rule as the perfumes list: an account that cannot act on a row does
+    // not get an empty column where the buttons would be.
+    ...(canEdit
+      ? [
+          actionsColumn((row) => (
           <Stack direction="row" spacing={0.25} justifyContent="center">
             <Tooltip title={canEditBranch(row.id) ? 'Edit branch' : 'You can only edit your own branch'}>
               <Box component="span">
@@ -404,7 +384,9 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
             </Tooltip>
             )}
           </Stack>
-        )),
+          )),
+        ]
+      : []),
   ];
 
   return (
@@ -536,7 +518,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
         <FormProvider {...methods}>
           <form onSubmit={handleSubmit(onSubmit)} noValidate>
             <DialogContent dividers>
-              <Grid container spacing={2.25}>
+              <Grid container spacing={GUTTER.cards}>
                 <Grid item xs={12} sm={8}>
                   <RHFTextField name="name" label="Branch name *" autoFocus />
                 </Grid>

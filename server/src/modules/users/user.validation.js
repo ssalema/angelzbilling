@@ -17,17 +17,6 @@ const baseUser = {
   isActive: z.boolean().optional().default(true),
 };
 
-/**
- * A non-superadmin must belong to exactly one location — that is what scopes
- * them — but the Head Office is one of those, and it travels as null. So the
- * field has to be PRESENT rather than truthy: an omitted branch is a client
- * that forgot to ask, and posting someone to the Head Office by accident is
- * not a thing we want to do quietly.
- *
- * For a superadmin it is optional either way: with a branch they still see
- * everything but may only edit inside it, without one they are the Head Office
- * Super Admin.
- */
 const requireBranchForScopedRoles = (data, ctx) => {
   if (data.role && data.role !== 'superadmin' && data.branch === undefined) {
     ctx.addIssue({
@@ -52,11 +41,7 @@ export const updateUserSchema = z
   .object({
     name: baseUser.name.optional(),
     email: baseUser.email.optional(),
-    // No `.default('')` here, unlike the create schema. A PATCH carries only the
-    // fields being changed and `updateUser` does `Object.assign(user, req.body)`,
-    // so a default would put an empty string into the body of every partial
-    // update and wipe the stored number — which is exactly what the inline role
-    // change in the users table sends. Absent has to stay absent.
+    // No `.default('')` here, unlike the create schema.
     phone: z.string().trim().optional(),
     phoneCountryCode: z.string().trim().optional(),
     role: baseUser.role.optional(),

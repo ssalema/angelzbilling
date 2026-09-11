@@ -60,14 +60,12 @@ import { applyServerErrors } from '../../api/client.js';
 import { currencySymbol, formatCurrency, formatGrams, formatNumber, unitsFromGrams } from '../../utils/format.js';
 import { PAYMENT_METHODS, PAYMENT_TERMS, HEAD_OFFICE, locationOf, locationOptions } from '../../utils/constants.js';
 import { downloadBillPdf } from '../../utils/downloadBill.js';
-import { FONT, CARD_HEAD_PAD, CARD_PAD, ICON, brand, numericText, statusColors, surface } from '../../theme/index.js';
+import { FONT, CARD_HEAD_PAD, CARD_PAD, GUTTER, INSET_RADIUS, ICON, brand, numericText, statusColors, surface } from '../../theme/index.js';
 
 const CreateBillPage = () => {
   const navigate = useNavigate();
   const snackbar = useSnackbar();
-  // Only the Head Office Super Admin picks where a bill is raised. Everyone
-  // else bills at the location they are assigned to and cannot change it — the
-  // server pins them there regardless of what this page sends.
+  // Only the Head Office Super Admin picks where a bill is raised.
   const { user, isMainSuperAdmin } = useAuth();
   const { settings, loading: settingsLoading, defaultTaxPercent, branchesEnabled } = useSettings();
 
@@ -88,7 +86,7 @@ const CreateBillPage = () => {
   const branches = useApiResource(
     () => (canPickLocation ? branchApi.list({ limit: 100 }) : Promise.resolve({ items: [] })),
     [canPickLocation],
-    { immediate: canPickLocation }
+    { immediate: canPickLocation, watch: 'branches' }
   );
 
   const locations = useMemo(
@@ -104,12 +102,7 @@ const CreateBillPage = () => {
 
   const atHeadOffice = billLocation.id === HEAD_OFFICE.id;
 
-  /**
-   * The slip is headed by a favicon, and a branch with its own branding prints
-   * under its own. The server resolves it that way when the bill is reloaded, so
-   * the preview and the just-saved slip have to resolve it the same way here or
-   * the paper would change after the save.
-   */
+  // The slip is headed by a favicon, and a branch with its own branding prints under its own.
   const slipStore = useMemo(
     () => ({
       ...settings,
@@ -136,14 +129,6 @@ const CreateBillPage = () => {
     formState: { isSubmitting },
   } = methods;
 
-  /**
-   * The store's default tax reaches this form asynchronously: on a hard reload
-   * of /billing/new the settings request cannot even start until the refresh
-   * cookie has been exchanged, so `defaultValues` above is read while the value
-   * is still 0. Apply it once it lands, unless the biller has already typed a
-   * rate of their own — a bill must never quietly go out untaxed because the
-   * page won a race against its own settings.
-   */
   const taxDefaultApplied = useRef(false);
   useEffect(() => {
     if (taxDefaultApplied.current || settingsLoading) return;
@@ -157,11 +142,7 @@ const CreateBillPage = () => {
 
   const watched = useWatch({ control });
 
-  /**
-   * Grams of a perfume already spoken for by the lines on this bill.
-   * `exceptIndex` leaves one line out, which is how we work out the headroom
-   * that line still has: its own quantity is what we are about to re-decide.
-   */
+  // Grams of a perfume already spoken for by the lines on this bill.
   const gramsClaimed = useCallback(
     (perfumeId, exceptIndex = -1) =>
       (watched.items || []).reduce((sum, item, index) => {
@@ -188,19 +169,16 @@ const CreateBillPage = () => {
     [watched.items, watched.taxPercent, watched.extraDiscount]
   );
 
-  /**
-   * A part payment is still one bill: the total below is what the customer owes
-   * in full, and `amountReceived` is only how much of it crossed the counter
-   * today. The server recomputes both — this is what the biller watches while
-   * typing, so the drawer and the slip agree before anything is saved.
-   */
   const isPartial = watched.paymentTerm === 'partial';
   const amountReceived = isPartial ? Math.min(Number(watched.amountPaid) || 0, totals.grandTotal) : totals.grandTotal;
   const balanceDue = Math.max(0, Number((totals.grandTotal - amountReceived).toFixed(2)));
 
+  // The type-ahead.
   const options = useApiResource(
-    () => perfumeApi.lookup({ q: debouncedQuery, limit: 25 }),
-    [debouncedQuery]
+    (signal) => perfumeApi.lookup({ q: debouncedQuery, limit: 25 }, signal),
+    [debouncedQuery],
+    // Stock moves under this screen while a bill is being written.
+    { watch: 'perfumes' }
   );
 
   const addItem = useCallback(
@@ -213,10 +191,6 @@ const CreateBillPage = () => {
           item.perfume === String(option.perfumeId) && (item.variantSku || '') === (option.variantSku || '')
       );
 
-      // Stock arrives as the perfume's bulk grams, shared by every size, so how
-      // many bottles we can add depends on this fill AND on what the other lines
-      // of the same perfume have already claimed: 250 g of a 50gm attar is five
-      // units, and fewer still if a 100gm line is already on the bill.
       const freeGrams = (Number(option.stock) || 0) - gramsClaimed(option.perfumeId, existingIndex);
       const sellable = unitsFromGrams(freeGrams, option.sizeGrams);
 
@@ -320,7 +294,7 @@ const CreateBillPage = () => {
           subtitle={`${savedBill.billNumber} · ${formatCurrency(savedBill.grandTotal)}${
             savedBill.amountDue > 0 ? ` · ${formatCurrency(savedBill.amountDue)} due` : ''
           }`}
-          breadcrumbs={[{ label: 'Billing', to: '/billing' }, { label: savedBill.billNumber }]}
+          breadcrumbs={[{ label: 'Bill records', to: '/billing' }, { label: savedBill.billNumber }]}
         />
 
         {/* A bill with a balance is saved and stocked exactly like any other —
@@ -373,14 +347,14 @@ const CreateBillPage = () => {
         subtitle="Add the customer, pick the perfumes, then preview and print"
         breadcrumbs={[
           { label: 'Dashboard', to: '/dashboard' },
-          { label: 'Billing', to: '/billing' },
+          { label: 'Bill records', to: '/billing' },
           { label: 'Create bill' },
         ]}
       />
 
       <FormProvider {...methods}>
         <form onSubmit={openPreview} noValidate>
-          <Grid container spacing={2.5}>
+          <Grid container spacing={GUTTER.page}>
             {/* ── Left: customer + items ── */}
             <Grid item xs={12} lg={8}>
               <Card sx={{ p: CARD_PAD, mb: 2.5 }}>
@@ -391,7 +365,7 @@ const CreateBillPage = () => {
 
                 <CustomerRecallBanner />
 
-                <Grid container spacing={2.25}>
+                <Grid container spacing={GUTTER.cards}>
                   {/* The number comes first: it is what recalls a returning buyer. */}
                   <Grid item xs={12} sm={6}>
                     <RHFContactNumber
@@ -712,7 +686,7 @@ const CreateBillPage = () => {
                             onClick={() => field.onChange(method.value)}
                             variant={field.value === method.value ? 'filled' : 'outlined'}
                             color={field.value === method.value ? 'primary' : 'default'}
-                            sx={{ height: 34, borderRadius: 2, fontWeight: 600, cursor: 'pointer' }}
+                            sx={{ height: 34, borderRadius: `${INSET_RADIUS}px`, fontWeight: 600, cursor: 'pointer' }}
                           />
                         ))}
                       </Box>
@@ -746,7 +720,7 @@ const CreateBillPage = () => {
                           }}
                           variant={field.value === term.value ? 'filled' : 'outlined'}
                           color={field.value === term.value ? 'primary' : 'default'}
-                          sx={{ height: 34, borderRadius: 2, fontWeight: 600, cursor: 'pointer' }}
+                          sx={{ height: 34, borderRadius: `${INSET_RADIUS}px`, fontWeight: 600, cursor: 'pointer' }}
                         />
                       ))}
                     </Box>
@@ -763,7 +737,7 @@ const CreateBillPage = () => {
                       inputProps={{ min: 0, max: totals.grandTotal }}
                       helperText="The balance stays on this bill and can be collected later"
                     />
-                    <Box sx={{ mt: 1, p: 1.5, borderRadius: 2, bgcolor: surface.plumFaint }}>
+                    <Box sx={{ mt: 1, p: 1.5, borderRadius: `${INSET_RADIUS}px`, bgcolor: surface.plumFaint }}>
                       <SummaryRow label="Paid now" value={formatCurrency(amountReceived, { precise: true })} />
                       <SummaryRow
                         label="Balance due"
@@ -833,22 +807,17 @@ const CreateBillPage = () => {
               amountPaid: amountReceived,
               amountDue: balanceDue,
               status: balanceDue > 0 ? 'pending' : 'paid',
-              // The slip prints one line per payment, and the only payment this
-              // bill can have yet is the one being taken right now — so stand it
-              // in exactly as the server will write it.
               payments: amountReceived > 0
                 ? [{ amount: amountReceived, method: watched.paymentMethod, at: new Date(), atBilling: true }]
                 : [],
               paymentMethod: watched.paymentMethod,
               notes: watched.notes,
-              // The Head Office carries no branch snapshot, and neither does a
-              // store with branches switched off — both print under the main
-              // business name, address and logo, exactly as the server writes it.
               branch:
                 branchesEnabled && !atHeadOffice
                   ? {
                       name: billLocation.name,
                       code: billLocation.code || '',
+                      gstin: billLocation.gstin || '',
                       address: '',
                       phone: billLocation.phone || '',
                       phoneCountryCode: billLocation.phoneCountryCode || '+91',

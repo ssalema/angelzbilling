@@ -1,23 +1,13 @@
 import { Box, Dialog, DialogContent, DialogTitle, Stack, Typography } from '@mui/material';
 import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined';
 
-import DialogCloseButton from '../../../components/common/DialogCloseButton.jsx';
+import DialogCloseButton, { dismiss } from '../../../components/common/DialogCloseButton.jsx';
 import BulkPerfumeUpload from './BulkPerfumeUpload.jsx';
 import { FONT, brand } from '../../../theme/index.js';
 
-/**
- * The door to the catalogue upload.
- *
- * One panel rather than the tabs the stock and price dialogs carry: those two
- * offer a single-perfume alternative because there is no other screen for it,
- * while adding one perfume by hand already has a home — the Add perfume wizard,
- * which this deliberately does not duplicate or change.
- *
- * The dialog is remounted per opening (`keepMounted` is deliberately off), so a
- * spreadsheet read in one session leaves nothing behind for the next.
- */
+// The door to the catalogue upload.
 const BulkUploadDialog = ({ open, onClose, onCreated }) => (
-  <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+  <Dialog open={open} onClose={dismiss(onClose)} maxWidth="md" fullWidth>
     <DialogCloseButton onClose={onClose} />
 
     <DialogTitle sx={{ pb: 1, pr: 6 }}>

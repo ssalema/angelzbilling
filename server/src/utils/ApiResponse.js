@@ -1,7 +1,3 @@
-/**
- * One envelope for every successful response so the client never has to guess
- * where the payload lives:  { success, message, data, meta? }
- */
 export const sendSuccess = (res, { statusCode = 200, message = 'Success', data = null, meta } = {}) => {
   const body = { success: true, message, data };
   if (meta) body.meta = meta;

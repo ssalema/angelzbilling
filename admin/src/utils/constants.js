@@ -1,16 +1,7 @@
 /** Shared option lists. Keeping them here stops labels drifting between screens. */
 
-/**
- * The store's locations are the Head Office plus every branch.
- *
- * The Head Office is the main business itself — the General tab in Settings —
- * and is a location alongside the branches rather than a branch of its own. It
- * has no Branch record, so the server sends `branch: null` for anything that
- * belongs to it and shapes it into this on the way out. "All branches" is a
- * filter word only: nothing is ever assigned to it.
- */
+// The store's locations are the Head Office plus every branch.
 export const HEAD_OFFICE = { id: 'head-office', name: 'Head Office', code: 'HO', isHeadOffice: true };
-export const ALL_LOCATIONS = '';
 
 /** The location a record belongs to, with the Head Office standing in for null. */
 export const locationOf = (branch) => (branch?.id ? branch : HEAD_OFFICE);
@@ -47,12 +38,7 @@ export const BILL_STATUSES = [
   { value: 'refunded', label: 'Refunded' },
 ];
 
-/**
- * How much of a bill the customer settles at the counter.
- *
- * Partial does not make a different bill — same number, same items, same stock
- * deduction — only a balance the shop collects later against that same record.
- */
+// How much of a bill the customer settles at the counter.
 export const PAYMENT_TERMS = [
   { value: 'full', label: 'Full Paid', description: 'The customer settles the whole bill now' },
   { value: 'partial', label: 'Partial Paid', description: 'Part now, the balance collected later' },
@@ -120,11 +106,19 @@ export const SELECTOR_STYLES = [
 
 export const ROWS_PER_PAGE = [10, 25, 50, 100];
 
-/**
- * What every uploader accepts. `.jfif` is served as image/jpeg, so the
- * extension is listed for pickers that match on it.
- */
+// What every uploader accepts.
 export const IMAGE_TYPES = 'image/jpeg,image/jpg,image/pjpeg,.jfif,image/png,image/gif,image/webp';
 
 /** Cloudinary and the server both cap a single upload here. */
-export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
+// Why an image was turned away, or null if it is fine.
+export const rejectImageReason = (file) => {
+  if (!file?.type?.startsWith('image/')) return 'That is not an image — pick a JPEG, PNG, WEBP or GIF.';
+  if (file.size > MAX_UPLOAD_BYTES) return 'That image is over 5MB. Save a smaller copy and try again.';
+  return null;
+};
+
+// The password rule, worded once.
+export const PASSWORD_HINT =
+  'At least 8 characters with an uppercase letter, a lowercase letter and a number';

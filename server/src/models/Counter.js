@@ -1,10 +1,6 @@
 import mongoose from 'mongoose';
 
-/**
- * Atomic sequence generator. `findOneAndUpdate` with `$inc` + `upsert` is a
- * single-document atomic operation, so two cashiers saving at the exact same
- * millisecond can never receive the same bill number.
- */
+// Atomic sequence generator.
 const counterSchema = new mongoose.Schema(
   {
     _id: { type: String, required: true },

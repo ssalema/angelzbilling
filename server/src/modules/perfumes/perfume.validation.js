@@ -154,9 +154,7 @@ const publishReadiness = (data, ctx) => {
   if (!Number(data.mrp)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['mrp'], message: 'Set a price before publishing' });
   }
-  // A perfume with an empty pool is sold out the moment it is listed. Undefined
-  // is left alone: a partial update that never mentions stock is not claiming
-  // the shelf is empty, and the status route checks the stored figure instead.
+  // A perfume with an empty pool is sold out the moment it is listed.
   if (data.stock !== undefined && !(Number(data.stock) > 0)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['stock'], message: 'Add stock before publishing' });
   }
@@ -204,16 +202,9 @@ const gramsDelta = z.coerce
 
 export const stockBodySchema = z
   .object({
-    /**
-     * Grams on hand after the correction, not a bottle count. There is no
-     * variantSku here on purpose: a perfume has exactly one stock figure.
-     */
+    // Grams on hand after the correction, not a bottle count.
     stock: z.coerce.number().min(0, 'Stock cannot be negative').optional(),
-    /**
-     * Grams arriving, added to whatever is on hand. The stock update screen
-     * sends this rather than a total it worked out itself, so a bottle sold
-     * while the admin was typing is not quietly written back over.
-     */
+    // Grams arriving, added to whatever is on hand.
     addStock: gramsDelta.optional(),
     /** Optional — lets the same inline editor retune the alert weight. */
     lowStockThreshold: z.coerce.number().min(0).optional(),
@@ -223,21 +214,14 @@ export const stockBodySchema = z
     message: 'Send either a new stock total or the grams to add',
   });
 
-/**
- * The stock screen's type-ahead. With no term it answers with the perfumes that
- * actually need restocking, so the box is useful before anything is typed.
- */
+// The stock screen's type-ahead.
 export const stockSearchQuerySchema = z.object({
   q: z.string().trim().max(100, 'Search term is too long').optional().default(''),
   limit: z.coerce.number().int().min(1).max(50).optional().default(20),
 });
 
-/**
- * One request matches every row of an uploaded sheet against the catalogue.
- * The cap is the sheet size the bulk screen accepts — comfortably inside the
- * 2mb body limit, and far more than a restock run ever carries.
- */
-export const MAX_BULK_STOCK_ROWS = 2000;
+// One request matches every row of an uploaded sheet against the catalogue.
+const MAX_BULK_STOCK_ROWS = 2000;
 
 export const resolveStockNamesSchema = z.object({
   names: z
@@ -246,11 +230,7 @@ export const resolveStockNamesSchema = z.object({
     .max(MAX_BULK_STOCK_ROWS, `Up to ${MAX_BULK_STOCK_ROWS} rows can be matched at once`),
 });
 
-/**
- * Which screen sent the rows. The single and bulk screens share this endpoint,
- * so only the caller knows whether this was one correction or a sheet — and the
- * audit line on the perfume says which.
- */
+// Which screen sent the rows.
 const updateSource = z.enum(['single', 'bulk']).optional().default('bulk');
 
 export const bulkStockSchema = z.object({
@@ -263,13 +243,8 @@ export const bulkStockSchema = z.object({
 
 export const idParamSchema = z.object({ id: objectId });
 
-/* ───────────────────────── Per-size repricing ─────────────────────────
- * The repricing screen sends one price per fill the admin actually changed.
- * A size absent from `prices` is a size that keeps what it has — the server
- * derives nothing, so nothing can be rewritten by accident.
- */
 
-/** Mirrors MIN/MAX_PRICE in utils/sizePricing.js. */
+/** Bounds a per-size price: anything outside this is a typo, not a repricing. */
 const sizePrice = z.coerce
   .number()
   // No currency symbol: the symbol is a store setting and this schema is built
@@ -283,12 +258,8 @@ export const priceSearchQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).optional().default(20),
 });
 
-/**
- * One request matches every row of an uploaded sheet against the catalogue.
- * The cap is the sheet size the bulk screen accepts — comfortably inside the
- * 2mb body limit, and larger than the catalogue itself.
- */
-export const MAX_BULK_PRICE_ROWS = 2000;
+// One request matches every row of an uploaded sheet against the catalogue.
+const MAX_BULK_PRICE_ROWS = 2000;
 
 export const resolvePriceNamesSchema = z.object({
   names: z
@@ -319,21 +290,9 @@ export const bulkPriceSchema = z.object({
     .max(MAX_BULK_PRICE_ROWS, `Up to ${MAX_BULK_PRICE_ROWS} perfumes can be repriced at once`),
 });
 
-/* ───────────────────────── Bulk catalogue upload ─────────────────────────
- * Creating perfumes from a spreadsheet. The sheet itself is read in the
- * browser; what arrives here is one object per perfume the admin reviewed.
- *
- * SKUs are deliberately absent: the whole point of the screen is that the
- * catalogue numbers its own new rows, so a client-supplied SKU is not accepted
- * even if one is sent.
- *
- * `prices` carries only the fills the sheet actually filled in. A size left out
- * is a size this perfume does not sell — nothing is derived from a neighbouring
- * price, here or anywhere else (see utils/sizePricing.js).
- */
 
 /** A sheet this long is a catalogue import, not a typo — and still one request. */
-export const MAX_BULK_CREATE_ROWS = 2000;
+const MAX_BULK_CREATE_ROWS = 2000;
 
 export const previewBulkCreateSchema = z.object({
   names: z
@@ -353,14 +312,6 @@ const bulkCreateItem = z.object({
     .max(MAX_STOCK_GRAMS, 'That is more stock than one upload can add')
     .optional()
     .default(0),
-  /**
-   * The photograph, already uploaded from the review screen — the spreadsheet
-   * never carries one, so this is a media-library link and not a sheet cell.
-   *
-   * Empty is allowed and means "no photo": that row is created as a draft
-   * rather than rejected, since a perfume cannot be published without an image
-   * and the admin may well be photographing the shelf afterwards.
-   */
   image: z
     .union([
       z.literal(''),
@@ -375,10 +326,6 @@ const bulkCreateItem = z.object({
     ])
     .optional()
     .default(''),
-  /**
-   * The Cloudinary id behind that photo, so the perfume owns its upload: it is
-   * cleaned up with the perfume, exactly as an image added in the wizard is.
-   */
   imagePublicId: z.string().trim().max(300).optional().default(''),
   prices: z
     .array(z.object({ sizeGrams: z.coerce.number().positive('A fill size must be above zero grams'), mrp: sizePrice }))

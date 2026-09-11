@@ -45,19 +45,7 @@ import {
 /** How many review rows are drawn at once — a thousand-row sheet is normal here. */
 const PAGE_SIZE = 25;
 
-/**
- * Restocking a whole delivery from a spreadsheet.
- *
- * The file is read in the browser and thrown away: it is never uploaded, never
- * written to the media library, never parked on the server or in the database.
- * What leaves this screen is a list of names to look up, and — only after the
- * admin has reviewed and pressed Update stock — a list of ids and grams. Close
- * the dialog at any point before that and nothing has happened at all.
- *
- * The Stock column is always a DELIVERY. 500 against a perfume holding 200
- * means 700 on hand, never 500 — the review table spells that out on every row
- * so the reading can't be got wrong, and the server does the addition itself.
- */
+// Restocking a whole delivery from a spreadsheet.
 const BulkStockUpdate = ({ onUpdated }) => {
   const snackbar = useSnackbar();
 
@@ -78,12 +66,7 @@ const BulkStockUpdate = ({ onUpdated }) => {
     setPage(1);
   };
 
-  /**
-   * Reads the chosen file and matches it against the catalogue.
-   *
-   * `file` is only ever a local handle — it is read into rows here and goes out
-   * of scope when this returns, so nothing holds the spreadsheet afterwards.
-   */
+  // Reads the chosen file and matches it against the catalogue.
   const handleFiles = async (fileList) => {
     const file = [...(fileList || [])][0];
     if (!file) return;

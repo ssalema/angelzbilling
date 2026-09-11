@@ -62,13 +62,15 @@ export const errorHandler = (err, req, res, _next) => {
 
   const body = {
     success: false,
-    // Never leak an unexpected internal message to the client in production.
+    // Never leak an unexpected internal message to the client.
     message:
-      error.statusCode >= 500 && env.isProd ? 'Something went wrong. Please try again.' : error.message,
+      error.statusCode >= 500 && !env.exposeErrorStacks
+        ? 'Something went wrong. Please try again.'
+        : error.message,
     errors: error.errors?.length ? error.errors : undefined,
   };
 
-  if (!env.isProd && error.statusCode >= 500) body.stack = err.stack;
+  if (env.exposeErrorStacks && error.statusCode >= 500) body.stack = err.stack;
 
   res.status(error.statusCode || 500).json(body);
 };

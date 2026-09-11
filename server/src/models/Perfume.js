@@ -5,13 +5,10 @@ import { resolveSizeGrams, unitsFromGrams, smallestFillGrams } from '../utils/gr
 const PERFUME_STATUSES = ['draft', 'published', 'archived'];
 
 /** How a perfume got into the catalogue — typed into the wizard, or uploaded in a sheet. */
-export const PERFUME_SOURCES = ['manual', 'bulk-upload'];
+const PERFUME_SOURCES = ['manual', 'bulk-upload'];
 
-/**
- * What the last write actually changed, so "Updated by Lucifer" can say *what*
- * Lucifer touched. Kept as slugs; the admin turns them into labels.
- */
-export const PERFUME_UPDATE_ACTIONS = [
+// What the last write actually changed, so "Updated by Lucifer" can say *what* Lucifer touched.
+const PERFUME_UPDATE_ACTIONS = [
   'created',
   'bulk-upload',
   'details',
@@ -68,12 +65,7 @@ const variantSchema = new mongoose.Schema(
     mrp: { type: Number, required: true, min: [0, 'Price cannot be negative'] },
     discountPercent: { type: Number, default: 0, min: 0, max: 100 },
     sellingPrice: { type: Number, default: 0, min: 0 },
-    /**
-     * Grams this fill removes from the perfume's single stock per unit sold —
-     * derived from the Size option on save. A variant deliberately holds NO
-     * stock of its own: every size is poured from the same bulk weight kept on
-     * the parent perfume, so a variant only carries size, price and SKU.
-     */
+    // Grams this fill removes from the perfume's single stock per unit sold — derived from the Size option on save.
     sizeGrams: { type: Number, default: 0, min: [0, 'Fill size cannot be negative'] },
     isActive: { type: Boolean, default: true },
     image: {
@@ -120,14 +112,12 @@ const perfumeSchema = new mongoose.Schema(
 
     /** Grams sold per unit when the perfume has no variants (its pack size). */
     sizeGrams: { type: Number, default: 0, min: [0, 'Pack size cannot be negative'] },
-    /**
-     * THE inventory for this perfume, in GRAMS — one bulk pool every fill size
-     * is poured from, whether or not it has variants. Selling a 50gm variant
-     * takes 50 g out of here; nothing else in this schema holds stock.
-     */
     stock: { type: Number, default: 0, min: [0, 'Stock cannot be negative'] },
     /** Also grams — the weight at which the low stock alert fires, measured on `stock`. */
     lowStockThreshold: { type: Number, default: 100, min: 0 },
+
+    // `stock - lowStockThreshold`, stored rather than computed.
+    stockMargin: { type: Number, default: 0 },
 
     images: {
       type: [mediaSchema],
@@ -152,11 +142,6 @@ const perfumeSchema = new mongoose.Schema(
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     createdVia: { type: String, enum: PERFUME_SOURCES, default: 'manual' },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-    /**
-     * The kind of the last change — 'stock', 'price', 'details'… Written beside
-     * `updatedBy` on every path that touches a perfume, so the view page can
-     * show who changed it and what they changed in one line.
-     */
     updatedAction: { type: String, enum: PERFUME_UPDATE_ACTIONS, default: 'created' },
   },
   {
@@ -171,24 +156,14 @@ const perfumeSchema = new mongoose.Schema(
 perfumeSchema.index({ status: 1, createdAt: -1 });
 perfumeSchema.index({ category: 1, subCategory: 1 });
 perfumeSchema.index({ 'variants.sku': 1 });
-/**
- * The billing screen's type-ahead filters on `status: 'published'` and sorts by
- * name — the hottest read in the app, since it fires while a biller types. This
- * compound serves the filter and the sort from one index scan.
- *
- * It also covers the plain `name` sort on the catalogue list. A text index
- * cannot serve a sort, so the one below does not help here despite covering the
- * same field.
- */
 perfumeSchema.index({ status: 1, name: 1 });
-/**
- * The remaining sortable columns on the catalogue list. Without these, sorting
- * by price or stock pulled the whole matching set into memory to sort it, which
- * Mongo refuses to do past 32 MB.
- */
+// The remaining sortable columns on the catalogue list.
 perfumeSchema.index({ name: 1 });
 perfumeSchema.index({ mrp: -1 });
 perfumeSchema.index({ stock: 1 });
+// The stock filters, which were `$expr` and therefore unindexable.
+perfumeSchema.index({ stockMargin: 1 });
+perfumeSchema.index({ status: 1, stockMargin: 1 });
 perfumeSchema.index({ name: 'text', brand: 'text', sku: 'text', tags: 'text' });
 
 /** Grams on hand. Variants share this one pool, so it is simply `stock`. */
@@ -204,16 +179,16 @@ perfumeSchema.virtual('primaryImage').get(function primaryImage() {
   return this.images?.[0]?.url || this.variants?.find((v) => v.image?.url)?.image?.url || '';
 });
 
-/**
- * Keep every derived field in sync on write, so reads never have to compute.
- * This is what lets the perfume list sort and filter by real selling price.
- */
+// Keep every derived field in sync on write, so reads never have to compute.
 perfumeSchema.pre('save', function syncDerived(next) {
   if (this.isModified('name') && this.name) {
     this.slug = slugify(this.name, { lower: true, strict: true, trim: true });
   }
 
   this.finalPrice = computeFinalPrice(this.mrp, this.discountPercent);
+  // Kept in step with both of its inputs, so a threshold change is as covered as
+  // a stock change. Every other write path maintains it too — see the field.
+  this.stockMargin = round2((this.stock || 0) - (this.lowStockThreshold ?? 100));
 
   if (this.hasVariants && this.variants?.length) {
     this.variants.forEach((variant) => {
@@ -233,11 +208,7 @@ perfumeSchema.pre('save', function syncDerived(next) {
   next();
 });
 
-/**
- * Whole bottles sellable right now out of the shared weight. With variants the
- * answer depends on which fill you pour, so we report the best case — the
- * smallest active fill — which is what "can this still be sold at all?" means.
- */
+// Whole bottles sellable right now out of the shared weight.
 perfumeSchema.virtual('unitsInStock').get(function unitsInStock() {
   return unitsFromGrams(this.stock, smallestFillGrams(this));
 });

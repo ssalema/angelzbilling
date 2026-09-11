@@ -1,13 +1,6 @@
 import { createTheme, alpha } from '@mui/material/styles';
 
-/**
- * Angelz Desire brand system.
- *
- * The palette is deliberately not SaaS blue — a fragrance house reads as
- * noir plum, champagne gold and ivory. Headings use a serif display face,
- * data uses a clean sans, and separation comes from gold hairlines rather
- * than heavy drop shadows.
- */
+// Angelz Desire brand system.
 
 export const brand = {
   plum: '#3E2545',
@@ -24,11 +17,7 @@ export const brand = {
   line: '#E8DFD2',
 };
 
-/**
- * Surface tints — the faint washes used for hover rows, avatar wells, icon
- * halos and selected states. Every translucent fill in the panel comes from
- * here, so "faint plum" is one value rather than five hand-typed rgba strings.
- */
+// Surface tints — the faint washes used for hover rows, avatar wells, icon halos and selected states.
 export const surface = {
   plumFaint: alpha(brand.plum, 0.04),
   plumSoft: alpha(brand.plum, 0.06),
@@ -36,7 +25,6 @@ export const surface = {
   goldFaint: alpha(brand.gold, 0.05),
   goldSoft: alpha(brand.gold, 0.14),
   successSoft: alpha('#1E6B4F', 0.1),
-  warningSoft: alpha('#B4801A', 0.12),
   errorSoft: alpha('#9B2C2C', 0.1),
   // Ivory wash for inset panels; ink overlay for badges laid over an image.
   ivoryWash: alpha(brand.ivory, 0.7),
@@ -45,16 +33,30 @@ export const surface = {
   inkOverlay: alpha(brand.ink, 0.78),
 };
 
-/**
- * The corner a Card turns, in px.
- *
- * A bordered block that is not a `<Card>` — a table in a dialog, a specimen
- * panel — still has to turn the same corner, or the panel reads as two design
- * systems stacked. `sx: { borderRadius: 2.5 }` was the usual guess and resolves
- * to 30px, which is more than twice a Card's, so this is the number to reach
- * for instead. The MuiCard and MuiPaper overrides below take it from here too.
- */
+// The corner a Card turns, in px.
 export const CARD_RADIUS = 14;
+
+// The corner a *small* block inside a card turns — a tinted totals well, a collapsed row, a summary strip.
+export const INSET_RADIUS = 10;
+
+// Grid gutters.
+export const GUTTER = {
+  /** Top-level page grid: panels laid side by side. */
+  page: 2.5,
+  /** A row of equal tiles — stat cards, media slots. */
+  cards: 2.25,
+  /** Form fields inside a card or dialog. */
+  fields: 2,
+};
+
+// The bar that sticks to the bottom of a long form carrying its save actions.
+export const STICKY_BAR = {
+  /** Clear of the viewport edge on a desktop, flush to it on a phone. */
+  bottom: { xs: 0, sm: 12 },
+  /** Above page content and the sticky summary cards, below the topbar menu. */
+  zIndex: 3,
+  padding: 2,
+};
 
 /** Elevation is a token too, so a toast and a sticky bar cast the same light. */
 export const SHADOW = {
@@ -63,58 +65,29 @@ export const SHADOW = {
   sticky: `0 -2px 16px ${alpha(brand.ink, 0.1)}`,
 };
 
-/**
- * The sidebar and the login brand panel sit on plum, so their text and rules
- * come from this set rather than the light-ground palette above.
- */
 export const onPlum = {
   text: 'rgba(255,255,255,0.9)',
-  textStrong: '#FFFFFF',
   textMuted: 'rgba(255,255,255,0.72)',
   textFaint: 'rgba(255,255,255,0.55)',
   textGhost: 'rgba(255,255,255,0.42)',
   divider: 'rgba(255,255,255,0.1)',
   hover: 'rgba(255,255,255,0.08)',
   selected: alpha(brand.gold, 0.2),
-  chip: 'rgba(255,255,255,0.08)',
 };
 
-/**
- * One padding scale for cards, so a panel body sits the same distance from its
- * edge on every screen. `CARD_PAD` is the standard body; `CARD_HEAD_PAD` is the
- * header strip above a Divider, which carries less bottom padding.
- */
+// One padding scale for cards, so a panel body sits the same distance from its edge on every screen.
 export const CARD_PAD = { xs: 2, sm: 2.5 };
 export const CARD_HEAD_PAD = { px: { xs: 2, sm: 2.5 }, pt: { xs: 2, sm: 2.25 }, pb: 1.75 };
 
-/**
- * The single-image frame — store logo, favicon, branch logo. One height and one
- * preview inset everywhere, so a logo looks the same in Settings, in the branch
- * dialog and wherever a slot lands next. The square corners come from
- * `<Dropzone variant="frame" />`: artwork is being cropped to a box, and a
- * rounded box quietly lies about where its edges are.
- */
+// The single-image frame — store logo, favicon, branch logo.
 export const LOGO_FRAME = {
   height: 176,
-  /**
-   * The frame for a square mark. A wordmark is roughly 400×120, so a landscape
-   * frame fits it with room to spare; a favicon is as tall as it is wide, and
-   * in that same frame it can only ever be shown at frame height — which is
-   * most of the width wasted and a small icon. This one is square-ish, so the
-   * favicon lands about as large as the logo beside it.
-   */
+  // The frame for a square mark.
   squareHeight: 260,
   /** Breathing room between the dashed drop target and the well inside it. */
   gap: 1.25,
   /** The well's corner, a touch tighter than the dashed frame around it. */
   radius: '6px',
-  /**
-   * Laid out against the well rather than sized by it: the image is centred by
-   * `margin: auto` inside an absolutely positioned box, so its percentage caps
-   * resolve against a height that is definitely known. Sized by `maxHeight`
-   * alone it depended on the flex chain above resolving one, and a square mark
-   * dropped into a slot that did not simply overflowed the frame.
-   */
   preview: {
     position: 'absolute',
     inset: 0,
@@ -125,14 +98,7 @@ export const LOGO_FRAME = {
   },
 };
 
-/**
- * The five type sizes available outside the Typography variants.
- *
- * Screens used to reach for 28 different hand-typed rem values, most of them
- * landing a hair off `caption` or `body2` — close enough to look like a mistake
- * rather than a decision. Anything that genuinely needs a size not covered by a
- * variant takes one of these instead.
- */
+// The five type sizes available outside the Typography variants.
 export const FONT = {
   micro: '0.68rem', // eyebrows, dense chips
   tiny: '0.72rem', // chart tooltips, secondary metadata
@@ -159,11 +125,6 @@ export const ICON = {
   illustration: 32,
 };
 
-/**
- * Figures — money, counts, percentages — always read in the sans face, never
- * the Cormorant display serif: a number is data, not a heading. Spread this
- * onto any Typography that shows a large figure so they all match.
- */
 export const numericText = {
   fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif",
   fontWeight: 700,
@@ -201,10 +162,7 @@ export const statusColors = {
   out_of_stock: { color: '#9B2C2C', bg: '#FBE6E6' },
 };
 
-/**
- * Money coming off a price is good news. Error red is reserved for faults —
- * out of stock, deactivated, deleted — so a discount never borrows it.
- */
+// Money coming off a price is good news.
 export const DISCOUNT_COLOR = '#1E6B4F';
 
 const theme = createTheme({
@@ -283,7 +241,7 @@ const theme = createTheme({
         root: {
           border: `1px solid ${brand.line}`,
           borderRadius: CARD_RADIUS,
-          boxShadow: '0 1px 2px rgba(36,24,38,0.04)',
+          boxShadow: SHADOW.card,
         },
       },
     },
@@ -292,12 +250,6 @@ const theme = createTheme({
       defaultProps: { disableElevation: true },
       styleOverrides: {
         root: { borderRadius: 10, paddingInline: 18, minHeight: 40 },
-        // Nearly every disabled button here is disabled because it is *busy* —
-        // "Signing in…", "Saving…" — and MUI's default paints that state near
-        // black, so the label and its spinner disappear at the exact moment the
-        // user is watching them. Keep the brand fill, keep the label (and any
-        // color="inherit" spinner) white, and show "waiting" by dimming the
-        // fill rather than the text.
         contained: {
           '&.Mui-disabled': { color: '#fff', backgroundColor: alpha(brand.plum, 0.55) },
           '&.Mui-disabled .MuiCircularProgress-root': { color: '#fff' },
@@ -391,3 +343,4 @@ const theme = createTheme({
 });
 
 export default theme;
+

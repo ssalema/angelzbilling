@@ -5,37 +5,14 @@ import { surface, brand } from '../../theme/index.js';
 /** Corner of the 'frame' outline, in px — the SVG needs the same number. */
 const FRAME_RADIUS = 8;
 
-/**
- * The dashed outline of a 'frame' dropzone, as a background SVG. The rect sits
- * on the edge and is stroked at double width, so the outer half is clipped away
- * and a clean 1.5px line is left inside — the usual trick, and it avoids `calc`
- * inside SVG geometry, which browsers do not agree on.
- */
+// The dashed outline of a 'frame' dropzone, as a background SVG.
 const frameOutline = (color, dashes = true) => {
   const dash = dashes ? ' stroke-dasharray="8 6"' : '';
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" fill="none"><rect width="100%" height="100%" rx="${FRAME_RADIUS}" stroke="${color}" stroke-width="3"${dash}/></svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 };
 
-/**
- * The one drag-and-drop file target in the panel.
- *
- * It is a real `<button>`, so it takes keyboard focus, fires on Enter and
- * Space, and announces itself to a screen reader — the three hand-rolled
- * `<Box onClick>` dropzones this replaces did none of that.
- *
- * The caller owns what is shown inside: pass a render function and it receives
- * `{ dragging, disabled }` so the idle, hovered and full states stay the
- * caller's business, while focus, keyboard and file plumbing stay here.
- *
- * `variant` picks the frame shape: 'panel' (the wide drag-and-drop area),
- * 'tile' (a grid cell) or 'frame' (a single-image slot — an SVG-stroked
- * outline with a soft corner).
- *
- * `outline` softens that frame once it holds artwork: a dashed line invites you
- * to drop something, so an empty slot keeps it, while a slot already showing a
- * logo reads better as a picture in a plain mount.
- */
+// The one drag-and-drop file target in the panel.
 const Dropzone = ({
   onFiles,
   accept,
@@ -61,12 +38,7 @@ const Dropzone = ({
 
   const active = dragging && !disabled;
 
-  // 'frame' — the single-image slot (logo, favicon, branch logo). A CSS dashed
-  // border draws whatever dash length the browser feels like at 1.5px, so the
-  // outline is stroked as an SVG instead: one long dash, one clear gap, the
-  // same on every browser.
-  // A drag in progress goes back to dashes whatever the slot holds — that is
-  // the line telling you the drop will land.
+  // 'frame' — the single-image slot (logo, favicon, branch logo).
   const dashes = outline !== 'solid';
   const dashed =
     variant === 'frame'

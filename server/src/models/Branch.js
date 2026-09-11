@@ -34,14 +34,7 @@ const branchSchema = new mongoose.Schema(
     // on restores exactly these branches and leaves manual deactivations alone.
     deactivatedByFeature: { type: Boolean, default: false },
 
-    /**
-     * A branch may print under its own branding; when off it inherits the
-     * store's. One switch covers both marks, so a branch is never half itself —
-     * its own logo on the bill header but the store's favicon beside it.
-     *
-     * The field keeps its original name: existing branches carry it, and a
-     * rename would silently reset every one of them to the store branding.
-     */
+    // A branch may print under its own branding; when off it inherits the store's.
     hasOwnLogo: { type: Boolean, default: false },
     logo: {
       url: { type: String, default: '' },

@@ -22,21 +22,9 @@ import useApiResource from '../../hooks/useApiResource.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
 import { formatCurrency, formatNumber } from '../../utils/format.js';
-import { brand } from '../../theme/index.js';
+import { GUTTER, brand } from '../../theme/index.js';
 import { DEFAULT_DATE_RANGE, isDefaultRange, locationLabel } from '../../utils/constants.js';
 
-/**
- * Feeds one widget, from the combined payload while it is in step with the
- * page, and from its own endpoint once it is not.
- *
- * `immediate: !shared` is what drives the switch: while the widget is shared
- * its own request never fires, and when `shared` goes false the flag flips to
- * true and `useApiResource` runs it. `shared` is in the dependency list so
- * going back in step re-runs the effect too.
- *
- * The returned shape is exactly `useApiResource`'s, so a widget component
- * cannot tell which source it was given.
- */
 const useSharedWidget = (overview, key, shared, fetcher, deps) => {
   const own = useApiResource(fetcher, [...deps, shared], { immediate: !shared });
 
@@ -50,10 +38,6 @@ const useSharedWidget = (overview, key, shared, fetcher, deps) => {
   };
 };
 
-/**
- * The page loads in one request and every widget owns its own range, so
- * narrowing the donut refetches only the donut — not the whole page.
- */
 const DashboardPage = () => {
   const { isAdmin, isSuperAdmin, user } = useAuth();
   const { branchesEnabled } = useSettings();
@@ -75,17 +59,15 @@ const DashboardPage = () => {
 
   const params = useCallback((range) => ({ range: range.range, from: range.from, to: range.to }), []);
 
-  /**
-   * One request brings the whole page back at the main range. Opening the
-   * dashboard used to fire eight at once, and the browser will only run a few
-   * per origin in parallel, so the lower widgets sat queued behind the top ones
-   * for no reason — every one of them is driven by the same range on load.
-   */
-  const overview = useApiResource(() => dashboardApi.overview(params(mainRange)), [
-    mainRange.range,
-    mainRange.from,
-    mainRange.to,
-  ]);
+  // One request brings the whole page back at the main range.
+  const overview = useApiResource(
+    (signal) => dashboardApi.overview(params(mainRange), signal),
+    [mainRange.range, mainRange.from, mainRange.to],
+    // Coming back to the dashboard paints the last figures at once and refreshes
+    // behind them, rather than showing eight skeletons for a second.
+    // Bills and catalogue writes both move these figures, so the page follows both.
+    { cacheKey: 'dashboard:overview', watch: ['bills', 'perfumes'] }
+  );
 
   const useWidget = (key, shared, fetcher, deps) => useSharedWidget(overview, key, shared, fetcher, deps);
 
@@ -152,7 +134,7 @@ const DashboardPage = () => {
       <InlineError error={summary.error} onRetry={summary.reload} />
 
       {/* ── Summary cards ── */}
-      <Grid container spacing={2.25} sx={{ mb: 2.5 }}>
+      <Grid container spacing={GUTTER.cards} sx={{ mb: 2.5 }}>
         <Grid item xs={12} sm={6} lg={3}>
           <StatCard
             // Money actually taken. A part-paid bill counts for what came in,
@@ -216,7 +198,9 @@ const DashboardPage = () => {
             label="Customers"
             value={formatNumber(stats?.customers?.value)}
             growth={stats?.customers?.growth}
-            caption={`${formatNumber(stats?.customers?.newInPeriod || 0)} billed in this period`}
+            // The value is everyone ever billed; the caption is the ones this
+            // period brought in, which is what the growth chip measures.
+            caption={`${formatNumber(stats?.customers?.newInPeriod || 0)} new in this period`}
             icon={PeopleAltOutlined}
             color={brand.plumLight}
             loading={summary.loading}
@@ -243,7 +227,7 @@ const DashboardPage = () => {
       {/* ── How bills settled, and how customers paid ──
           Two questions about the same bills, so they sit side by side: the donut
           is how many were settled in full, the pie is what they paid with. */}
-      <Grid container spacing={2.25} sx={{ mb: 2.5 }}>
+      <Grid container spacing={GUTTER.cards} sx={{ mb: 2.5 }}>
         <Grid item xs={12} md={5}>
           <BreakdownChart
             title="Bill status"
@@ -307,7 +291,7 @@ const DashboardPage = () => {
       </Box>
 
       {/* ── Recent bills + low stock ── */}
-      <Grid container spacing={2.25}>
+      <Grid container spacing={GUTTER.cards}>
         <Grid item xs={12} md={7}>
           <RecentBills
             data={recentBills.data}

@@ -7,19 +7,10 @@ const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  /**
-   * Store identity that arrives with the session itself, so SettingsProvider
-   * has something to draw with immediately instead of waiting for this request
-   * to finish and then making one of its own.
-   */
   const [bootSettings, setBootSettings] = useState(null);
   const [booting, setBooting] = useState(true);
   const [sessionExpired, setSessionExpired] = useState(false);
 
-  /**
-   * On a page refresh the in-memory access token is gone, but the httpOnly
-   * refresh cookie is not — so we silently trade it for a new session.
-   */
   useEffect(() => {
     let cancelled = false;
 
@@ -84,15 +75,7 @@ export const AuthProvider = ({ children }) => {
     return fresh;
   }, []);
 
-  /**
-   * Seeing and changing are two different questions.
-   *
-   * `isSuperAdmin` answers what this account may SEE — every branch, user, bill
-   * and setting, whether or not a branch is assigned. `isMainSuperAdmin` answers
-   * what it may CHANGE store-wide: the main business details, the branch
-   * registry, another branch's team. A Super Admin with a branch edits inside
-   * that branch only, which is what `canEditBranch` answers per record.
-   */
+  // Seeing and changing are two different questions.
   const isSuperAdmin = user?.role === 'superadmin';
   // Every account sits at a location; no branch means the Head Office, and the
   // Head Office Super Admin is the one with authority over the whole business.

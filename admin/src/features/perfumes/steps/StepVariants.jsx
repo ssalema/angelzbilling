@@ -37,7 +37,7 @@ import SectionTitle from '../../../components/common/SectionTitle.jsx';
 import { PERFUME_SIZES, SELECTOR_STYLES } from '../../../utils/constants.js';
 import { currencySymbol, formatCurrency, formatGrams, formatNumber, unitsFromGrams } from '../../../utils/format.js';
 import { computeFinalPrice, sizeGramsFor } from '../perfumeSchema.js';
-import { FONT, CARD_HEAD_PAD, CARD_PAD, ICON, brand, numericText, surface } from '../../../theme/index.js';
+import { FONT, CARD_HEAD_PAD, CARD_PAD, CARD_RADIUS, GUTTER, INSET_RADIUS, ICON, brand, numericText, surface } from '../../../theme/index.js';
 
 /** Cartesian perfume of every attribute's values — {Size:'50gm'} × {Colour:'Gold'}. */
 const buildCombinations = (attributes) => {
@@ -69,9 +69,7 @@ const VariantRow = ({ index, attributeNames, onRemove, onOpenDetail, expanded, p
   const variant = useWatch({ control, name: `variants.${index}` });
 
   const sellingPrice = computeFinalPrice(variant?.mrp, variant?.discountPercent);
-  // A variant holds no stock of its own. Its fill size decides how much of the
-  // perfume's single bulk weight one unit takes, so "how many of these can I
-  // sell?" is that shared weight divided by this fill — shown, never typed.
+  // A variant holds no stock of its own.
   const fillGrams = sizeGramsFor(variant);
   const unitsLeft = unitsFromGrams(perfumeStock, fillGrams);
   const outOfStock = unitsLeft === 0;
@@ -210,7 +208,7 @@ const VariantRow = ({ index, attributeNames, onRemove, onOpenDetail, expanded, p
       <TableRow>
         <TableCell colSpan={attributeNames.length + 8} sx={{ py: 0, border: 0 }}>
           <Collapse in={expanded} unmountOnExit>
-            <Box sx={{ py: 2, px: 1, bgcolor: surface.ivoryWash, borderRadius: 2, mb: 1 }}>
+            <Box sx={{ py: 2, px: 1, bgcolor: surface.ivoryWash, borderRadius: `${INSET_RADIUS}px`, mb: 1 }}>
               <RHFTextField
                 name={`variants.${index}.image.url`}
                 label="Variant image URL"
@@ -227,11 +225,7 @@ const VariantRow = ({ index, attributeNames, onRemove, onOpenDetail, expanded, p
 
 /* ───────────────────── Price for a perfume with no variants ───────────────────── */
 
-/**
- * Pricing belongs to the variants: each combination carries its own MRP and
- * discount in the table below. A perfume sold in one size has no such row, so
- * this is where its single price is entered — the same two fields, once.
- */
+// Pricing belongs to the variants: each combination carries its own MRP and discount in the table below.
 const BasePricing = () => {
   const { control } = useFormContext();
   const [mrp, discountPercent] = useWatch({ control, name: ['mrp', 'discountPercent'] });
@@ -245,7 +239,7 @@ const BasePricing = () => {
         title="Price"
         description="This perfume sells in one size, so it has a single price. Turn variants on above to price each fill size separately."
       />
-      <Grid container spacing={2.25} alignItems="stretch">
+      <Grid container spacing={GUTTER.cards} alignItems="stretch">
         <Grid item xs={12} sm={6} md={4}>
           <RHFNumberField
             name="mrp"
@@ -270,7 +264,7 @@ const BasePricing = () => {
               height: '100%',
               border: 1.5,
               borderColor: 'primary.main',
-              borderRadius: 2.5,
+              borderRadius: `${CARD_RADIUS}px`,
               px: 2,
               py: 1.5,
               bgcolor: surface.plumFaint,
@@ -321,10 +315,6 @@ const StepVariants = () => {
 
   const possibleCount = useMemo(() => buildCombinations(attributes).length, [attributes]);
 
-  /**
-   * Regenerating preserves anything already typed for a combination that still
-   * exists — an admin who edited 12 prices should not lose them by adding a size.
-   */
   const generateCombinations = () => {
     const baseSku = getValues('sku');
     // Seeds each new row so a perfume that already had a single price does not
@@ -422,7 +412,7 @@ const StepVariants = () => {
 
       {!hasVariants ? (
         <>
-          <Card sx={{ p: 2 }}>
+          <Card sx={{ p: CARD_PAD }}>
             <EmptyState
               icon={AutoAwesome}
               title="Selling one size only"
@@ -451,7 +441,7 @@ const StepVariants = () => {
 
             <Stack spacing={2}>
               {attributeArray.fields.map((field, index) => (
-                <Box key={field.id} sx={{ border: 1, borderColor: 'divider', borderRadius: 2.5, p: 2 }}>
+                <Box key={field.id} sx={{ border: 1, borderColor: 'divider', borderRadius: `${CARD_RADIUS}px`, p: 2 }}>
                   <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems="flex-start">
                     <Box sx={{ flex: 1, width: '100%' }}>
                       <RHFTextField

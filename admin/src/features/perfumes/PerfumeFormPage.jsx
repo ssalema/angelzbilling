@@ -26,6 +26,7 @@ import PublishedWithChangesOutlined from '@mui/icons-material/PublishedWithChang
 
 import PageHeader from '../../components/common/PageHeader.jsx';
 import ConfirmDialog from '../../components/common/ConfirmDialog.jsx';
+import StickyActionBar from '../../components/common/StickyActionBar.jsx';
 import { ErrorState } from '../../components/common/StateViews.jsx';
 
 import StepBasicInfo from './steps/StepBasicInfo.jsx';
@@ -35,7 +36,7 @@ import StepVariants from './steps/StepVariants.jsx';
 import StepPreview from './steps/StepPreview.jsx';
 
 import { perfumeSchema, emptyPerfume, stepFields, basePricingFor } from './perfumeSchema.js';
-import { FONT, SHADOW } from '../../theme/index.js';
+import { CARD_PAD, FONT, GUTTER, INSET_RADIUS } from '../../theme/index.js';
 import { perfumeApi } from '../../api/endpoints.js';
 import useApiResource from '../../hooks/useApiResource.js';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
@@ -109,11 +110,6 @@ const PerfumeFormPage = () => {
     });
   }, [existing.data, reset]);
 
-  /**
-   * A new perfume numbers itself: the next SKU in the catalogue's run drops
-   * into the field so nobody has to look up what the last one was. It stays
-   * editable, and a failed lookup just leaves the box empty to type into.
-   */
   useEffect(() => {
     if (isEdit) return undefined;
     let cancelled = false;
@@ -164,9 +160,6 @@ const PerfumeFormPage = () => {
 
   const save = async (values, statusOverride) => {
     setPendingAction(statusOverride === 'draft' ? 'draft' : 'publish');
-    // The API still stores one price per perfume, but nobody types it any more:
-    // with variants it is the cheapest active row, otherwise the base price
-    // from the variants step.
     const pricing = basePricingFor(values);
     const payload = {
       ...values,
@@ -221,10 +214,18 @@ const PerfumeFormPage = () => {
     }
   );
 
+  // Loading, error and loaded all render the same trail, so the page does not
+  // lose its place in the hierarchy the moment the perfume fails to arrive.
+  const crumbs = [
+    { label: 'Dashboard', to: '/dashboard' },
+    { label: 'Perfumes', to: '/perfumes' },
+    { label: isEdit ? 'Edit' : 'New' },
+  ];
+
   if (existing.error) {
     return (
       <Box>
-        <PageHeader title="Edit perfume" breadcrumbs={[{ label: 'Perfumes', to: '/perfumes' }, { label: 'Edit' }]} />
+        <PageHeader title="Edit perfume" breadcrumbs={crumbs} />
         <Card>
           <ErrorState error={existing.error} onRetry={existing.reload} />
         </Card>
@@ -237,10 +238,10 @@ const PerfumeFormPage = () => {
       <Box>
         <PageHeader
           title="Edit perfume"
-          breadcrumbs={[{ label: 'Perfumes', to: '/perfumes' }, { label: 'Edit' }]}
+          breadcrumbs={crumbs}
         />
         {/* Mirrors the wizard: the stepper rail, then the fields of step one. */}
-        <Card sx={{ p: 3, mb: 2.5 }}>
+        <Card sx={{ p: CARD_PAD, mb: 2.5 }}>
           <Stack direction="row" spacing={2} sx={{ overflow: 'hidden' }}>
             {STEPS.map((step) => (
               <Stack key={step} direction="row" spacing={1} alignItems="center" sx={{ flex: 1, minWidth: 0 }}>
@@ -250,18 +251,18 @@ const PerfumeFormPage = () => {
             ))}
           </Stack>
         </Card>
-        <Card sx={{ p: 3 }}>
+        <Card sx={{ p: CARD_PAD }}>
           <Skeleton variant="text" width={200} height={22} />
           <Divider sx={{ my: 2 }} />
-          <Grid container spacing={2}>
+          <Grid container spacing={GUTTER.fields}>
             {Array.from({ length: 6 }).map((_, index) => (
               <Grid item xs={12} sm={6} key={index}>
                 <Skeleton variant="text" width="45%" height={13} />
-                <Skeleton variant="rounded" height={44} sx={{ borderRadius: 2, mt: 0.5 }} />
+                <Skeleton variant="rounded" height={44} sx={{ borderRadius: `${INSET_RADIUS}px`, mt: 0.5 }} />
               </Grid>
             ))}
           </Grid>
-          <Skeleton variant="rounded" height={110} sx={{ borderRadius: 2, mt: 2 }} />
+          <Skeleton variant="rounded" height={110} sx={{ borderRadius: `${INSET_RADIUS}px`, mt: 2 }} />
         </Card>
       </Box>
     );
@@ -278,14 +279,10 @@ const PerfumeFormPage = () => {
             ? `Updating "${existing.data?.name || ''}"`
             : 'Five short steps — you can save as a draft at any point'
         }
-        breadcrumbs={[
-          { label: 'Dashboard', to: '/dashboard' },
-          { label: 'Perfumes', to: '/perfumes' },
-          { label: isEdit ? 'Edit' : 'New' },
-        ]}
+        breadcrumbs={crumbs}
       />
 
-      <Card sx={{ p: { xs: 2, sm: 3 }, mb: 2.5 }}>
+      <Card sx={{ p: CARD_PAD, mb: 2.5 }}>
         {/*
           Five labels side by side are unreadable on a phone, so below `sm` the
           stepper keeps only its numbered dots and the current step is named
@@ -335,18 +332,12 @@ const PerfumeFormPage = () => {
       <FormProvider {...methods}>
         <form
           onSubmit={(event) => {
-            // Only the final step saves. Enter inside a field — common while
-            // editing variants — must never submit the wizard early; it just
-            // moves on like Continue does.
+            // Only the final step saves.
             if (!isLastStep) {
               event.preventDefault();
               goToStep(activeStep + 1);
               return;
             }
-            // "Save changes" appears exactly where Continue just was, so a
-            // double click (or a held Enter) on Continue would land on it and
-            // save the moment the last step opened. Ignore a submit that
-            // arrives before the step has had time to be read.
             if (Date.now() - stepEnteredAt.current < STEP_SETTLE_MS) {
               event.preventDefault();
               return;
@@ -361,31 +352,16 @@ const PerfumeFormPage = () => {
           {activeStep === 3 && <StepVariants />}
           {activeStep === 4 && <StepPreview />}
 
-          <Card
-            sx={{
-              mt: 2.5,
-              position: 'sticky',
-              bottom: { xs: 0, sm: 12 },
-              zIndex: 2,
-              overflow: 'hidden',
-              backdropFilter: 'blur(6px)',
-              boxShadow: SHADOW.sticky,
-            }}
-          >
-            {/* Thin wizard progress across the top of the bar. */}
-            <LinearProgress
-              variant="determinate"
-              value={((activeStep + 1) / STEPS.length) * 100}
-              sx={{ height: 3 }}
-            />
-            <Divider />
-            <Stack
-              direction={{ xs: 'column-reverse', sm: 'row' }}
-              justifyContent="space-between"
-              alignItems={{ xs: 'stretch', sm: 'center' }}
-              spacing={1.5}
-              sx={{ p: 2 }}
-            >
+          <StickyActionBar
+            progress={
+              /* Thin wizard progress across the top of the bar. */
+              <LinearProgress
+                variant="determinate"
+                value={((activeStep + 1) / STEPS.length) * 100}
+                sx={{ height: 3 }}
+              />
+            }
+            status={
               <Stack direction="row" alignItems="center" spacing={2} sx={{ minWidth: 0 }}>
                 <Button
                   type="button"
@@ -407,12 +383,8 @@ const PerfumeFormPage = () => {
                   </Typography>
                 </Box>
               </Stack>
-
-              <Stack
-                direction="row"
-                spacing={1.5}
-                sx={{ width: { xs: '100%', sm: 'auto' }, flexShrink: 0 }}
-              >
+            }
+          >
                 <Tooltip title="Save what you have and finish later">
                   <span style={{ display: 'flex', flex: 1 }}>
                     <Button
@@ -465,9 +437,7 @@ const PerfumeFormPage = () => {
                     Continue
                   </Button>
                 )}
-              </Stack>
-            </Stack>
-          </Card>
+          </StickyActionBar>
         </form>
       </FormProvider>
 

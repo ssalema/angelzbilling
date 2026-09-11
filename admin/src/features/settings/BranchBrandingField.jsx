@@ -4,17 +4,9 @@ import { Box, Stack, Typography } from '@mui/material';
 import { branchApi } from '../../api/endpoints.js';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import LogoDropzone from '../../components/common/LogoDropzone.jsx';
-import { MAX_UPLOAD_BYTES } from '../../utils/constants.js';
+import { rejectImageReason } from '../../utils/constants.js';
 
-/**
- * One branding slot — logo or favicon — for a single branch.
- *
- * It reads like the store's own Branding panel on purpose: same dropzone, same
- * label/hint row, same two artwork sizes. The difference is when the file
- * moves. An existing branch uploads straight away; a branch being created has
- * no id yet, so the file is held here and the dialog uploads it once the branch
- * exists.
- */
+// One branding slot — logo or favicon — for a single branch.
 const BranchBrandingField = ({
   kind,
   label,
@@ -26,10 +18,6 @@ const BranchBrandingField = ({
   onUploaded,
   disabled,
   frameHeight,
-  /**
-   * A held-back file being uploaded by the dialog once the branch exists —
-   * the work is out of this component's hands, so its progress comes in.
-   */
   uploading = false,
   uploadProgress = null,
 }) => {
@@ -53,12 +41,9 @@ const BranchBrandingField = ({
 
   const choose = async (file) => {
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      snackbar.error('Choose an image file (PNG, JPG, WEBP or GIF)');
-      return;
-    }
-    if (file.size > MAX_UPLOAD_BYTES) {
-      snackbar.error('That image is over 5MB. Please choose a smaller one.');
+    const rejected = rejectImageReason(file);
+    if (rejected) {
+      snackbar.error(rejected);
       return;
     }
 

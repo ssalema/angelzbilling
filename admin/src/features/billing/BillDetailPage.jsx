@@ -40,7 +40,7 @@ import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { formatCurrency, formatDate } from '../../utils/format.js';
 import { PAYMENT_METHOD_LABELS, locationOf } from '../../utils/constants.js';
 import { formatContactNumber } from '../../utils/countries.js';
-import { FONT, CARD_HEAD_PAD, CARD_PAD, brand, numericText, statusColors } from '../../theme/index.js';
+import { FONT, CARD_HEAD_PAD, CARD_PAD, GUTTER, brand, numericText, statusColors } from '../../theme/index.js';
 
 // Long bills scroll inside the items card instead of pushing the summary
 // column far off screen. One row is an avatar plus two lines of text.
@@ -62,7 +62,7 @@ const BillDetailPage = () => {
   const slipRef = useRef(null);
   const [downloading, setDownloading] = useState(false);
 
-  const { data: bill, loading, error, reload } = useApiResource(() => billApi.get(id), [id]);
+  const { data: bill, loading, error, reload } = useApiResource(() => billApi.get(id), [id], { watch: 'bills' });
 
   // ?print=1 opens the browser print dialog as soon as the bill has rendered.
   useEffect(() => {
@@ -94,9 +94,7 @@ const BillDetailPage = () => {
     }
   };
 
-  // Every state renders the same header, so the page does not jump when the
-  // bill lands. A bill number is a code, not a display heading — it reads as
-  // data, in the same sans face as the rest of the page.
+  // Every state renders the same header, so the page does not jump when the bill lands.
   const crumbs = [
     { label: 'Dashboard', to: '/dashboard' },
     { label: 'Bill records', to: '/billing' },
@@ -115,7 +113,7 @@ const BillDetailPage = () => {
     return (
       <Box>
         <PageHeader title={<Skeleton variant="text" width={220} />} breadcrumbs={crumbs} sx={headerSx} />
-        <Grid container spacing={2.5}>
+        <Grid container spacing={GUTTER.page}>
           <Grid item xs={12} md={8}>
             <CardSkeleton height={340} />
           </Grid>
@@ -144,11 +142,7 @@ const BillDetailPage = () => {
   const savings = Number(bill.totalDiscount || 0);
 
   const amountDue = Number(bill.amountDue || 0);
-  /**
-   * Only a bill that is still owed something can take a payment. A settled bill
-   * has nothing to collect and a refunded one has had its money handed back —
-   * offering the button on either would invite an entry that cannot be undone.
-   */
+  // Only a bill that is still owed something can take a payment.
   const canCollectPayment = bill.status === 'pending' && amountDue > 0;
   // Newest first: "what happened last to this bill" is the question being asked.
   const history = [...(bill.payments || [])].sort((a, b) => new Date(b.at) - new Date(a.at));
@@ -206,7 +200,7 @@ const BillDetailPage = () => {
           }
         />
 
-        <Grid container spacing={2.5} alignItems="flex-start">
+        <Grid container spacing={GUTTER.page} alignItems="flex-start">
           {/* ── Items ── */}
           <Grid item xs={12} md={8}>
             <Card>

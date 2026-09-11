@@ -1,71 +1,63 @@
 import TtlCache from '../utils/TtlCache.js';
 import { resolveBranchScope } from './authorize.js';
+import { invalidateUser, clearUserCache } from '../utils/userCache.js';
+import { broadcast, onBroadcast } from '../config/broadcast.js';
 
-/**
- * Response caching for the read-only analytics endpoints.
- *
- * The dashboard fires eight aggregations on every load and the figures barely
- * move between two loads seconds apart, so recomputing them per request is pure
- * waste — six staff with the page open costs the database forty-eight pipeline
- * runs a minute for numbers that are identical.
- *
- * Two things keep it honest:
- *  - the cache key LEADS with the caller's branch scope and role, so one branch
- *    is never served another branch's totals, and a write can evict exactly the
- *    scopes it touched (see `bustDashboardCache`);
- *  - every write that moves a figure (a bill, a refund, a stock or catalogue
- *    change, a staff account) evicts those scopes, so the staleness window is
- *    "until the next relevant write", not a flat thirty seconds.
- */
-export const dashboardCache = new TtlCache({ ttlMs: 30_000, maxEntries: 300 });
+// Response caching for the read-only analytics endpoints.
+const dashboardCache = new TtlCache({ ttlMs: 30_000, maxEntries: 300 });
 
-/**
- * A second cache for figures that are all-time rather than period-scoped.
- *
- * The "total customers ever billed" aggregation groups the entire bills
- * collection with no date filter — it is the most expensive query in the app
- * and it cannot be narrowed, because the question really is "everyone, ever".
- * It is also the figure that moves least: one new customer changes it by one.
- * Holding it for an hour turns eight full scans a minute into one an hour, and
- * the worst case is a lifetime customer count that is up to an hour behind.
- *
- * It is deliberately NOT cleared by the write hook below — that is the entire
- * point of keeping it separate from `dashboardCache`.
- */
+// A second cache for figures that are all-time rather than period-scoped.
 export const lifetimeCache = new TtlCache({ ttlMs: 60 * 60_000, maxEntries: 50 });
+
+// A third cache, for catalogue reads that are not analytics.
+export const catalogueCache = new TtlCache({ ttlMs: 10 * 60_000, maxEntries: 60 });
+
+// The billing screen's type-ahead set, which is a different shape again.
+export const lookupCache = new TtlCache({ ttlMs: 10 * 60_000, maxEntries: 4 });
+
+/** Both catalogue-shaped caches, dropped together — they go stale on the same writes. */
+const bustCatalogueCaches = () => {
+  catalogueCache.clear();
+  lookupCache.clear();
+  broadcast('catalogue');
+};
+
+// The analytics cache's own hit rate, for the metrics endpoint.
+export const dashboardCacheStats = () => dashboardCache.stats;
 
 /** Every entry for one scope starts with this, which is what makes eviction surgical. */
 const scopePrefix = (scope) => `${scope || 'all'} :: `;
 
-/**
- * Evicts the cached analytics for the scopes a write actually affected.
- *
- * Always two of them: the branch the write happened at, and the all-branches
- * roll-up a Super Admin sees, which necessarily includes it. Every other
- * branch's figures are untouched by this write and stay cached.
- *
- * With no scope (a catalogue or staff change, which is store-wide) it falls
- * back to clearing everything, because those genuinely do move every branch's
- * numbers — a perfume going out of stock shows on all of them.
- */
-export const bustDashboardCache = (scope) => {
+// Evicts the cached analytics for the scopes a write actually affected.
+const bustLocally = (scope) => {
   if (scope === undefined) return dashboardCache.clear();
   return dashboardCache.deleteByPrefix([scopePrefix(scope), scopePrefix('all')]);
 };
 
+const bustDashboardCache = (scope) => {
+  const removed = bustLocally(scope);
+  // The other workers hold their own copies of these figures and have no way to
+  // know a bill was raised over here. See config/broadcast.js.
+  broadcast('dashboard', { scope: scope === undefined ? '__all__' : scope });
+  return removed;
+};
+
+// Applied locally only — re-broadcasting a relayed eviction is how two workers
+// spend an afternoon evicting each other.
+onBroadcast('dashboard', (payload) =>
+  bustLocally(payload?.scope === '__all__' ? undefined : payload?.scope)
+);
+onBroadcast('catalogue', () => {
+  catalogueCache.clear();
+  lookupCache.clear();
+});
+
 const keyFor = (req) => {
-  // Query values are already normalised by `validate`, so the defaults
-  // (range=month) are present here and two requests that mean the same thing
-  // hash to the same entry.
   const query = Object.keys(req.query)
     .sort()
     .map((key) => `${key}=${req.query[key]}`)
     .join('&');
 
-  // `resolveBranchScope` is the same function the controllers filter on, so the
-  // key cannot drift from the data it describes. Scope leads so eviction can
-  // match on a prefix. Role is in the key as a safety margin: if a payload ever
-  // becomes role-dependent it will not leak sideways.
   const scope = resolveBranchScope(req) || 'all';
   return `${scopePrefix(scope)}${req.baseUrl}${req.path}?${query} :: ${req.user?.role}`;
 };
@@ -84,9 +76,6 @@ export const cacheResponse =
       return next();
     }
 
-    // Let the browser revalidate rather than hold a copy of its own: a 304 off
-    // Express's ETag is nearly free and, unlike a browser-side max-age, it can
-    // never survive a cache bust and show a biller their own bill missing.
     res.set('Cache-Control', 'private, no-cache');
 
     const hit = cache.get(key);
@@ -105,31 +94,17 @@ export const cacheResponse =
     return next();
   };
 
-/**
- * Clears the dashboard cache after any successful write on the router it is
- * mounted on.
- *
- * Mounted once per module rather than called at each controller's return: a
- * write added later is covered automatically, which is exactly the sort of
- * thing that gets forgotten when invalidation lives next to the response.
- *
- * `scoped` says the writes on this router belong to one branch (bills do), so
- * only that branch and the all-branches roll-up are evicted. Routers whose
- * writes are store-wide (perfumes, users, settings) leave it off and clear
- * everything, which is the honest answer for a catalogue change.
- *
- * `except` lists paths that use a write verb but change nothing — POST
- * /bills/preview is a costing calculation the biller triggers while typing, and
- * letting it bust the cache would keep the dashboard cold all day for no gain.
- */
+// Clears the dashboard cache after any successful write on the router it is mounted on.
 export const invalidateDashboardOnWrite =
-  ({ except = [], scoped = false } = {}) =>
+  ({ except = [], scoped = false, catalogue = false } = {}) =>
   (req, res, next) => {
     if (req.method === 'GET' || except.includes(req.path)) return next();
 
     const json = res.json.bind(res);
     res.json = (body) => {
       if (res.statusCode >= 200 && res.statusCode < 300) {
+        if (catalogue) bustCatalogueCaches();
+
         let scope;
         if (scoped) {
           // Resolved here rather than at request time: an admin's own scope is
@@ -147,4 +122,31 @@ export const invalidateDashboardOnWrite =
     return next();
   };
 
-export default cacheResponse;
+// Evicts the cached ACCOUNT after any successful write on the router it is mounted on.
+export const invalidateAccountOnWrite =
+  ({ target = 'param' } = {}) =>
+  (req, res, next) => {
+    if (req.method === 'GET') return next();
+
+    const json = res.json.bind(res);
+    res.json = (body) => {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        const id = target === 'self' ? req.user?._id || req.params?.id : req.params?.id || req.user?._id;
+        invalidateUser(id);
+      }
+      return json(body);
+    };
+    return next();
+  };
+
+// Clears EVERY cached account after a successful write.
+export const invalidateAllAccountsOnWrite = () => (req, res, next) => {
+  if (req.method === 'GET') return next();
+
+  const json = res.json.bind(res);
+  res.json = (body) => {
+    if (res.statusCode >= 200 && res.statusCode < 300) clearUserCache();
+    return json(body);
+  };
+  return next();
+};

@@ -1,23 +1,7 @@
-/**
- * The store name for the screens that paint BEFORE settings exist: the boot
- * splash, the auth-refresh screen and the crash screen. None of them can wait
- * on a request, and none of them may hardcode a store name — this app is
- * installed per store.
- *
- * So the last known name is kept in localStorage and reused on the next load.
- * A first-ever visit has nothing cached and falls back to a neutral word; every
- * visit after that is branded from the first frame.
- *
- * index.html runs the same two reads inline — the browser files a history entry
- * and a bookmark under whatever `<title>` it sees at load, which is far too
- * early for React to have corrected it, so the tab title cannot wait for this
- * module. It is plain HTML and cannot import, so if you change the key or the
- * title format here, change it there too.
- */
-export const SITE_NAME_KEY = 'ab:siteName';
+const SITE_NAME_KEY = 'ab:siteName';
 
 /** Deliberately generic — a store that has never loaded settings has no name yet. */
-export const FALLBACK_SITE_NAME = 'Admin';
+const FALLBACK_SITE_NAME = 'Admin';
 
 /** The browser tab, one format everywhere. Mirrored inline in index.html. */
 export const documentTitle = (name) => (name ? `${name} — Admin` : FALLBACK_SITE_NAME);

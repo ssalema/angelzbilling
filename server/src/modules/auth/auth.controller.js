@@ -1,23 +1,12 @@
 import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/ApiResponse.js';
-import { REFRESH_COOKIE, refreshCookieOptions } from '../../utils/tokens.js';
+import { REFRESH_COOKIE, refreshCookieOptions, revokeAccessToken } from '../../utils/tokens.js';
 import * as authService from './auth.service.js';
-import User from '../../models/User.js';
+import User, { roleLabelFor } from '../../models/User.js';
 import Settings from '../../models/Settings.js';
 import { HEAD_OFFICE_ID, HEAD_OFFICE_LABEL, HEAD_OFFICE_CODE } from '../../utils/locations.js';
+import { emit, revokeSession, userRoom } from '../../config/socket.js';
 
-/**
- * The store identity the app needs before it can draw anything — the sidebar
- * logo, the browser tab, the currency symbol, and whether branch-aware screens
- * exist at all.
- *
- * It rides along with the session because the client otherwise could not ask
- * for it until the session existed: settings needs a token, so the browser did
- * an auth round trip and THEN a settings round trip, two serial requests before
- * first paint. Sending it here collapses that to one. It costs nothing to add —
- * `Settings.getCached` serves it from process memory — and it is the same data
- * any signed-in account can already read from GET /settings.
- */
 const storeProfile = (settings) => ({
   siteName: settings.siteName,
   tagline: settings.tagline,
@@ -33,16 +22,14 @@ const publicUser = (user) => ({
   phone: user.phone,
   phoneCountryCode: user.phoneCountryCode || '+91',
   role: user.role,
-  roleLabel: user.roleLabel,
+  roleLabel: user.roleLabel || roleLabelFor(user.role),
   // A Super Admin with no branch is the main one and may change anything. With
   // a branch they still see everything, but only edit inside that branch.
   isMainSuperAdmin: user.role === 'superadmin' && !user.branch,
   avatar: user.avatar,
   isActive: user.isActive,
   lastLoginAt: user.lastLoginAt,
-  // No branch means the Head Office — the main business, which is a location in
-  // its own right. The client reads this the same way it reads any branch; the
-  // Head Office's details come from Settings, so only the label travels here.
+  // No branch means the Head Office — the main business, which is a location in its own right.
   branch: user.branch
     ? {
         id: user.branch._id,
@@ -98,6 +85,7 @@ export const refreshController = asyncHandler(async (req, res) => {
 export const logoutController = asyncHandler(async (req, res) => {
   const token = req.cookies?.[REFRESH_COOKIE];
   await authService.logout(req.user?._id, token);
+  revokeAccessToken(req.tokenId);
   res.clearCookie(REFRESH_COOKIE, { ...refreshCookieOptions(), maxAge: undefined });
   return sendSuccess(res, { message: 'You have been signed out' });
 });
@@ -119,12 +107,21 @@ export const updateProfileController = asyncHandler(async (req, res) => {
     { new: true, runValidators: true }
   ).populate('branch', 'name code address phone phoneCountryCode gstin isActive hasOwnLogo logo favicon');
 
+  // The same account may be open in another tab — it should not keep showing
+  // the old name in the sidebar.
+  emit('user:profile', { user: publicUser(user) }, { rooms: [userRoom(user._id)] });
+
   return sendSuccess(res, { message: 'Profile updated', data: { user: publicUser(user) } });
 });
 
 export const changePasswordController = asyncHandler(async (req, res) => {
   await authService.changePassword(req.user._id, req.body);
   res.clearCookie(REFRESH_COOKIE, { ...refreshCookieOptions(), maxAge: undefined });
+
+  // Every other device this account is signed in on is now holding a password
+  // that no longer works, so tell them rather than let them find out on a write.
+  revokeSession(req.user._id, 'Your password was changed. Please sign in again.');
+
   return sendSuccess(res, {
     message: 'Password updated. Please sign in again with your new password.',
   });

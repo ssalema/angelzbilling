@@ -1,7 +1,4 @@
-/**
- * Operational (expected) error. Anything thrown that is NOT an ApiError is
- * treated as a programming bug by the error handler and hidden from the client.
- */
+// Operational (expected) error.
 export class ApiError extends Error {
   constructor(statusCode, message, errors = [], isOperational = true) {
     super(message);
@@ -40,12 +37,7 @@ export class ApiError extends Error {
     return new ApiError(500, message, [], false);
   }
 
-  /**
-   * The server is healthy but deliberately shedding load right now — a full
-   * upload queue, say. Operational and retryable, which is exactly what 503
-   * means and why this is not a 500: nothing is broken, the client should just
-   * come back. Pair it with a Retry-After header at the call site.
-   */
+  // The server is healthy but deliberately shedding load right now — a full upload queue, say.
   static serviceUnavailable(message = 'The server is busy. Please try again in a moment.') {
     return new ApiError(503, message);
   }

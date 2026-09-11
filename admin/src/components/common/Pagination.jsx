@@ -6,17 +6,7 @@ import LastPageRounded from '@mui/icons-material/LastPageRounded';
 import { ROWS_PER_PAGE } from '../../utils/constants.js';
 import { FONT, ICON } from '../../theme/index.js';
 
-/**
- * The single pagination bar used by every list in the panel.
- *
- * Left:  rows-per-page picker + the visible range ("1–10 of 12").
- * Right: "Page 1 of 2" + first / prev / current / next / last controls.
- *
- * Controls borrow the panel's bordered-icon-button language (see FilterBar's
- * refresh button) so the bar reads as part of the same system.
- *
- * `page` is 1-based everywhere, matching the API's `?page=` parameter.
- */
+// The single pagination bar used by every list in the panel.
 const Pagination = ({
   page = 1,
   limit = 10,

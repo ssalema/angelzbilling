@@ -4,6 +4,8 @@ import authenticate from '../../middlewares/authenticate.js';
 import { authorize, requireGlobalSuperAdmin } from '../../middlewares/authorize.js';
 import validate from '../../middlewares/validate.js';
 import { imageUpload, enforceFileLimits, uploadGate } from '../../middlewares/upload.js';
+import { invalidateAllAccountsOnWrite } from '../../middlewares/cache.js';
+import { announceOnWrite } from '../../middlewares/realtime.js';
 import { createBranchSchema, updateBranchSchema, listBranchQuerySchema } from './branch.validation.js';
 import {
   listBranches,
@@ -22,14 +24,15 @@ const brandingParam = idParam.extend({ kind: z.enum(['logo', 'favicon']) });
 
 const router = Router();
 router.use(authenticate);
+router.use(invalidateAllAccountsOnWrite());
+// A branch's name and logo are printed on bills everywhere, so this is store-wide.
+router.use(announceOnWrite({ resource: 'branches' }));
 
 // Anyone signed in can READ branches (they populate pickers and bill headers).
 router.get('/', validate({ query: listBranchQuerySchema }), listBranches);
 router.get('/:id', validate({ params: idParam }), getBranch);
 
-// Adding a location to the registry is a store-wide decision: main Super Admin
-// only. Editing one branch's own details is branch-level, so a Super Admin
-// assigned to that branch may do it — the controller checks which branch.
+// Adding a location to the registry is a store-wide decision: main Super Admin only.
 router.post('/', requireGlobalSuperAdmin(), validate({ body: createBranchSchema }), createBranch);
 router.patch(
   '/:id',

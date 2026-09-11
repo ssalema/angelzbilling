@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Controller, useFormContext } from 'react-hook-form';
 import {
   TextField,
@@ -11,14 +12,12 @@ import {
   InputLabel,
   Select,
   InputAdornment,
+  IconButton,
 } from '@mui/material';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
 
-/**
- * Thin react-hook-form bindings for MUI inputs.
- *
- * Each one reads from the surrounding FormProvider, so a form only writes
- * `<RHFTextField name="sku" label="SKU" />` and validation wiring is automatic.
- */
+// Thin react-hook-form bindings for MUI inputs.
 
 export const RHFTextField = ({ name, helperText, ...props }) => {
   const { control } = useFormContext();
@@ -39,6 +38,44 @@ export const RHFTextField = ({ name, helperText, ...props }) => {
   );
 };
 
+// The one way a password is typed anywhere in the panel.
+export const RHFPasswordField = ({ name, helperText, defaultVisible = false, ...props }) => {
+  const { control } = useFormContext();
+  const [visible, setVisible] = useState(defaultVisible);
+
+  return (
+    <Controller
+      name={name}
+      control={control}
+      render={({ field, fieldState }) => (
+        <TextField
+          {...field}
+          value={field.value ?? ''}
+          type={visible ? 'text' : 'password'}
+          error={Boolean(fieldState.error)}
+          helperText={fieldState.error?.message || helperText}
+          {...props}
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  edge="end"
+                  onClick={() => setVisible((shown) => !shown)}
+                  aria-label={visible ? 'Hide password' : 'Show password'}
+                >
+                  {visible ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                </IconButton>
+              </InputAdornment>
+            ),
+            ...props.InputProps,
+          }}
+        />
+      )}
+    />
+  );
+};
+
 export const RHFNumberField = ({ name, helperText, prefix, suffix, ...props }) => {
   const { control } = useFormContext();
   return (
@@ -50,9 +87,6 @@ export const RHFNumberField = ({ name, helperText, prefix, suffix, ...props }) =
           {...field}
           value={field.value ?? ''}
           onChange={(event) => {
-            // A text box, not type="number": the browser's spinner arrows sat on
-            // top of the value and stepped it on a stray scroll. Digits are kept
-            // by hand instead, so nothing but a number can be typed.
             const raw = event.target.value.replace(/[^\d.]/g, '');
             // Keep the field empty-able while typing; commit a number otherwise.
             field.onChange(raw === '' ? '' : Number(raw));

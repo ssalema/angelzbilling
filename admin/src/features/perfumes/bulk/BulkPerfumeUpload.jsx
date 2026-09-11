@@ -31,7 +31,7 @@ import { perfumeApi, uploadApi } from '../../../api/endpoints.js';
 import { useSnackbar } from '../../../context/SnackbarContext.jsx';
 import { formatCurrency, formatGrams, formatNumber, truncate } from '../../../utils/format.js';
 import { readSheet, SheetError, SHEET_TYPES } from '../../../utils/spreadsheet.js';
-import { IMAGE_TYPES, MAX_UPLOAD_BYTES } from '../../../utils/constants.js';
+import { IMAGE_TYPES, rejectImageReason } from '../../../utils/constants.js';
 import { IMG } from '../../../utils/image.js';
 import { brand, CARD_RADIUS, FONT, ICON, numericText, surface } from '../../../theme/index.js';
 import {
@@ -50,25 +50,7 @@ import {
 /** How many review rows are drawn at once — a thousand-row sheet is the point here. */
 const PAGE_SIZE = 25;
 
-/**
- * Adding a whole catalogue from a spreadsheet.
- *
- * The wizard next door is untouched and stays the way to add one perfume
- * properly — with its media, features, FAQs and every field it asks for. This
- * screen is for the other job: getting a thousand fragrances into the catalogue
- * in one go, with the handful of fields a shop actually has for all of them.
- *
- * The file is read in the browser and thrown away, exactly as the stock and
- * price sheets are: it is never uploaded, never written to the media library
- * and never parked on the server. What leaves this screen is a list of names to
- * check, and — only after the admin has reviewed the rows and pressed Add
- * perfumes — the rows themselves. Close the dialog before that and nothing has
- * happened at all.
- *
- * SKUs are never read from the sheet. The catalogue numbers its own new rows
- * and the server hands the block out, so the review table shows the number each
- * perfume is about to be given rather than one this screen made up.
- */
+// Adding a whole catalogue from a spreadsheet.
 const BulkPerfumeUpload = ({ onCreated }) => {
   const snackbar = useSnackbar();
 
@@ -82,9 +64,6 @@ const BulkPerfumeUpload = ({ onCreated }) => {
   const [page, setPage] = useState(1);
 
   const reset = () => {
-    // Photos added on the review screen are already in the media library, so
-    // walking away from the sheet has to take them with it — otherwise every
-    // abandoned run leaves images nothing will ever point at.
     rows.forEach((row) => {
       if (row.photoPublicId) uploadApi.remove(row.photoPublicId, 'image').catch(() => {});
     });
@@ -98,12 +77,7 @@ const BulkPerfumeUpload = ({ onCreated }) => {
     setPage(1);
   };
 
-  /**
-   * A photo the admin picked for one row, already uploaded.
-   *
-   * Replacing a picture drops the one it replaces, so a row that was
-   * photographed twice does not leave the first attempt behind.
-   */
+  // A photo the admin picked for one row, already uploaded.
   const setPhoto = (key, asset) =>
     setRows((current) =>
       current.map((row) => {
@@ -115,12 +89,7 @@ const BulkPerfumeUpload = ({ onCreated }) => {
       })
     );
 
-  /**
-   * Reads the chosen file and checks it against the catalogue.
-   *
-   * `file` is only ever a local handle — it is read into rows here and goes out
-   * of scope when this returns, so nothing holds the spreadsheet afterwards.
-   */
+  // Reads the chosen file and checks it against the catalogue.
   const handleFiles = async (fileList) => {
     const file = [...(fileList || [])][0];
     if (!file) return;
@@ -575,20 +544,7 @@ const BulkPerfumeUpload = ({ onCreated }) => {
   );
 };
 
-/**
- * The picture slot on one review row.
- *
- * The sheet carries no photographs — a spreadsheet cell cannot hold one the
- * catalogue can read — so this is where they come from: click the slot, pick
- * the file, and the picture is in the row a moment later. The alternative would
- * be editing the sheet and uploading it again to add a single image, which is
- * the whole reason this screen exists.
- *
- * The upload happens immediately and the row keeps only `{url, publicId}`, the
- * same contract the wizard's MediaUploader works to. Nothing is written to the
- * catalogue until Add perfumes; a picture added and then abandoned is cleaned
- * up when the screen resets.
- */
+// The picture slot on one review row.
 const RowPhoto = ({ row, disabled, onPhoto }) => {
   const snackbar = useSnackbar();
   const [progress, setProgress] = useState(null);
@@ -598,12 +554,9 @@ const RowPhoto = ({ row, disabled, onPhoto }) => {
     const file = [...(fileList || [])][0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      snackbar.warning('That is not an image — pick a JPEG, PNG, WEBP or GIF.');
-      return;
-    }
-    if (file.size > MAX_UPLOAD_BYTES) {
-      snackbar.warning('That image is larger than 5MB. Save a smaller copy and try again.');
+    const rejected = rejectImageReason(file);
+    if (rejected) {
+      snackbar.error(rejected);
       return;
     }
 

@@ -8,7 +8,8 @@ const devFormat = printf(({ level, message, timestamp: ts, stack }) => {
 });
 
 export const logger = winston.createLogger({
-  level: env.isProd ? 'info' : 'debug',
+  // 'http' rather than 'info' in production.
+  level: env.isProd ? 'http' : 'debug',
   // The e2e suite drives hundreds of requests; their access logs would bury the
   // assertion results it prints.
   silent: env.nodeEnv === 'test',

@@ -88,24 +88,27 @@ const PerfumeListPage = () => {
   const debouncedSearch = useDebounce(filters.search, 400);
 
   const perfumes = useApiResource(
-    () =>
-      perfumeApi.list({
-        search: debouncedSearch,
-        category: filters.category,
-        status: filters.status,
-        stock: filters.stock,
-        sort: filters.sort,
-        page: filters.page,
-        limit: filters.limit,
-      }),
-    [debouncedSearch, filters.category, filters.status, filters.stock, filters.sort, filters.page, filters.limit]
+    (signal) =>
+      perfumeApi.list(
+        {
+          search: debouncedSearch,
+          category: filters.category,
+          status: filters.status,
+          stock: filters.stock,
+          sort: filters.sort,
+          page: filters.page,
+          limit: filters.limit,
+        },
+        signal
+      ),
+    [debouncedSearch, filters.category, filters.status, filters.stock, filters.sort, filters.page, filters.limit],
+    { cacheKey: 'perfumes:list', watch: 'perfumes' }
   );
 
-  const facets = useApiResource(() => perfumeApi.facets(), []);
+  // The dropdown contents, which change only when the catalogue does.
+  const facets = useApiResource((signal) => perfumeApi.facets(signal), [], { cacheKey: 'perfumes:facets', watch: 'perfumes' });
 
-  // Deleting the last perfume of a category drops it from the facets. Holding on to the
-  // now-missing value leaves the select blank and the table empty, so fall back to
-  // "All categories" as soon as it disappears.
+  // Deleting the last perfume of a category drops it from the facets.
   useEffect(() => {
     if (!filters.category || !facets.data) return;
     if (!(facets.data.categories || []).includes(filters.category)) {
@@ -256,8 +259,6 @@ const PerfumeListPage = () => {
       label: 'Stock',
       align: 'center',
       // Stock is bulk weight; the tooltip spells out what that covers in bottles.
-      // The pill is the shared StatusChip, so a low bottle looks identical here,
-      // on the perfume page and in the dashboard's low-stock panel.
       render: (row) => (
         <Tooltip title={`${STOCK_LABELS[stockStatus(row)]} · ${formatNumber(row.unitsInStock ?? 0)} unit(s) sellable`}>
           <span>
@@ -287,10 +288,12 @@ const PerfumeListPage = () => {
         </Typography>
       ),
     },
-    actionsColumn((row) => (
-        <Stack direction="row" spacing={0.25} justifyContent="center">
-          {isAdmin && (
-            <>
+    // Billing staff can neither edit nor delete, so the column is left out for
+    // them rather than standing there labelled "Actions" and holding nothing.
+    ...(isAdmin
+      ? [
+          actionsColumn((row) => (
+            <Stack direction="row" spacing={0.25} justifyContent="center">
               <Tooltip title="Edit perfume">
                 <IconButton size="small" color="primary" onClick={() => navigate(`/perfumes/${row.id}/edit`)}>
                   <EditOutlined sx={{ fontSize: ICON.action }} />
@@ -301,10 +304,10 @@ const PerfumeListPage = () => {
                   <DeleteOutline sx={{ fontSize: ICON.action }} />
                 </IconButton>
               </Tooltip>
-            </>
-          )}
-        </Stack>
-      )),
+            </Stack>
+          )),
+        ]
+      : []),
   ];
 
   return (

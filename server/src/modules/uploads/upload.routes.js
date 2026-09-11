@@ -14,10 +14,6 @@ router.use(authenticate);
 router.post(
   '/',
   authorize('superadmin', 'admin'),
-  // `files` matches the field name the admin panel appends, and the `files: 7`
-  // ceiling in the upload middleware is what bounds this array.
-  // Ahead of multer on purpose: a queued request must not be holding 7 x 30 MB
-  // of buffers while it waits its turn.
   uploadGate,
   upload.array('files', 7),
   enforceFileLimits,

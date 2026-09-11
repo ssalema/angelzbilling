@@ -1,18 +1,22 @@
 import axios from 'axios';
+import { clearResourceCache } from './resourceCache.js';
 
-const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
+// Same-origin deploys leave VITE_API_URL unset and call the relative prefix; cross-origin ones set a full base.
+const trimSlash = (value) => String(value ?? '').trim().replace(/\/+$/, '');
 
-/**
- * The access token lives in module memory, never in localStorage.
- * An XSS payload can read localStorage; it cannot read a closure variable as
- * easily, and the long-lived refresh token is an httpOnly cookie either way.
- */
+const API_PREFIX = trimSlash(import.meta.env.VITE_API_PREFIX) || '/api/v1';
+const BASE_URL = trimSlash(import.meta.env.VITE_API_URL) || API_PREFIX;
+
+// The access token lives in module memory, never in localStorage.
 let accessToken = null;
 let onSessionExpired = null;
 
 export const setAccessToken = (token) => {
   accessToken = token;
 };
+
+/** The live token, read by the socket handshake on every connect attempt. */
+export const getAccessToken = () => accessToken;
 export const setSessionExpiredHandler = (handler) => {
   onSessionExpired = handler;
 };
@@ -31,11 +35,6 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-/**
- * Single-flight refresh: if five requests 401 at once we refresh once and
- * replay all five, rather than firing five competing refresh calls (which
- * would invalidate each other because refresh tokens rotate).
- */
 let refreshPromise = null;
 
 const refreshAccessToken = async () => {
@@ -54,8 +53,21 @@ const refreshAccessToken = async () => {
   return refreshPromise;
 };
 
+/**
+ * Mints a fresh access token, sharing the in-flight request with the interceptor
+ * above. The socket calls this when the server hangs up on an expired token.
+ */
+export const refreshSession = () => refreshAccessToken();
+
+// Which verbs change something the cached reads describe.
+const MUTATING = new Set(['post', 'put', 'patch', 'delete']);
+
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Any successful write drops every cached read.
+    if (MUTATING.has(String(response.config?.method || '').toLowerCase())) clearResourceCache();
+    return response;
+  },
   async (error) => {
     const { config, response } = error;
 
@@ -86,12 +98,16 @@ api.interceptors.response.use(
 
 /** Every failure reaches the UI in the same shape, so error states stay simple. */
 const normaliseError = (error) => {
+  // A request this app cancelled on purpose is not a failure.
+  if (error.code === 'ERR_CANCELED' || error.name === 'CanceledError') {
+    return { message: 'Request cancelled', errors: [], status: 0, aborted: true };
+  }
   if (error.code === 'ECONNABORTED') {
     return { message: 'The request took too long. Please check your connection and try again.', errors: [], status: 0 };
   }
   if (!error.response) {
     return {
-      message: 'Cannot reach the server. Make sure the API is running on port 5000.',
+      message: `Cannot reach the server. Make sure the API is running and reachable at ${BASE_URL}.`,
       errors: [],
       status: 0,
     };

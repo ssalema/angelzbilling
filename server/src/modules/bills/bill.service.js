@@ -7,17 +7,8 @@ import { round2 } from '../../utils/query.js';
 import { resolveSizeGrams, gramsForQuantity, unitsFromGrams, formatGrams } from '../../utils/grams.js';
 import { toBranchId, toLocationId, isValidLocationId, HEAD_OFFICE_LABEL } from '../../utils/locations.js';
 
-/**
- * Bill numbers look like AP260900001 — the store's bill prefix from Settings,
- * then YY + MM + a 5 digit serial.
- *
- * The serial is keyed to the Indian financial year (1 April – 31 March), not to
- * the month printed in the number, so it runs unbroken from April through March
- * and starts again at 00001 on 1 April. The counter is deliberately NOT per
- * branch: the number carries no branch code, so branches sharing a financial
- * year must share one sequence or two of them would mint the same number.
- */
-export const financialYearKey = (date = new Date()) => {
+// Bill numbers look like AP260900001 — the store's bill prefix from Settings, then YY + MM + a 5 digit serial.
+const financialYearKey = (date = new Date()) => {
   // getMonth() is 0-based, so 3 is April — the first month of the financial year.
   const startYear = date.getMonth() >= 3 ? date.getFullYear() : date.getFullYear() - 1;
   return `${startYear}-${String((startYear + 1) % 100).padStart(2, '0')}`;
@@ -25,26 +16,12 @@ export const financialYearKey = (date = new Date()) => {
 
 export const generateBillNumber = async ({ prefix = DEFAULT_BILL_PREFIX, at = new Date() } = {}) => {
   const stamp = `${String(at.getFullYear()).slice(-2)}${String(at.getMonth() + 1).padStart(2, '0')}`;
-  // The prefix is left out of the counter key on purpose: renaming the prefix
-  // mid-year is a cosmetic change, and keying on it would drop the serial back
-  // to 00001 halfway through the financial year.
   const key = `BILL-FY${financialYearKey(at)}`;
   const seq = await Counter.next(key);
   return `${prefix}${stamp}${String(seq).padStart(5, '0')}`;
 };
 
-/**
- * Turns the thin client payload into fully priced, fully snapshotted lines.
- *
- * Prices always come from the database, never from the request body — a tampered
- * payload cannot sell a 5000 rupee bottle for 5 rupees. The discount is the one
- * price field the client does supply, so it is capped here too: without a cap,
- * `discountPercent: 100` sold that same bottle for nothing while still deducting
- * its stock, which reconciles perfectly and hides the theft.
- *
- * `maxDiscountPercent` is the store's staff ceiling; `canOverride` lifts it for
- * admins and above, who are trusted to authorise a bigger write-off.
- */
+// Turns the thin client payload into fully priced, fully snapshotted lines.
 export const buildBillItems = async (items, { maxDiscountPercent = 100, canOverride = true } = {}) => {
   const discountCap = canOverride ? 100 : Math.max(0, Math.min(100, Number(maxDiscountPercent) || 0));
 
@@ -54,11 +31,6 @@ export const buildBillItems = async (items, { maxDiscountPercent = 100, canOverr
 
   const lines = [];
 
-  // Every fill size of a perfume is poured from the SAME bulk weight, so a bill
-  // holding a 50gm and a 100gm line of one perfume must draw both from one
-  // running balance — checking each line against the full stock would let a
-  // bill sell weight that isn't there. `remaining` is that balance; `consumed`
-  // is what the whole bill takes, collapsed to one $inc per perfume.
   const remaining = new Map(perfumes.map((p) => [String(p._id), Number(p.stock) || 0]));
   const consumed = new Map();
 
@@ -83,8 +55,6 @@ export const buildBillItems = async (items, { maxDiscountPercent = 100, canOverr
     }
 
     // Stock is held as bulk grams, so a quantity of 2 on a 100gm fill needs 200 g.
-    // The fill size comes from the variant; the weight it eats comes from the
-    // perfume, which is the only place stock is kept.
     const sizeGrams = resolveSizeGrams(variant || perfume);
     const perfumeKey = String(perfume._id);
     const availableGrams = remaining.get(perfumeKey) ?? 0;
@@ -139,40 +109,18 @@ export const buildBillItems = async (items, { maxDiscountPercent = 100, canOverr
     });
   }
 
-  // One deduction per perfume, against its single stock field — a variant has
-  // no stock of its own to touch.
-  //
-  // `stock: { $gte: grams }` is not belt-and-braces on the check above, it IS
-  // the check. The loop read stock into `remaining` and validated against it;
-  // by the time this write lands another till may already have taken the same
-  // weight, and an unguarded `$inc` would happily drive stock negative — ten
-  // cashiers each selling "the last bottle" all succeeded and left the perfume
-  // at -900 g. Carrying the condition into the write itself makes the read and
-  // the deduction one atomic step, and a filter that no longer matches is how
-  // the loser finds out. See `deductStock` for what happens then.
+  // One deduction per perfume, against its single stock field — a variant has no stock of its own to touch.
   const stockOps = [...consumed.entries()].map(([perfumeId, grams]) => ({
     updateOne: {
       filter: { _id: perfumeId, stock: { $gte: grams } },
-      update: { $inc: { stock: -grams } },
+      update: { $inc: { stock: -grams, stockMargin: -grams } },
     },
   }));
 
   return { lines, stockOps };
 };
 
-/**
- * Applies the guarded deductions and refuses the whole bill if any of them was
- * beaten to the stock.
- *
- * `modifiedCount` is the whole signal: every op is a `$gte` filter, so an op
- * that matched nothing is a perfume that no longer has the weight this bill
- * needs. There is no partial sale — one line short means the bill does not
- * happen, so this throws and the caller unwinds (inside the transaction, by
- * aborting it; outside one, by putting back what it already took).
- *
- * The failing perfume is looked up afterwards purely to name it in the message:
- * "someone else just bought it" is only useful if it says what.
- */
+// Applies the guarded deductions and refuses the whole bill if any of them was beaten to the stock.
 export const deductStock = async (stockOps, session = null) => {
   if (!stockOps.length) return;
 
@@ -245,18 +193,7 @@ export const calculateTotals = (
   };
 };
 
-/**
- * Resolves which location this bill belongs to.
- *
- * Every bill has one. `null` means the Head Office — the main business itself,
- * which is a location alongside the branches rather than a branch of its own —
- * and the slip then prints under the store's name, address, GSTIN and logo. It
- * also means "no location at all" when branch management is switched off, which
- * comes to the same printed bill.
- *
- * Only the Head Office Super Admin gets to choose. Everyone else bills at the
- * location they are assigned to, whatever the client sends.
- */
+// Resolves which location this bill belongs to.
 export const resolveBillBranch = async (user, requestedBranchId, { enabled = true } = {}) => {
   if (!enabled) return null;
 

@@ -4,7 +4,7 @@ import Inventory2Outlined from '@mui/icons-material/Inventory2Outlined';
 import EditNoteOutlined from '@mui/icons-material/EditNoteOutlined';
 import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined';
 
-import DialogCloseButton from '../../../components/common/DialogCloseButton.jsx';
+import DialogCloseButton, { dismiss } from '../../../components/common/DialogCloseButton.jsx';
 import SingleStockUpdate from './SingleStockUpdate.jsx';
 import BulkStockUpdate from './BulkStockUpdate.jsx';
 import { FONT, ICON, brand } from '../../../theme/index.js';
@@ -14,18 +14,7 @@ const TABS = [
   { value: 'bulk', label: 'Bulk update', icon: <UploadFileOutlined sx={{ fontSize: ICON.action }} /> },
 ];
 
-/**
- * The two ways stock goes up: one perfume by hand, or a whole delivery from a
- * spreadsheet. Both sit behind one door because they answer the same question,
- * and both ADD to what is on hand rather than replacing it.
- *
- * They are tabs rather than a menu on the button: with a menu the admin has to
- * decide which one they want before seeing either, and picking wrong means
- * closing and reopening. Here the wrong guess costs one click.
- *
- * The dialog is remounted per opening (`keepMounted` is deliberately off), so a
- * spreadsheet read in one session leaves nothing behind for the next.
- */
+// The two ways stock goes up: one perfume by hand, or a whole delivery from a spreadsheet.
 const UpdateStockDialog = ({ open, onClose, onUpdated }) => {
   const [tab, setTab] = useState('single');
 
@@ -34,7 +23,7 @@ const UpdateStockDialog = ({ open, onClose, onUpdated }) => {
   }, [open]);
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog open={open} onClose={dismiss(onClose)} maxWidth="md" fullWidth>
       <DialogCloseButton onClose={onClose} />
 
       <DialogTitle sx={{ pb: 1, pr: 6 }}>
@@ -54,7 +43,7 @@ const UpdateStockDialog = ({ open, onClose, onUpdated }) => {
       <Tabs
         value={tab}
         onChange={(_event, next) => setTab(next)}
-        sx={{ px: 3, borderBottom: 1, borderColor: 'divider' }}
+        sx={{ px: 1, borderBottom: 1, borderColor: 'divider' }}
       >
         {TABS.map((item) => (
           <Tab key={item.value} value={item.value} label={item.label} icon={item.icon} iconPosition="start" />

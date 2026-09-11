@@ -1,7 +1,10 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'node:crypto';
 import env from '../config/env.js';
+import TtlCache from './TtlCache.js';
+import { broadcast, onBroadcast } from '../config/broadcast.js';
 
+// Access tokens carry a `jti` so that one can be retired before it expires.
 export const signAccessToken = (user) =>
   jwt.sign(
     {
@@ -9,6 +12,7 @@ export const signAccessToken = (user) =>
       role: user.role,
       branch: user.branch ? String(user.branch._id || user.branch) : null,
       tokenType: 'access',
+      jti: crypto.randomUUID(),
     },
     env.jwt.accessSecret,
     { expiresIn: env.jwt.accessExpires }
@@ -37,11 +41,32 @@ const parseDuration = (value) => {
 };
 
 export const refreshCookieMaxAge = () => parseDuration(env.jwt.refreshExpires);
+const accessTokenMaxAge = () => parseDuration(env.jwt.accessExpires);
+
+// Access tokens retired before their expiry.
+const revokedAccessTokens = new TtlCache({ ttlMs: accessTokenMaxAge(), maxEntries: 5000 });
+
+const revokeLocally = (jti, ttlMs) => {
+  if (!jti) return;
+  revokedAccessTokens.set(String(jti), true, ttlMs);
+};
+
+export const revokeAccessToken = (jti, ttlMs = accessTokenMaxAge()) => {
+  if (!jti) return;
+  revokeLocally(jti, ttlMs);
+  broadcast('revoke-token', { jti: String(jti), ttlMs });
+};
+
+onBroadcast('revoke-token', (payload) => revokeLocally(payload?.jti, payload?.ttlMs));
+
+export const isAccessTokenRevoked = (jti) => (jti ? revokedAccessTokens.get(String(jti)) === true : false);
 
 export const refreshCookieOptions = () => ({
   httpOnly: true,
-  secure: env.isProd,
-  sameSite: env.isProd ? 'none' : 'lax',
+  // Both come from config rather than from NODE_ENV, and both default to the
+  // safe position. See the notes in config/env.js.
+  secure: env.cookieSecure,
+  sameSite: env.cookieSameSite,
   domain: env.cookieDomain,
   path: '/',
   maxAge: refreshCookieMaxAge(),

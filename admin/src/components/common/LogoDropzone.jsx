@@ -7,28 +7,13 @@ import { IMAGE_TYPES } from '../../utils/constants.js';
 import { LOGO_FRAME, brand, ICON } from '../../theme/index.js';
 import { IMG } from '../../utils/image.js';
 
-/**
- * The single-image slot — store logo, favicon, branch logo.
- *
- * All three used to hand-roll the same dropzone with three different heights,
- * two empty states and two preview insets, so the same picture looked like a
- * different control depending on which panel you opened. The frame lives here
- * now: a dashed hairline outside, the inset well inside, the preview and the
- * hover replace/remove pill on top of it.
- *
- * Upload, validation and removal stay with the caller — only one of them holds
- * a file back until its branch exists, and none of that is a frame's business.
- */
+// The single-image slot — store logo, favicon, branch logo.
 const LogoDropzone = ({
   /** Current image URL, or a local object URL while an upload is pending. */
   value,
   alt = 'Logo',
   busy = false,
-  /**
-   * Upload percentage, 0–100, while `busy`. Absent means the work has no
-   * measurable progress — a removal, say — and the bar runs indeterminate
-   * rather than sitting frozen at zero.
-   */
+  // Upload percentage, 0–100, while `busy`.
   progress = null,
   disabled = false,
   onFiles,

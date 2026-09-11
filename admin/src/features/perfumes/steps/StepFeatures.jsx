@@ -1,4 +1,4 @@
-import { Card, Typography, Box, Button, Stack, IconButton, Grid, Chip, Tooltip } from '@mui/material';
+import { Typography, Box, Button, Stack, IconButton, Grid, Chip, Tooltip } from '@mui/material';
 import { useFieldArray, useFormContext } from 'react-hook-form';
 import AddRounded from '@mui/icons-material/AddRounded';
 import DeleteOutline from '@mui/icons-material/DeleteOutline';
@@ -7,7 +7,7 @@ import CheckCircleOutline from '@mui/icons-material/CheckCircleOutline';
 import { RHFTextField, RHFChipInput } from '../../../components/form/RHFControls.jsx';
 import { EmptyState } from '../../../components/common/StateViews.jsx';
 import { SectionCard } from './StepBasicInfo.jsx';
-import { ICON, surface } from '../../../theme/index.js';
+import { CARD_RADIUS, GUTTER, ICON, surface } from '../../../theme/index.js';
 
 const SUGGESTED_FEATURES = [
   'Alcohol free',
@@ -91,7 +91,7 @@ const StepFeatures = () => {
             {fields.map((field, index) => (
               <Box
                 key={field.id}
-                sx={{ border: 1, borderColor: 'divider', borderRadius: 2.5, p: 2, bgcolor: surface.ivoryWash }}
+                sx={{ border: 1, borderColor: 'divider', borderRadius: `${CARD_RADIUS}px`, p: 2, bgcolor: surface.ivoryWash }}
               >
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
                   <Stack direction="row" spacing={1} alignItems="center">
@@ -105,7 +105,7 @@ const StepFeatures = () => {
                   </Tooltip>
                 </Stack>
 
-                <Grid container spacing={2}>
+                <Grid container spacing={GUTTER.fields}>
                   <Grid item xs={12}>
                     <RHFTextField
                       name={`faqs.${index}.question`}

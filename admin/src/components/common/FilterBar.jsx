@@ -3,11 +3,7 @@ import SearchRounded from '@mui/icons-material/SearchRounded';
 import RestartAltRounded from '@mui/icons-material/RestartAltRounded';
 import { ICON } from '../../theme/index.js';
 
-
-/**
- * One-line filter bar: search grows, every control sits on the same row.
- * Wraps only on narrow screens, where a single row would be unusable.
- */
+// One-line filter bar: search grows, every control sits on the same row.
 export const FilterBar = ({ children, sx }) => (
   <Stack
     direction="row"
@@ -41,10 +37,7 @@ export const FilterSearch = ({ sx, ...props }) => (
   />
 );
 
-/**
- * Fixed-width dropdown. `fullWidth` is on by default from the theme, which is
- * what pushed each select onto its own line — it is switched off here.
- */
+// Fixed-width dropdown.
 export const FilterSelect = ({ width = 160, sx, children, SelectProps, ...props }) => (
   <TextField
     select
@@ -59,11 +52,7 @@ export const FilterSelect = ({ width = 160, sx, children, SelectProps, ...props 
   </TextField>
 );
 
-/**
- * Reset is one affordance everywhere: a bordered icon button carrying the
- * RestartAlt glyph. It is disabled while there is nothing to reset, which is
- * what keeps it from reading as a reload.
- */
+// Reset is one affordance everywhere: a bordered icon button carrying the RestartAlt glyph.
 export const ResetIconButton = ({ onClick, disabled = false, title, disabledTitle }) => (
   <Tooltip title={disabled ? disabledTitle : title}>
     {/* A disabled button fires no events, so the tooltip needs a live wrapper. */}

@@ -6,10 +6,6 @@ import {
   addPostalCodeIssue,
 } from '../../utils/countries.js';
 
-/**
- * Postal codes are validated against the country the branch sits in, so a UK
- * branch is not held to India's six digit pincode.
- */
 const addressSchema = z
   .object({
     line1: z.string().trim().max(200).optional().default(''),

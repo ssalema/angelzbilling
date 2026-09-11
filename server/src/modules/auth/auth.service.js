@@ -10,22 +10,36 @@ import {
 
 const MAX_SESSIONS = 5; // one account, at most five signed-in devices
 
-const prune = (tokens = []) => tokens.filter((t) => t.expiresAt > new Date());
-
-/** Issues a fresh pair and records the (hashed) refresh token on the user. */
+// Issues a fresh pair and records the (hashed) refresh token on the user.
 const issueTokens = async (user, userAgent = '') => {
   const accessToken = signAccessToken(user);
   const refreshToken = signRefreshToken(user);
 
-  const kept = prune(user.refreshTokens || []).slice(-(MAX_SESSIONS - 1));
-  kept.push({
-    tokenHash: hashToken(refreshToken),
-    expiresAt: new Date(Date.now() + refreshCookieMaxAge()),
-    userAgent: String(userAgent).slice(0, 200),
-    createdAt: new Date(),
-  });
+  // Expired entries are dropped by their own condition rather than by being
+  // filtered out of a snapshot, so this cannot take a live session with it.
+  await User.updateOne(
+    { _id: user._id },
+    { $pull: { refreshTokens: { expiresAt: { $lte: new Date() } } } }
+  );
 
-  await User.updateOne({ _id: user._id }, { $set: { refreshTokens: kept } });
+  await User.updateOne(
+    { _id: user._id },
+    {
+      $push: {
+        refreshTokens: {
+          $each: [
+            {
+              tokenHash: hashToken(refreshToken),
+              expiresAt: new Date(Date.now() + refreshCookieMaxAge()),
+              userAgent: String(userAgent).slice(0, 200),
+              createdAt: new Date(),
+            },
+          ],
+          $slice: -MAX_SESSIONS,
+        },
+      },
+    }
+  );
 
   return { accessToken, refreshToken };
 };
@@ -66,10 +80,7 @@ export const login = async ({ email, password, userAgent }) => {
     throw ApiError.forbidden('Your account has been deactivated. Please contact the super admin.');
   }
 
-  // An out-of-service branch stops the people scoped to it from working. A
-  // Super Admin assigned to one is not scoped by it — they see the whole store
-  // either way — so this must not lock them out, least of all when the main
-  // Super Admin switches branch management off and deactivates every branch.
+  // An out-of-service branch stops the people scoped to it from working.
   if (user.role !== 'superadmin' && user.branch && user.branch.isActive === false) {
     throw ApiError.forbidden('Your branch is currently inactive. Please contact the super admin.');
   }
@@ -103,13 +114,20 @@ export const refreshSession = async (token, userAgent = '') => {
   if (!user) throw ApiError.unauthorized('This account no longer exists');
   if (!user.isActive) throw ApiError.forbidden('Your account has been deactivated.');
 
+  // Redeeming the token is a single atomic claim, and that claim IS the one-use guarantee.
   const presented = hashToken(token);
-  const match = (user.refreshTokens || []).find((t) => t.tokenHash === presented);
-  if (!match || match.expiresAt < new Date()) {
+  const claim = await User.updateOne(
+    {
+      _id: user._id,
+      refreshTokens: { $elemMatch: { tokenHash: presented, expiresAt: { $gt: new Date() } } },
+    },
+    { $pull: { refreshTokens: { tokenHash: presented } } }
+  );
+
+  if (!claim.modifiedCount) {
     throw ApiError.unauthorized('Your session is no longer valid. Please sign in again.');
   }
 
-  user.refreshTokens = (user.refreshTokens || []).filter((t) => t.tokenHash !== presented);
   const tokens = await issueTokens(user, userAgent);
 
   return { user, ...tokens };

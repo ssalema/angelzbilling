@@ -10,14 +10,6 @@ import CollectPaymentDialog from './CollectPaymentDialog.jsx';
 import { formatCurrency, formatDate } from '../../utils/format.js';
 import { ICON } from '../../theme/index.js';
 
-/**
- * Sits above the customer fields and does the recall: type a number that has
- * bought here before and the rest of the form fills itself from their last bill.
- * Rendered inside the billing FormProvider — it drives the form directly.
- *
- * It also carries the warning for a customer who still owes money, and lets that
- * balance be taken without leaving the sale being rung up behind it.
- */
 const CustomerRecallBanner = () => {
   const { customer, loading, searched, applySaved, forget, refresh } = useCustomerRecall();
 
@@ -25,9 +17,7 @@ const CustomerRecallBanner = () => {
   /** The pending bill whose balance is being taken, if any. */
   const [collecting, setCollecting] = useState(null);
 
-  // The warning interrupts once per number. Re-raising it on every re-render —
-  // or every time the biller edits a field — would turn a useful heads-up into
-  // something they learn to dismiss without reading.
+  // The warning interrupts once per number.
   const warnedFor = useRef('');
   const owed = Number(customer?.totalDue || 0);
   const hasPending = Boolean(customer?.pendingBills?.length);
@@ -40,15 +30,6 @@ const CustomerRecallBanner = () => {
     setPendingOpen(true);
   }, [hasPending, customer]);
 
-  /**
-   * The banner has four faces — checking, recalled, new customer, nothing typed
-   * yet — but the dialogs below are rendered once, outside all of them.
-   *
-   * Collecting a balance refreshes the recall, which flips this straight back to
-   * "checking". If the dialogs lived inside that branch they would unmount the
-   * moment a payment succeeded and reappear a beat later, so the biller would
-   * watch the list they were working in blink out from under them.
-   */
   const banner = () => {
     if (loading) {
       return (

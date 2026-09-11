@@ -54,15 +54,10 @@ import {
   unitsFromGrams,
   STOCK_LABELS,
 } from '../../utils/format.js';
-import { FONT, CARD_HEAD_PAD, CARD_PAD, DISCOUNT_COLOR, ICON, brand, numericText, surface } from '../../theme/index.js';
+import { FONT, CARD_HEAD_PAD, CARD_PAD, CARD_RADIUS, GUTTER, DISCOUNT_COLOR, ICON, brand, numericText, surface } from '../../theme/index.js';
 import { IMG } from '../../utils/image.js';
 
-/**
- * What the last write changed, in words. The server stores a slug beside
- * `updatedBy` on every path that touches a perfume — the wizard, the stock and
- * price screens, a bulk sheet — so "Updated by Lucifer" can say what Lucifer
- * actually changed.
- */
+// What the last write changed, in words.
 const UPDATE_ACTION_LABELS = {
   created: 'Created',
   'bulk-upload': 'Bulk upload',
@@ -78,11 +73,7 @@ const UPDATE_ACTION_LABELS = {
 /** Adding a perfume is not an update to it — these two are creation, not change. */
 const CREATION_ACTIONS = new Set(['created', 'bulk-upload']);
 
-/**
- * Whether anyone has actually changed this perfume since it was added. A brand
- * new one carries an `updatedAt` equal to the moment it was created, which
- * would otherwise read as an edit that never happened.
- */
+// Whether anyone has actually changed this perfume since it was added.
 const wasUpdated = (perfume) => {
   if (perfume.updatedAction) return !CREATION_ACTIONS.has(perfume.updatedAction);
 
@@ -118,7 +109,7 @@ const PerfumeViewPage = () => {
   const [activeImage, setActiveImage] = useState(0);
   const [soldOpen, setSoldOpen] = useState(false);
 
-  const { data: perfume, loading, error, reload } = useApiResource(() => perfumeApi.get(id), [id]);
+  const { data: perfume, loading, error, reload } = useApiResource(() => perfumeApi.get(id), [id], { watch: 'perfumes' });
 
   // Loading, error and loaded all render the same header — same breadcrumbs,
   // same height — so the page never jumps when the perfume arrives.
@@ -132,7 +123,7 @@ const PerfumeViewPage = () => {
     return (
       <Box>
         <PageHeader title={<Skeleton variant="text" width={280} />} breadcrumbs={crumbs} />
-        <Grid container spacing={2.5}>
+        <Grid container spacing={GUTTER.page}>
           <Grid item xs={12} md={5}>
             <CardSkeleton height={380} />
           </Grid>
@@ -182,13 +173,13 @@ const PerfumeViewPage = () => {
         }
       />
 
-      <Grid container spacing={2.5}>
+      <Grid container spacing={GUTTER.page}>
         {/* Gallery */}
         <Grid item xs={12} md={5}>
           <Card sx={{ p: CARD_PAD }}>
             <Box
               sx={{
-                borderRadius: 3,
+                borderRadius: `${CARD_RADIUS}px`,
                 overflow: 'hidden',
                 bgcolor: surface.plumFaint,
                 aspectRatio: '1',
@@ -238,7 +229,7 @@ const PerfumeViewPage = () => {
                     component="video"
                     src={video.url}
                     controls
-                    sx={{ width: '100%', borderRadius: 2, bgcolor: '#000' }}
+                    sx={{ width: '100%', borderRadius: `${CARD_RADIUS}px`, bgcolor: '#000' }}
                   />
                 ))}
               </Stack>
@@ -247,9 +238,7 @@ const PerfumeViewPage = () => {
 
           {/* Metadata */}
           <Card sx={{ p: CARD_PAD, mt: 2.5 }}>
-            <Typography variant="h6" sx={{ mb: 1 }}>
-              Catalogue details
-            </Typography>
+            <SectionTitle title="Catalogue details" />
             <Row label="SKU" value={perfume.sku} />
             <Row label="Brand" value={perfume.brand} />
             <Row label="Category" value={[perfume.category, perfume.subCategory].filter(Boolean).join(' → ')} />
@@ -311,7 +300,7 @@ const PerfumeViewPage = () => {
             <Divider sx={{ my: 2 }} />
 
             {/* Sales performance from real bill data */}
-            <Grid container spacing={2}>
+            <Grid container spacing={GUTTER.fields}>
               <Grid item xs={6} sm={3}>
                 <Typography variant="overline" color="text.secondary" component="div">
                   Units sold
@@ -499,9 +488,7 @@ const PerfumeViewPage = () => {
 
           {/* Description, features, FAQs */}
           <Card sx={{ p: CARD_PAD }}>
-            <Typography variant="h6" sx={{ mb: 1.25 }}>
-              About this fragrance
-            </Typography>
+            <SectionTitle title="About this fragrance" />
 
             {perfume.description ? (
               <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-line', lineHeight: 1.75 }}>
@@ -542,7 +529,7 @@ const PerfumeViewPage = () => {
                   <Accordion
                     key={index}
                     elevation={0}
-                    sx={{ border: 1, borderColor: 'divider', borderRadius: 2, mb: 1, '&:before': { display: 'none' } }}
+                    sx={{ border: 1, borderColor: 'divider', borderRadius: `${CARD_RADIUS}px`, mb: 1, '&:before': { display: 'none' } }}
                   >
                     <AccordionSummary expandIcon={<ExpandMore />}>
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>

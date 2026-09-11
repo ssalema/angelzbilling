@@ -51,20 +51,7 @@ import {
 /** How many review rows are drawn at once — a thousand-row sheet is normal here. */
 const PAGE_SIZE = 25;
 
-/**
- * Repricing a whole catalogue from a spreadsheet.
- *
- * The file is read in the browser and thrown away: it is never uploaded, never
- * written to the media library, never parked on the server or in the database.
- * What leaves this screen is a list of names to look up, and — only after the
- * admin has reviewed and pressed the update button — a list of ids and the
- * per-size prices they approved. Close the dialog before that and nothing has
- * happened at all.
- *
- * The sheet carries one column per fill. Every size is independent, and a blank
- * cell means that size keeps the price it has — never that a price should be
- * worked out for it.
- */
+// Repricing a whole catalogue from a spreadsheet.
 const BulkPriceUpdate = ({ onUpdated }) => {
   const snackbar = useSnackbar();
 
@@ -95,12 +82,7 @@ const BulkPriceUpdate = ({ onUpdated }) => {
       return next;
     });
 
-  /**
-   * Reads the chosen file and matches it against the catalogue.
-   *
-   * `file` is only ever a local handle — it is read into rows here and goes out
-   * of scope when this returns, so nothing holds the spreadsheet afterwards.
-   */
+  // Reads the chosen file and matches it against the catalogue.
   const handleFiles = async (fileList) => {
     const file = [...(fileList || [])][0];
     if (!file) return;

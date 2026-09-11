@@ -1,17 +1,4 @@
-/**
- * A tiny in-process TTL cache.
- *
- * Deliberately not Redis: the only thing cached today is dashboard analytics,
- * which is cheap to recompute and safe to serve slightly stale. A per-instance
- * Map costs nothing to run and cannot fail the request. If a second API
- * instance is ever added, each keeps its own copy — the worst case is that two
- * users see figures up to `ttlMs` apart, which is the same guarantee a single
- * instance already gives.
- *
- * Entries expire lazily on read. `maxEntries` is the real memory ceiling: once
- * it is hit the oldest insertion is evicted, so a caller that varies the query
- * string endlessly cannot grow the map without bound.
- */
+// A tiny in-process TTL cache.
 export default class TtlCache {
   constructor({ ttlMs = 30_000, maxEntries = 200 } = {}) {
     this.ttlMs = ttlMs;
@@ -48,22 +35,17 @@ export default class TtlCache {
     }
   }
 
+  /** Drops one key. Returns true if there was something there to drop. */
+  delete(key) {
+    return this.store.delete(key);
+  }
+
   /** Drops everything. The blunt instrument — prefer `deleteByPrefix`. */
   clear() {
     this.store.clear();
   }
 
-  /**
-   * Drops only the entries whose key starts with one of `prefixes`.
-   *
-   * This is what keeps the cache useful in a live shop. Clearing the whole map
-   * on every write meant a till raising bills all afternoon flushed the
-   * analytics cache every few seconds, so the 30 second TTL never survived long
-   * enough to serve anything and the hit rate sat near zero exactly when load
-   * was highest. Keys lead with the branch scope, so a bill raised at one
-   * branch now evicts that branch and the all-branches roll-up, and leaves the
-   * other branches' cached figures standing.
-   */
+  // Drops only the entries whose key starts with one of `prefixes`.
   deleteByPrefix(prefixes = []) {
     const list = Array.isArray(prefixes) ? prefixes : [prefixes];
     if (!list.length) return 0;

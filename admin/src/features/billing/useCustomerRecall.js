@@ -8,16 +8,7 @@ import { DEFAULT_DIAL_CODE, digitsFor, onlyDigits } from '../../utils/countries.
 /** Everything a past bill can tell us about the person standing at the counter. */
 const RECALLED_FIELDS = ['name', 'email', 'address', 'gstin'];
 
-/**
- * Customer recall for the billing form.
- *
- * A returning buyer is identified by their contact number alone: as soon as the
- * biller has typed a complete number we look the customer up from past bills and
- * fill in the rest of the form, so nobody re-types a name and address that the
- * shop already has. Anything the biller has already typed is left alone — the
- * banner offers an explicit "Use saved details" for that — and `forget()` wipes
- * the recall when the number belongs to somebody new.
- */
+// Customer recall for the billing form.
 export const useCustomerRecall = () => {
   const { control, getValues, setValue } = useFormContext();
 
@@ -82,14 +73,7 @@ export const useCustomerRecall = () => {
     };
   }, [debouncedMobile, dial, fill, reloadKey]);
 
-  /**
-   * Re-reads the customer from the server.
-   *
-   * The lookup normally runs once per number so it cannot fight the biller as
-   * they type. But a balance collected from the pending-bills warning changes
-   * the very thing that warning is showing, so that one case has to be able to
-   * ask again — clearing the guard is what makes the effect re-run.
-   */
+  // Re-reads the customer from the server.
   const refresh = useCallback(() => {
     lastLookup.current = '';
     setReloadKey((key) => key + 1);

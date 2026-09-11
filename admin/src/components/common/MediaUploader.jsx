@@ -16,20 +16,13 @@ import ChevronRight from '@mui/icons-material/ChevronRight';
 import StarRounded from '@mui/icons-material/StarRounded';
 import AddPhotoAlternateOutlined from '@mui/icons-material/AddPhotoAlternateOutlined';
 import { uploadApi } from '../../api/endpoints.js';
-import { IMAGE_TYPES } from '../../utils/constants.js';
+import { IMAGE_TYPES, rejectImageReason } from '../../utils/constants.js';
 import Dropzone from './Dropzone.jsx';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
-import { ICON, brand, surface } from '../../theme/index.js';
+import { CARD_RADIUS, ICON, brand, surface } from '../../theme/index.js';
 import { IMG } from '../../utils/image.js';
 
-
-/**
- * Drag-and-drop image manager for the perfume wizard.
- *
- * Files upload to Cloudinary immediately and the parent form only ever holds
- * `{url, publicId}` references — so an abandoned wizard never saves a broken
- * image, and reordering is a pure array operation.
- */
+// Drag-and-drop image manager for the perfume wizard.
 const MediaUploader = ({ images = [], onImagesChange, maxImages = 5, folder = 'perfumes' }) => {
   const snackbar = useSnackbar();
   const [progress, setProgress] = useState(null);
@@ -40,10 +33,11 @@ const MediaUploader = ({ images = [], onImagesChange, maxImages = 5, folder = 'p
     const files = [...fileList];
     if (!files.length) return;
 
-    const incomingImages = files.filter((f) => f.type.startsWith('image/'));
+    const incomingImages = files.filter((f) => !rejectImageReason(f));
 
     if (incomingImages.length < files.length) {
-      snackbar.warning('Only images can be uploaded — the other files were skipped.');
+      const [firstRejected] = files.filter((f) => rejectImageReason(f));
+      snackbar.error(rejectImageReason(firstRejected));
     }
     if (incomingImages.length > imageSlots) {
       snackbar.warning(
@@ -152,7 +146,7 @@ const MediaUploader = ({ images = [], onImagesChange, maxImages = 5, folder = 'p
               key={image.publicId || image.url || index}
               sx={{
                 position: 'relative',
-                borderRadius: 2.5,
+                borderRadius: `${CARD_RADIUS}px`,
                 overflow: 'hidden',
                 border: 2,
                 borderColor: index === 0 ? 'secondary.main' : 'divider',

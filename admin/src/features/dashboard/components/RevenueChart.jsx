@@ -63,10 +63,6 @@ const ChartTooltip = ({ active, payload, metric }) => {
   );
 };
 
-/**
- * The big "Revenue growth" panel: metric switcher on the right, the range
- * filter beneath it, a total for the period, and a filled area chart.
- */
 const RevenueChart = ({ data, loading, error, onRetry, range, onRangeChange, growth }) => {
   const [metric, setMetric] = useState('revenue');
 
@@ -226,7 +222,10 @@ const RevenueChart = ({ data, loading, error, onRetry, range, onRangeChange, gro
                 stroke={brand.plum}
                 strokeWidth={2.4}
                 fill="url(#revenueFill)"
-                dot={false}
+                // A line needs two points to be visible at all, so a period that
+                // holds a single bucket is drawn as a marked point instead of an
+                // empty panel.
+                dot={points.length === 1 ? { r: 4, fill: brand.plum, stroke: '#fff', strokeWidth: 2 } : false}
                 activeDot={{ r: 5, fill: brand.gold, stroke: '#fff', strokeWidth: 2 }}
               />
             </AreaChart>

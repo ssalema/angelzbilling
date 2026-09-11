@@ -13,10 +13,7 @@ import WarningAmberRounded from '@mui/icons-material/WarningAmberRounded';
 import DialogCloseButton from './DialogCloseButton.jsx';
 import { FONT, ICON, surface } from '../../theme/index.js';
 
-/**
- * Confirmation for anything destructive or irreversible.
- * Holds its own busy state so the caller just passes an async onConfirm.
- */
+// Confirmation for anything destructive or irreversible.
 const ConfirmDialog = ({
   open,
   title = 'Are you sure?',
@@ -65,7 +62,7 @@ const ConfirmDialog = ({
         <DialogContentText sx={{ fontSize: FONT.body, color: 'text.secondary' }}>{message}</DialogContentText>
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+      <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
         <Button
           onClick={handleConfirm}
           variant="contained"

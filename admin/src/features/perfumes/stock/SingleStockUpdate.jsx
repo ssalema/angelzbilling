@@ -34,23 +34,7 @@ import { brand, CARD_RADIUS, FONT, ICON, numericText, surface } from '../../../t
 import { IMG } from '../../../utils/image.js';
 import { parseTypedGrams } from './stockSheet.js';
 
-/**
- * Topping up perfumes by hand.
- *
- * Built like the billing screen: search, pick, and the perfume drops into a
- * list you keep adding to. A delivery almost never contains exactly one
- * fragrance, and closing and reopening this dialog for each bottle was the
- * whole reason bulk upload existed — this covers the middle ground, where
- * there are six to update and writing a spreadsheet is more work than typing.
- *
- * The columns are the bulk review table's, in the same order and with the same
- * arithmetic, so the two tabs teach each other. Available stock is read from
- * the catalogue and never editable; the admin types what has ARRIVED, and the
- * final weight is worked out in front of them.
- *
- * Only the arriving grams are sent — the server adds them — so a bottle billed
- * while the list was being built is still subtracted rather than written over.
- */
+// Topping up perfumes by hand.
 const SingleStockUpdate = ({ onUpdated }) => {
   const snackbar = useSnackbar();
 
@@ -288,10 +272,6 @@ const SingleStockUpdate = ({ onUpdated }) => {
                             onChange={(event) => editRow(row.id, event.target.value.replace(/[^\d.]/g, ''))}
                             disabled={saving}
                             error={Boolean(error)}
-                            // No blank placeholder line when the row is fine: a
-                            // reserved helper row is laid out with the field, so
-                            // it lifts the box off the row's centre line and the
-                            // column reads as misaligned against the name beside it.
                             helperText={error}
                             inputProps={{ style: { textAlign: 'right' } }}
                             InputProps={{ endAdornment: <InputAdornment position="end">gm</InputAdornment> }}

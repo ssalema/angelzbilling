@@ -7,22 +7,14 @@ import { brand } from '../../theme/index.js';
 import { IMG } from '../../utils/image.js';
 import { cachedSiteName } from '../../utils/branding.js';
 
-/**
- * The printable bill — a thermal receipt slip, not an A4 invoice.
- *
- * Wrapped in `#print-area`, which the global print stylesheet isolates, so
- * `window.print()` from anywhere in the app produces just this slip on an
- * 80mm roll with no sidebar, buttons or chrome.
- */
+// The printable bill — a thermal receipt slip, not an A4 invoice.
 
 /** Settings arrive flattened from /bills/:id and nested from /settings — accept both. */
 const readShop = (store, bill) => {
   const s = store || bill?.store || {};
   return {
     name: s.siteName || cachedSiteName(),
-    // No literal fallbacks below this line: a tagline and a slip footer are the
-    // store's own words. An unset one prints nothing rather than someone else's
-    // slogan — the blocks that render them are conditional for that reason.
+    // No literal fallbacks below this line: a tagline and a slip footer are the store's own words.
     tagline: s.tagline || '',
     favicon: s.favicon || s.branding?.favicon?.url || '',
     gstin: s.gstin || '',
@@ -62,32 +54,14 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
   const amountDue = Number(bill.amountDue || 0);
   // Oldest first: the slip reads down the way the money came in.
   const instalments = [...(bill.payments || [])].sort((a, b) => new Date(a.at) - new Date(b.at));
-  /**
-   * The breakdown appears the moment a bill stops being "paid once, in full":
-   * either something is still owed, or it took more than one payment to clear.
-   * A settled-in-instalments bill keeps its history on the reprint — that is the
-   * customer's proof of what they already handed over.
-   */
   const showInstalments = amountDue > 0 || instalments.length > 1;
 
-  /**
-   * `bill.paymentMethod` is the mode chosen when the bill was raised and it is
-   * never rewritten by a later collection, so on a part-paid bill it names the
-   * wrong counter: ₹150 taken as cash at billing, the ₹100 balance settled by
-   * UPI a week later, and the slip still says Cash.
-   *
-   * The line describes the payment this slip is being handed over for, which is
-   * always the most recent one — UPI in that example. The earlier modes are not
-   * lost; the instalment breakdown above is the record of those.
-   */
   const latestMethod = instalments.length ? instalments[instalments.length - 1].method : '';
   const modeValue = methodLabel(latestMethod || bill.paymentMethod);
 
   // A bill rung up at a branch prints that branch's GSTIN, not head office's.
   const gstin = branch.gstin || shop.gstin;
-  // …and names the location it was raised at, under the biller. No branch means
-  // the Head Office, which is a location like any other. A store running with
-  // branch management off has none to name, so the slip stays quiet.
+  // …and names the location it was raised at, under the biller.
   const location = shop.branchesEnabled ? branch.name || HEAD_OFFICE.name : '';
   // The slip prints under the favicon alone — no wordmark, and nothing at all
   // when the store has not uploaded a favicon.
@@ -350,12 +324,7 @@ const MetaRow = ({ label, value, strong, width = 74, nowrap }) => (
   </Stack>
 );
 
-/**
- * `plain` drops the uppercase tracking for labels that carry a date. On a 72mm
- * roll "PAID (06 SEPT 2026, 04:49 PM)" spaced out that way wraps onto three
- * lines and pushes the amount out of sight; sentence case at the smaller size
- * keeps each instalment on one line beside its figure.
- */
+// `plain` drops the uppercase tracking for labels that carry a date.
 const TotalRow = ({ label, value, plain }) => (
   <Stack
     direction="row"
@@ -385,14 +354,6 @@ const Badge = ({ icon, label, divider }) => (
   </Box>
 );
 
-/*
- * ── Glyphs ──
- *
- * Inline SVG, so the slip prints identically without an icon font, and every
- * colour is stated rather than inherited: html2canvas serialises each SVG on its
- * own, where `currentColor` resolves to plain black instead of the brand ink.
- */
-
 const GLYPH = { display: 'inline-block', flexShrink: 0, overflow: 'visible' };
 
 const BottleGlyph = () => (
@@ -417,16 +378,7 @@ const HeartGlyph = () => (
   </svg>
 );
 
-/**
- * The status stamp's tick, drawn the same on screen, on paper and in the PDF.
- *
- * Both colours are passed in rather than inherited: html2canvas serialises each
- * inline SVG on its own, where `currentColor` falls back to black — on the black
- * PAID stamp that turned the tick into a dark blob. The disc and the check are
- * separate shapes for the same reason: a single compound path relying on the
- * nonzero winding rule to knock the check out of the disc rasterises
- * inconsistently at this size.
- */
+// The status stamp's tick, drawn the same on screen, on paper and in the PDF.
 const TickIcon = ({ color = '#fff', mark = brand.ink }) => (
   <svg
     width="15"

@@ -23,10 +23,7 @@ export const getSort = (sortParam, allowed = [], fallback = { createdAt: -1 }) =
 
 export const escapeRegex = (value = '') => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/**
- * Resolves the dashboard/report date filters into a concrete window.
- * range: 'today' | 'week' | 'month' | 'year' | 'all' | 'custom'
- */
+// Resolves the dashboard/report date filters into a concrete window.
 export const resolveDateRange = ({ range = 'month', from, to } = {}) => {
   const now = new Date();
   let start = null;

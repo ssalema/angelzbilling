@@ -43,10 +43,7 @@ export const PublicOnlyRoute = ({ children }) => {
   return children;
 };
 
-/**
- * Role gate. Renders a clear explanation rather than a redirect, so a branch
- * admin who bookmarks /users understands why they cannot see it.
- */
+// Role gate.
 export const RoleGuard = ({ roles = [], children }) => {
   const { user } = useAuth();
   if (!roles.length || roles.includes(user?.role)) return children;

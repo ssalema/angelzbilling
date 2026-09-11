@@ -2,6 +2,7 @@ import { Router } from 'express';
 import authenticate from '../../middlewares/authenticate.js';
 import { requireGlobalSuperAdmin } from '../../middlewares/authorize.js';
 import validate from '../../middlewares/validate.js';
+import { announceOnWrite } from '../../middlewares/realtime.js';
 import { imageUpload, enforceFileLimits, uploadGate } from '../../middlewares/upload.js';
 import {
   getSettings,
@@ -22,12 +23,9 @@ router.use(authenticate);
 // Reading settings is fine for anyone — the bill print header uses them.
 router.get('/', getSettings);
 
-/**
- * These settings ARE the main business: its name, tagline, contact details,
- * address, GSTIN, logo and favicon, plus store-wide billing rules and the
- * branch switch. A branch never overrides them, and a Super Admin assigned to a
- * branch cannot change them — only the main Super Admin can.
- */
+// Branding and the feature switches are read by every open screen.
+router.use(announceOnWrite({ resource: 'settings' }));
+
 const mainBusinessOnly = requireGlobalSuperAdmin(
   'Only the main Super Admin can change the main business details. Your account manages its branch only.'
 );

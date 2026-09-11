@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { broadcast, onBroadcast } from '../config/broadcast.js';
 
 const imageSchema = new mongoose.Schema(
   {
@@ -8,12 +9,7 @@ const imageSchema = new mongoose.Schema(
   { _id: false }
 );
 
-/**
- * The bill/SKU prefix a fresh install starts on, and the one fallback every
- * reader defers to. It lives HERE, beside the schema default it fills in, so
- * the prefix is stated once — a store that renames itself changes the setting,
- * and nothing in the codebase still spells out the old initials.
- */
+// The bill/SKU prefix a fresh install starts on, and the one fallback every reader defers to.
 export const DEFAULT_BILL_PREFIX = 'AP';
 
 /** Singleton document — there is exactly one settings row, keyed 'general'. */
@@ -21,10 +17,6 @@ const settingsSchema = new mongoose.Schema(
   {
     key: { type: String, default: 'general', unique: true, immutable: true },
 
-    // Blank on a fresh install on purpose — this app is deployed per store, and
-    // the schema is the wrong place to assert whose store it is. The admin names
-    // it on first run (Settings > Store name is required); until then the UI
-    // falls back to a neutral word rather than someone else's brand.
     siteName: { type: String, trim: true, default: '', maxlength: 120 },
     tagline: { type: String, trim: true, default: '', maxlength: 200 },
     contactEmail: { type: String, trim: true, lowercase: true, default: '' },
@@ -55,12 +47,6 @@ const settingsSchema = new mongoose.Schema(
       currencySymbol: { type: String, default: '₹' },
       billPrefix: { type: String, default: DEFAULT_BILL_PREFIX, uppercase: true, trim: true, maxlength: 6 },
       defaultTaxPercent: { type: Number, default: 0, min: 0, max: 100 },
-      /**
-       * The most a Billing Staff account may discount a line, and the most of a
-       * bill they may write off with the whole-bill discount. Admins and above
-       * can go past it; staff cannot, so a till operator can no longer hand out
-       * stock for free at full stock deduction.
-       */
       maxDiscountPercent: { type: Number, default: 20, min: 0, max: 100 },
       invoiceFooter: { type: String, default: 'Thank you for shopping with us.', maxlength: 300 },
       termsAndConditions: { type: String, default: '', maxlength: 2000 },
@@ -72,31 +58,25 @@ const settingsSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-/** Always returns the singleton, creating it with defaults on first call. */
-settingsSchema.statics.getSingleton = async function getSingleton() {
-  const existing = await this.findOne({ key: 'general' });
-  if (existing) return existing;
-  return this.create({ key: 'general' });
+const upsertSingleton = async (model, { lean = false } = {}) => {
+  const query = { key: 'general' };
+  try {
+    const doc = await model
+      .findOneAndUpdate(query, { $setOnInsert: query }, { new: true, upsert: true, setDefaultsOnInsert: true })
+      .lean(lean);
+    if (doc) return doc;
+  } catch (error) {
+    if (error?.code !== 11000) throw error;
+  }
+  // Lost the insert to a simultaneous caller: their document is the singleton.
+  return model.findOne(query).lean(lean);
 };
 
-/**
- * The same singleton, as a plain read-only object, cached in process.
- *
- * Every bill view and every printed slip needs the store identity, so
- * `getSingleton` was being queried on each one — a database round trip for a
- * document that changes maybe monthly, on one of the hottest read paths in the
- * app. This serves those readers from memory instead.
- *
- * It returns a LEAN object on purpose. `getSingleton` hands back a live
- * mongoose document that the settings controller mutates and saves, and a
- * shared cached copy of that is a bug waiting to happen — a caller could
- * quietly edit everyone else's settings in place. Writers keep using
- * `getSingleton`; readers use this and cannot mutate anything that matters.
- *
- * `invalidate` is called by the settings controller after every successful
- * write, so the staleness window is "until the next settings change", with the
- * TTL only as a backstop for a write that happened in another process.
- */
+settingsSchema.statics.getSingleton = function getSingleton() {
+  return upsertSingleton(this);
+};
+
+// The same singleton, as a plain read-only object, cached in process.
 let cachedSettings = null;
 let cachedAt = 0;
 const SETTINGS_TTL_MS = 60_000;
@@ -104,16 +84,21 @@ const SETTINGS_TTL_MS = 60_000;
 settingsSchema.statics.getCached = async function getCached() {
   if (cachedSettings && Date.now() - cachedAt < SETTINGS_TTL_MS) return cachedSettings;
 
-  const existing = await this.findOne({ key: 'general' }).lean();
-  cachedSettings = existing || (await this.create({ key: 'general' })).toObject();
+  // Same upsert as `getSingleton`, and lean for the same reason as before: the
+  // readers served from here must not be handed a document they can mutate.
+  cachedSettings = await upsertSingleton(this, { lean: true });
   cachedAt = Date.now();
   return cachedSettings;
 };
 
-settingsSchema.statics.invalidateCache = function invalidateCache() {
+settingsSchema.statics.invalidateCache = function invalidateCache({ local = false } = {}) {
   cachedSettings = null;
   cachedAt = 0;
+  if (!local) broadcast('settings');
 };
 
 export const Settings = mongoose.model('Settings', settingsSchema);
 export default Settings;
+
+// Relayed from another worker: clear locally without telling anyone back.
+onBroadcast('settings', () => Settings.invalidateCache({ local: true }));

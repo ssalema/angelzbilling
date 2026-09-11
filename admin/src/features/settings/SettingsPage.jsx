@@ -5,7 +5,6 @@ import { z } from 'zod';
 import {
   Box,
   Card,
-  Paper,
   Grid,
   Tabs,
   Tab,
@@ -28,6 +27,7 @@ import Facebook from '@mui/icons-material/Facebook';
 import LinkedIn from '@mui/icons-material/LinkedIn';
 
 import PageHeader from '../../components/common/PageHeader.jsx';
+import StickyActionBar from '../../components/common/StickyActionBar.jsx';
 import { RHFTextField, RHFNumberField } from '../../components/form/RHFControls.jsx';
 import RHFContactNumber from '../../components/form/RHFContactNumber.jsx';
 import SectionTitle from '../../components/common/SectionTitle.jsx';
@@ -45,7 +45,7 @@ import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { applyServerErrors } from '../../api/client.js';
 import { formatRelative } from '../../utils/format.js';
 import { DEFAULT_DIAL_CODE, addContactNumberIssue } from '../../utils/countries.js';
-import { CARD_PAD, ICON } from '../../theme/index.js';
+import { CARD_PAD, GUTTER, INSET_RADIUS, ICON } from '../../theme/index.js';
 
 const urlOrEmpty = (name) => z.string().trim().url(`Enter a full ${name} URL`).or(z.literal('')).default('');
 
@@ -96,10 +96,7 @@ const schema = z
     })
   );
 
-/**
- * "Never updated" hint next to each field, matching the reference UI.
- * The server escapes dots to colons because Mongoose Map keys cannot hold "."
- */
+// "Never updated" hint next to each field, matching the reference UI.
 const UpdatedHint = ({ settings, path }) => {
   const at = settings?.updatedFields?.[path.replace(/\./g, ':')];
   return (
@@ -126,11 +123,7 @@ const TABS = [
   { value: 'social', label: 'Social profiles', icon: <ShareOutlined sx={{ fontSize: ICON.action }} /> },
 ];
 
-/**
- * The currency pair an admin may type either half of. Codes are ISO 4217; when
- * several share a symbol the first one listed is what that symbol resolves back
- * to, so "$" reads as USD and "¥" as JPY.
- */
+// The currency pair an admin may type either half of.
 const CODE_TO_SYMBOL = {
   INR: '₹',
   USD: '$',
@@ -183,7 +176,7 @@ const SettingsPage = () => {
   const { reload: reloadGlobalSettings } = useSettings();
   const { tab, setTab } = useSettingsTab();
 
-  const settings = useApiResource(() => settingsApi.get(), []);
+  const settings = useApiResource(() => settingsApi.get(), [], { watch: 'settings' });
 
   const methods = useForm({ resolver: zodResolver(schema), mode: 'onTouched' });
   const {
@@ -223,12 +216,6 @@ const SettingsPage = () => {
     });
   }, [settings.data, reset]);
 
-  /**
-   * Code and symbol travel as a pair: typing a known code fills in its symbol
-   * and typing a known symbol fills in its code, so an admin only ever has to
-   * change one of the two. Anything unrecognised is left exactly as typed and
-   * the other field keeps what it held.
-   */
   const syncCurrency = (edited, raw) => {
     const options = { shouldDirty: true, shouldValidate: true };
     if (edited === 'code') {
@@ -242,11 +229,6 @@ const SettingsPage = () => {
     if (code) setValue('billing.currency', code, options);
   };
 
-  /**
-   * Branding waits here until the form is saved, so the logo behaves like every
-   * other field on the tab: a File to upload, `null` to remove, or no key at
-   * all for untouched. Discarding drops the lot.
-   */
   const [branding, setBranding] = useState({});
   const brandingDirty = Object.keys(branding).length > 0;
 
@@ -265,9 +247,6 @@ const SettingsPage = () => {
     try {
       const result = await settingsApi.update(values);
 
-      // Sequentially, and after the text fields: every branding call writes the
-      // same settings document, so the last response is the one that carries
-      // the whole save.
       let data = result.data;
       for (const kind of ['logo', 'favicon']) {
         if (!(kind in branding)) continue;
@@ -302,7 +281,11 @@ const SettingsPage = () => {
   if (settings.error) {
     return (
       <Box>
-        <PageHeader title="Settings" />
+        <PageHeader
+          title="Settings"
+          subtitle="Store identity, contact details, billing rules, branding, branches and social profiles"
+          breadcrumbs={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Settings' }]}
+        />
         <Card>
           <ErrorState error={settings.error} onRetry={settings.reload} />
         </Card>
@@ -343,20 +326,20 @@ const SettingsPage = () => {
       {settings.loading ? (
         // The tabs above are already real, so this only stands in for the
         // panel: a form card beside its summary card, same as what lands.
-        <Grid container spacing={2.5}>
+        <Grid container spacing={GUTTER.page}>
           <Grid item xs={12} md={8}>
             <Card sx={{ p: CARD_PAD }}>
               <Skeleton variant="text" width={200} height={22} />
               <Divider sx={{ my: 2 }} />
-              <Grid container spacing={2}>
+              <Grid container spacing={GUTTER.fields}>
                 {Array.from({ length: 6 }).map((_, index) => (
                   <Grid item xs={12} sm={6} key={index}>
                     <Skeleton variant="text" width="45%" height={13} />
-                    <Skeleton variant="rounded" height={44} sx={{ borderRadius: 2, mt: 0.5 }} />
+                    <Skeleton variant="rounded" height={44} sx={{ borderRadius: `${INSET_RADIUS}px`, mt: 0.5 }} />
                   </Grid>
                 ))}
               </Grid>
-              <Skeleton variant="rounded" height={90} sx={{ borderRadius: 2, mt: 2 }} />
+              <Skeleton variant="rounded" height={90} sx={{ borderRadius: `${INSET_RADIUS}px`, mt: 2 }} />
             </Card>
           </Grid>
           <Grid item xs={12} md={4}>
@@ -375,7 +358,7 @@ const SettingsPage = () => {
       ) : (
         <FormProvider {...methods}>
           <form onSubmit={handleSubmit(onSubmit)} noValidate>
-            <Grid container spacing={2.5}>
+            <Grid container spacing={GUTTER.page}>
               <Grid item xs={12} md={tab === 'general' ? 8 : 12}>
                 {tab === 'general' && (
                   // Every field row carries a bottom margin for the row under
@@ -455,7 +438,7 @@ const SettingsPage = () => {
                     />
                     <Divider sx={{ mb: 2.5 }} />
 
-                    <Grid container spacing={2.25}>
+                    <Grid container spacing={GUTTER.cards}>
                       <Grid item xs={12} sm={4}>
                         <RHFTextField
                           name="billing.billPrefix"
@@ -533,7 +516,7 @@ const SettingsPage = () => {
                     />
                     <Divider sx={{ mb: 2.5 }} />
 
-                    <Grid container spacing={2.5}>
+                    <Grid container spacing={GUTTER.page}>
                       <Grid item xs={12} md={6}>
                         <FieldRow label="Instagram" settings={settings.data} path="social.instagram" gutter={false}>
                           <RHFTextField
@@ -624,44 +607,34 @@ const SettingsPage = () => {
             </Grid>
 
             {isMainSuperAdmin && (isDirty || brandingDirty) && (
-              <Paper
-                elevation={0}
-                sx={{
-                  position: 'sticky',
-                  bottom: 0,
-                  zIndex: (theme) => theme.zIndex.appBar,
-                  mt: 2.5,
-                  px: 2.5,
-                  py: 1.75,
-                  borderTop: 1,
-                  borderColor: 'divider',
-                  bgcolor: 'background.paper',
-                }}
-              >
-                <Stack
-                  direction={{ xs: 'column', sm: 'row' }}
-                  spacing={1.5}
-                  alignItems={{ xs: 'stretch', sm: 'center' }}
-                  justifyContent="space-between"
-                >
+              <StickyActionBar
+                status={
                   <Typography variant="body2" color="text.secondary">
                     You have unsaved changes.
                   </Typography>
-                  <Stack direction="row" spacing={1.5} justifyContent="flex-end">
-                    <Button variant="outlined" color="inherit" onClick={discard} disabled={isSubmitting}>
-                      Discard changes
-                    </Button>
-                    <Button
-                      type="submit"
-                      variant="contained"
-                      startIcon={isSubmitting ? <CircularProgress size={15} color="inherit" /> : <SaveOutlined />}
-                      disabled={isSubmitting}
-                    >
-                      {isSubmitting ? 'Saving…' : 'Save changes'}
-                    </Button>
-                  </Stack>
-                </Stack>
-              </Paper>
+                }
+              >
+                <Button
+                  variant="outlined"
+                  color="inherit"
+                  onClick={discard}
+                  disabled={isSubmitting}
+                  fullWidth
+                  sx={{ whiteSpace: 'nowrap' }}
+                >
+                  Discard changes
+                </Button>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  startIcon={isSubmitting ? <CircularProgress size={15} color="inherit" /> : <SaveOutlined />}
+                  disabled={isSubmitting}
+                  fullWidth
+                  sx={{ whiteSpace: 'nowrap', minWidth: { sm: 160 } }}
+                >
+                  {isSubmitting ? 'Saving…' : 'Save changes'}
+                </Button>
+              </StickyActionBar>
             )}
           </form>
         </FormProvider>

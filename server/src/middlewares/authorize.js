@@ -22,32 +22,11 @@ const labelFor = (role) =>
 
 const isSuperAdmin = (user) => user?.role === 'superadmin';
 
-/**
- * Seeing and changing are two different questions.
- *
- * EVERY super admin sees the whole system — branches, users, bills, dashboard,
- * settings. That is what the role means, and the read guards below never narrow
- * one down. What a branch assignment changes is *authority*: a super admin
- * pinned to a branch may only write inside it.
- *
- * A super admin with no branch is the main one: unrestricted, and the only
- * account that may touch the main business identity in Settings, the branch
- * registry itself, or another branch's team.
- */
+// Seeing and changing are two different questions.
 export const isGlobalSuperAdmin = (user) => isSuperAdmin(user) && !user?.branch;
-export const isBranchSuperAdmin = (user) => isSuperAdmin(user) && Boolean(user?.branch);
+const isBranchSuperAdmin = (user) => isSuperAdmin(user) && Boolean(user?.branch);
 
-/**
- * The single source of truth for location scoping.
- *
- * A super admin may look at any location, or all of them via `?branch=all`.
- * Everyone else is silently pinned to their own — editing the query string does
- * nothing, because we overwrite it here rather than trust it.
- *
- * Returns `null` for "every location", `HEAD_OFFICE_ID` for the main business,
- * or a branch ObjectId. Feed the result to `locationFilter` rather than testing
- * it by hand: null and Head Office are different answers, not the same one.
- */
+// The single source of truth for location scoping.
 const LOCATION_ONLY = 'You can only make changes within your own location.';
 const MAIN_ONLY =
   'Only the main Super Admin can change this. Your account is assigned to a branch, so it manages that branch only.';
@@ -56,7 +35,7 @@ const MAIN_ONLY =
 export const ownBranch = (user) => (user?.branch ? String(user.branch._id || user.branch) : null);
 
 /** The same thing as a location id, so the Head Office compares like any branch. */
-export const ownLocation = (user) => toLocationId(ownBranch(user));
+const ownLocation = (user) => toLocationId(ownBranch(user));
 
 export const resolveBranchScope = (req) => {
   const user = req.user;
@@ -70,9 +49,6 @@ export const resolveBranchScope = (req) => {
   if (isSuperAdmin(user)) {
     const requested = req.query.branch || req.body?.branch;
     if (!requested || requested === ALL_LOCATIONS) return null;
-    // `locationFilter` feeds a branch id straight into `new ObjectId(...)`, which
-    // throws a BSONError — not a Mongoose CastError — for a malformed one, and
-    // that lands as a 500. A bad location in the query string is a bad request.
     if (!isValidLocationId(requested)) {
       throw ApiError.badRequest(`"${requested}" is not a valid location`);
     }
@@ -94,18 +70,12 @@ export const assertBranchAccess = (req, branchId) => {
   }
 };
 
-/**
- * Guard for CHANGING something that belongs to one location.
- *
- * The read guard above waves every super admin through; this one does not — a
- * branch super admin is held to their own branch exactly like a branch admin.
- * The Head Office Super Admin (no branch) is the one account with no ceiling.
- */
+// Guard for CHANGING something that belongs to one location.
 export const assertBranchWrite = (req, branchId) => {
   if (isGlobalSuperAdmin(req.user)) return;
 
-  // Branches off: records carry no location, so there is nothing to scope a
-  // write to and admins and staff keep exactly the reach they always had.
+  // Branches off: records carry no location, so admins and staff keep their usual
+  // reach. A super admin pinned to a branch is still held to it either way.
   if (!branchesOn(req) && !isSuperAdmin(req.user)) return;
 
   const own = ownLocation(req.user);
@@ -119,11 +89,7 @@ export const assertBranchWrite = (req, branchId) => {
   );
 };
 
-/**
- * Guard for store-wide changes: the main business record (which is also the Head
- * Office's own details) and the branch registry.
- */
-export const assertGlobalWrite = (req, message = MAIN_ONLY) => {
+const assertGlobalWrite = (req, message = MAIN_ONLY) => {
   if (!isGlobalSuperAdmin(req.user)) throw ApiError.forbidden(message);
 };
 

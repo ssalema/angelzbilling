@@ -47,12 +47,7 @@ const UserListPage = () => {
   const { user: me, isMainSuperAdmin, canEditBranch, branchName } = useAuth();
   const { branchesEnabled } = useSettings();
 
-  /**
-   * Every Super Admin sees every account — the list is never filtered by branch.
-   * Changing one is narrower: a Super Admin assigned to a branch manages that
-   * branch's team, and never another Super Admin. The server enforces the same
-   * rule; this only keeps the table honest about it.
-   */
+  // Every Super Admin sees every account — the list is never filtered by branch.
   const canManage = (row) =>
     isMainSuperAdmin || (row.role !== 'superadmin' && canEditBranch(locationOf(row.branch).id));
 
@@ -75,7 +70,7 @@ const UserListPage = () => {
   const debouncedSearch = useDebounce(filters.search, 400);
 
   const users = useApiResource(
-    () =>
+    (signal) =>
       userApi.list({
         search: debouncedSearch,
         role: filters.role,
@@ -84,13 +79,15 @@ const UserListPage = () => {
         sort: filters.sort,
         page: filters.page,
         limit: filters.limit,
-      }),
-    [debouncedSearch, filters.role, filters.status, filters.branch, filters.sort, filters.page, filters.limit]
+      }, signal),
+    [debouncedSearch, filters.role, filters.status, filters.branch, filters.sort, filters.page, filters.limit],
+    { watch: 'users' }
   );
 
   const branches = useApiResource(
     () => (branchesEnabled ? branchApi.list({ limit: 100 }) : Promise.resolve({ items: [] })),
-    [branchesEnabled]
+    [branchesEnabled],
+    { watch: 'branches' }
   );
 
   const patch = useCallback((changes) => {
@@ -110,14 +107,7 @@ const UserListPage = () => {
     }
   };
 
-  /**
-   * Inline role change straight from the table, as in the reference UI.
-   *
-   * The branch assignment rides along unchanged. Promoting a branch account to
-   * Super Admin therefore makes a branch-level one — full visibility, authority
-   * still capped at their branch. Cutting them loose to the whole business is a
-   * deliberate act, done in the edit dialog by clearing the branch.
-   */
+  // Inline role change straight from the table, as in the reference UI.
   const changeRole = async (row, role) => {
     if (role === row.role) return;
     // The location rides along unchanged; `null` keeps a Head Office account
@@ -385,7 +375,7 @@ const UserListPage = () => {
           rows={items}
           loading={users.loading}
           error={users.error}
-          onRetry={users.reload}
+          onRetry={users.reload}
           page={filters.page}
           limit={filters.limit}
           total={meta.total}

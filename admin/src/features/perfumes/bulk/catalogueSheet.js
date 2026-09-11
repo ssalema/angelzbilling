@@ -1,27 +1,4 @@
-/**
- * Turning an uploaded catalogue sheet into reviewable new perfumes.
- *
- * Kept apart from the screen so the rules an admin is shown before uploading —
- * the column names, the gram prices, one row per perfume — are the same rules
- * the file is actually judged by, written once. The stock and price sheets are
- * built the same way; this is the third of the three, and the only one that
- * creates rather than updates.
- *
- * Three things this sheet deliberately does NOT carry:
- *
- *   SKU. The catalogue numbers its own new rows (AP-925, AP-926…), so a sheet
- *   cannot set one. The server hands the numbers out and the review screen
- *   shows what each perfume is about to be called.
- *
- *   Photographs. A spreadsheet cell cannot hold a picture the catalogue can
- *   read, and the file is never stored, so photos are added on the review
- *   screen instead — one click per perfume, from the admin's own machine. That
- *   also means a forgotten photo never costs a second trip through the sheet.
- *
- *   A derived price. A gram size with no price in the file is a size the
- *   perfume does not sell — it is never worked out from a neighbouring size.
- *   See `sizePricing.js` for why that rule exists.
- */
+// Turning an uploaded catalogue sheet into reviewable new perfumes.
 
 import { SIZE_GRAMS, parsePrice, priceIssue } from '../pricing/sizePricing.js';
 
@@ -33,10 +10,7 @@ export const COLUMN_CATEGORY = 'Category';
 /** Spelled with its unit, because a column headed "Stock" invites "1.5 kg". */
 export const COLUMN_STOCK = 'Stock (GM)';
 
-/**
- * Headings that also mean the stock column. A sheet written before the heading
- * carried its unit still reads correctly — the figure was always grams.
- */
+// Headings that also mean the stock column.
 const STOCK_ALIASES = [COLUMN_STOCK, 'Stock', 'Stock GM', 'Stock in GM', 'Stock (gm)'];
 
 /** "100gm Price" — the heading for a fill of that many grams. */
@@ -57,11 +31,7 @@ export const SHEET_RULES = [
   'List each perfume once. A name that repeats in the sheet is flagged, and only its first row is used.',
 ];
 
-/**
- * Most perfumes one sheet can carry. Mirrors `MAX_BULK_CREATE_ROWS` on the
- * server, so a sheet too long to be accepted is turned away here — before a
- * thousand rows have been read and reviewed for nothing.
- */
+// Most perfumes one sheet can carry.
 export const MAX_SHEET_ROWS = 2000;
 
 /** Header matching is forgiving about case and spacing, and nothing else. */
@@ -70,13 +40,7 @@ const headerKey = (value) => String(value ?? '').trim().replace(/\s+/g, ' ').toL
 const findHeader = (headers, wanted) =>
   headers.find((header) => headerKey(header) === headerKey(wanted)) ?? null;
 
-/**
- * Reads the header row into the columns this screen understands.
- *
- * Size columns are matched by pattern rather than against a fixed list, so a
- * perfume sold in an unusual fill — a 200gm, say — can be created by adding a
- * "200gm Price" column, with no change here.
- */
+// Reads the header row into the columns this screen understands.
 export const findColumns = (headers = []) => {
   const sizes = [];
   headers.forEach((header) => {
@@ -98,12 +62,7 @@ export const findColumns = (headers = []) => {
   };
 };
 
-/**
- * Grams out of a cell. Thousands separators and a trailing "gm" are the two
- * things a real sheet carries that a plain `Number()` would choke on; a unit we
- * do not understand is rejected rather than assumed, because reading "1.5 kg"
- * as 1.5 grams is the one mistake this screen must never make.
- */
+// Grams out of a cell.
 export const parseGrams = (raw) => {
   const text = String(raw ?? '').trim().replace(/,/g, '').replace(/\s*(gm|gms|g|grams?)$/i, '');
   if (!text) return NaN;
@@ -116,18 +75,6 @@ const normaliseName = (value) => String(value ?? '').trim().replace(/\s+/g, ' ')
 /** The longest name the catalogue will hold. */
 const MAX_NAME = 180;
 
-/**
- * The sheet's rows, checked against everything that can be judged without the
- * catalogue: the name is there, at least one price was given, every price and
- * the stock are sensible numbers, and the perfume has not already been listed
- * further up the file.
- *
- * `photo` starts empty on every row. It is filled in on the review screen, from
- * the admin's own machine, and never from the sheet.
- *
- * Rows keep their original sheet line number so a flagged row can be found and
- * fixed in the file the admin still has open.
- */
 export const buildSheetRows = (records, columns) => {
   const seen = new Set();
 
@@ -184,15 +131,7 @@ export const buildSheetRows = (records, columns) => {
   });
 };
 
-/**
- * Merges the catalogue's answer into the sheet's rows.
- *
- * `checks` comes back from the server in the same order it was asked, one entry
- * per name that got as far as being worth checking. A row that survives carries
- * the SKU it is about to be given — the number is the admin's main reason for
- * reading this screen, so it is shown before anything is created rather than
- * after.
- */
+// Merges the catalogue's answer into the sheet's rows.
 export const applyChecks = (rows, checks) => {
   const queue = [...checks];
 
@@ -208,13 +147,7 @@ export const applyChecks = (rows, checks) => {
   });
 };
 
-/**
- * What a row will be created as.
- *
- * Publishing needs an image and stock, exactly as it does in the wizard: a
- * perfume with nothing on the shelf would go straight out as sold out, so a row
- * missing either is created as a draft and waits rather than being rejected.
- */
+// What a row will be created as.
 export const statusFor = (row) => (row.photo && Number(row.stock) > 0 ? 'published' : 'draft');
 
 /** The rows that will actually be sent — everything the server needs, and nothing else. */

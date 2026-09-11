@@ -5,10 +5,7 @@ import HomeOutlined from '@mui/icons-material/HomeOutlined';
 import { FONT, brand } from '../../theme/index.js';
 import { cachedSiteName } from '../../utils/branding.js';
 
-/**
- * Last line of defence. A render crash anywhere shows this rather than a blank
- * white page, and gives the user a way out.
- */
+// Last line of defence.
 class ErrorBoundary extends Component {
   constructor(props) {
     super(props);

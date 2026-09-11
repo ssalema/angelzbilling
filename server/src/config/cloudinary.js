@@ -14,10 +14,7 @@ if (env.cloudinary.enabled) {
   logger.warn('Cloudinary credentials are not set — media uploads will be rejected');
 }
 
-/**
- * Stream a multer memory buffer straight to Cloudinary.
- * Nothing touches disk, so the API stays stateless and container friendly.
- */
+// Stream a multer memory buffer straight to Cloudinary.
 export const uploadBuffer = (buffer, { folder = '', resourceType = 'image', publicId } = {}) =>
   new Promise((resolve, reject) => {
     if (!env.cloudinary.enabled) {
@@ -55,11 +52,7 @@ export const uploadBuffer = (buffer, { folder = '', resourceType = 'image', publ
     stream.end(buffer);
   });
 
-/**
- * Every asset this app creates is written under CLOUDINARY_FOLDER by
- * `uploadBuffer`. Anything outside it belongs to another project sharing the
- * same Cloudinary account, and nothing here may touch it.
- */
+// Every asset this app creates is written under CLOUDINARY_FOLDER by `uploadBuffer`.
 export const assertManagedAsset = (publicId) => {
   const id = String(publicId || '');
   const root = `${env.cloudinary.folder}/`;
@@ -73,11 +66,7 @@ export const assertManagedAsset = (publicId) => {
 export const isBrandingAsset = (publicId) =>
   String(publicId || '').startsWith(`${env.cloudinary.folder}/branding`);
 
-/**
- * Deletes an asset. `strict` propagates an upstream failure instead of
- * swallowing it — used where deletion is the point of the request, rather than
- * opportunistic cleanup after a successful replace.
- */
+// Deletes an asset.
 export const destroyAsset = async (publicId, resourceType = 'image', { strict = false } = {}) => {
   if (!publicId) return null;
 

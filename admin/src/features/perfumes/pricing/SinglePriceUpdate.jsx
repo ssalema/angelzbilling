@@ -36,18 +36,7 @@ import { brand, CARD_RADIUS, FONT, ICON, numericText, surface } from '../../../t
 import { IMG } from '../../../utils/image.js';
 import { changedPrices, currentRange, formatRange, newRange, sizeRows } from './sizePricing.js';
 
-/**
- * Repricing perfumes by hand.
- *
- * Search, pick, and the perfume drops into a list you keep adding to — a price
- * revision is rarely one fragrance, and reopening this dialog for each one was
- * the only alternative to writing a spreadsheet.
- *
- * Every size is priced on its own, in the table that opens under each row.
- * Nothing is derived from anything else: setting the 1000gm price does not move
- * the 25gm, and a box left blank keeps that size exactly as it is. Only the
- * sizes actually edited are sent, so a perfume can be part-repriced safely.
- */
+// Repricing perfumes by hand.
 const SinglePriceUpdate = ({ onUpdated }) => {
   const snackbar = useSnackbar();
 
@@ -98,12 +87,7 @@ const SinglePriceUpdate = ({ onUpdated }) => {
       return next;
     });
 
-  /**
-   * Each row's sizes, worked out from whatever is in its boxes right now.
-   *
-   * Derived rather than stored, so a preview can never be left standing beside
-   * a price that has since been edited.
-   */
+  // Each row's sizes, worked out from whatever is in its boxes right now.
   const previews = rows.map((row) => {
     const sizes = sizeRows(row, row.edits);
     return {

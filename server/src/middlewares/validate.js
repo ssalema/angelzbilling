@@ -1,11 +1,7 @@
 import { ZodError } from 'zod';
 import ApiError from '../utils/ApiError.js';
 
-/**
- * Zod validation middleware. Pass any of { body, query, params }.
- * Parsed (and coerced) values replace the raw input, so controllers only ever
- * see data that has already been through the schema.
- */
+// Zod validation middleware.
 export const validate = (schemas) => (req, _res, next) => {
   try {
     if (schemas.body) req.body = schemas.body.parse(req.body ?? {});

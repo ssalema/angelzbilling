@@ -52,16 +52,8 @@ import {
   DEFAULT_DATE_RANGE,
   isDefaultRange,
 } from '../../utils/constants.js';
-import { ICON, brand, statusColors } from '../../theme/index.js';
+import { GUTTER, ICON, brand, statusColors } from '../../theme/index.js';
 
-/**
- * The Payment column reads like the slip does: it names the mode of the most
- * recent payment, not the one picked when the bill was raised. A bill rung up
- * as cash and later settled by UPI shows UPI. The list endpoint sends only the
- * last payment entry, so `payments[0]` here IS that entry. Bills with nothing
- * collected yet, and older entries saved without a mode, fall back to the mode
- * the bill was raised with.
- */
 const latestMethodLabel = (row) => {
   const method = row.payments?.[0]?.method || row.paymentMethod;
   return PAYMENT_METHOD_LABELS[method] || method;
@@ -113,28 +105,35 @@ const BillListPage = () => {
     limit: filters.limit,
   };
 
-  const bills = useApiResource(() => billApi.list(query), [
-    debouncedSearch,
-    filters.status,
-    filters.paymentMethod,
-    filters.branch,
-    filters.sort,
-    filters.page,
-    filters.limit,
-    range.range,
-    range.from,
-    range.to,
-  ]);
+  const bills = useApiResource(
+    (signal) => billApi.list(query, signal),
+    [
+      debouncedSearch,
+      filters.status,
+      filters.paymentMethod,
+      filters.branch,
+      filters.sort,
+      filters.page,
+      filters.limit,
+      range.range,
+      range.from,
+      range.to,
+    ],
+    // Opening a bill and coming back is the commonest navigation on this screen.
+    { cacheKey: 'bills:list', watch: 'bills' }
+  );
 
   const stats = useApiResource(
-    () => billApi.stats({ range: range.range, from: range.from, to: range.to, branch: filters.branch }),
-    [range.range, range.from, range.to, filters.branch]
+    (signal) =>
+      billApi.stats({ range: range.range, from: range.from, to: range.to, branch: filters.branch }, signal),
+    [range.range, range.from, range.to, filters.branch],
+    { cacheKey: 'bills:stats', watch: 'bills' }
   );
 
   const branches = useApiResource(
     () => (isSuperAdmin && branchesEnabled ? branchApi.list({ limit: 100 }) : Promise.resolve({ items: [] })),
     [isSuperAdmin, branchesEnabled],
-    { immediate: isSuperAdmin && branchesEnabled }
+    { immediate: isSuperAdmin && branchesEnabled, watch: 'branches' }
   );
 
   const patch = useCallback((changes) => {
@@ -389,7 +388,7 @@ const BillListPage = () => {
         />
 
         {/* Period summary */}
-        <Grid container spacing={2.25} sx={{ mb: 2.5 }}>
+        <Grid container spacing={GUTTER.cards} sx={{ mb: 2.5 }}>
           <Grid item xs={12} sm={6} lg={3}>
             <StatCard
               label="Bills in period"

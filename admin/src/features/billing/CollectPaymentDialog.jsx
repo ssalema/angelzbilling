@@ -23,21 +23,11 @@ import { billApi } from '../../api/endpoints.js';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { currencySymbol, formatCurrency } from '../../utils/format.js';
 import { PAYMENT_METHODS } from '../../utils/constants.js';
-import { FONT, numericText, statusColors, surface } from '../../theme/index.js';
+import { FONT, INSET_RADIUS, numericText, statusColors, surface } from '../../theme/index.js';
 
 const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
-/**
- * Collects the balance on a pending bill.
- *
- * This updates the bill that is already there — same number, same items, same
- * prices, same stock — so there is nothing here to re-price and nothing to
- * deduct. All it asks for is how much came in and how, and the server flips the
- * bill to paid on its own once the balance reaches zero.
- *
- * Shared by the bill list and the bill detail page so the biller sees the same
- * dialog wherever they spot the pending bill.
- */
+// Collects the balance on a pending bill.
 const CollectPaymentDialog = ({ open, bill, onClose, onCollected }) => {
   const snackbar = useSnackbar();
 
@@ -47,9 +37,6 @@ const CollectPaymentDialog = ({ open, bill, onClose, onCollected }) => {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Opening on a different bill starts a fresh entry, pre-filled with the whole
-  // balance: settling in one go is by far the common case, and the biller can
-  // still type a smaller figure over it.
   useEffect(() => {
     if (!open || !bill) return;
     setAmount(due > 0 ? String(due) : '');
@@ -90,7 +77,7 @@ const CollectPaymentDialog = ({ open, bill, onClose, onCollected }) => {
     <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="xs" fullWidth>
       <DialogCloseButton onClose={onClose} disabled={saving} />
 
-      <DialogTitle sx={{ pb: 0.5 }}>
+      <DialogTitle sx={{ pb: 1, pr: 6 }}>
         <Stack direction="row" spacing={1.25} alignItems="center">
           <PaymentsOutlined sx={{ color: statusColors.pending.color }} />
           <Box>
@@ -103,7 +90,7 @@ const CollectPaymentDialog = ({ open, bill, onClose, onCollected }) => {
       </DialogTitle>
 
       <DialogContent>
-        <Box sx={{ p: 1.5, mb: 2.5, borderRadius: 2, bgcolor: surface.plumFaint }}>
+        <Box sx={{ p: 1.5, mb: 2.5, borderRadius: `${INSET_RADIUS}px`, bgcolor: surface.plumFaint }}>
           <SummaryRow label="Bill total" value={formatCurrency(bill.grandTotal, { precise: true })} />
           <SummaryRow label="Already paid" value={formatCurrency(bill.amountPaid, { precise: true })} />
           <Divider sx={{ my: 0.75 }} />
@@ -139,7 +126,7 @@ const CollectPaymentDialog = ({ open, bill, onClose, onCollected }) => {
               onClick={() => setMethod(option.value)}
               variant={method === option.value ? 'filled' : 'outlined'}
               color={method === option.value ? 'primary' : 'default'}
-              sx={{ height: 34, borderRadius: 2, fontWeight: 600, cursor: 'pointer' }}
+              sx={{ height: 34, borderRadius: `${INSET_RADIUS}px`, fontWeight: 600, cursor: 'pointer' }}
             />
           ))}
         </Box>
@@ -183,7 +170,7 @@ const CollectPaymentDialog = ({ open, bill, onClose, onCollected }) => {
       </DialogContent>
 
       {/* The cross in the corner is the only way out, as in every dialog here. */}
-      <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+      <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
         <Button
           variant="contained"
           onClick={submit}

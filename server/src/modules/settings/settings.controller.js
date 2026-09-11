@@ -67,17 +67,8 @@ export const updateSettingsSchema = z.object({
     });
   });
 
-/**
- * Mongoose Map keys may not contain "." or "$", so the audit map stores
- * `social:instagram` rather than `social.instagram`. The client un-escapes it.
- */
 const auditKey = (path) => path.replace(/\./g, ':');
 
-/**
- * The form PATCHes every field on save, so compare before writing: only a value
- * that actually changed earns a fresh audit stamp, otherwise a single edit would
- * re-date the whole tab.
- */
 const isUnchanged = (current, next) => {
   if (current === next) return true;
   if (current === undefined || current === null) return next === '' || next === null;
@@ -124,10 +115,6 @@ export const getPublicSettings = asyncHandler(async (_req, res) => {
 export const updateSettings = asyncHandler(async (req, res) => {
   const settings = await Settings.getSingleton();
 
-  // Switching branch management off deactivates every branch rather than deleting
-  // anything — bills and staff keep pointing at records that still exist. The flag
-  // remembers which branches the switch closed so switching it back on restores
-  // exactly those, leaving branches an admin deactivated by hand untouched.
   const nextBranches = req.body.features?.branches;
   const currentBranches = settings.features?.branches !== false;
   if (nextBranches === false && currentBranches) {
@@ -137,10 +124,6 @@ export const updateSettings = asyncHandler(async (req, res) => {
       { deactivatedByFeature: true },
       { $set: { isActive: true, deactivatedByFeature: false } }
     );
-    // The switch also goes off on its own once the last location is deactivated
-    // by hand, and those branches carry no `deactivatedByFeature` flag to
-    // restore. Turning it back on with nothing reopened would leave the store
-    // with branches "on" and no branch to bill against, so reopen them all.
     if (!restored.modifiedCount && (await Branch.countDocuments({ isActive: true })) === 0) {
       await Branch.updateMany({}, { $set: { isActive: true, deactivatedByFeature: false } });
     }

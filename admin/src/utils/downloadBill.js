@@ -1,13 +1,4 @@
-/**
- * Saving a slip as a PDF.
- *
- * The slip is a styled DOM node, so it is rasterised with html2canvas and
- * dropped into a jsPDF page cut to the same aspect ratio — the file opens as
- * one continuous receipt, not an A4 sheet with the slip stranded in a corner.
- *
- * Both libraries are heavy, so they are imported on demand: the billing list
- * only pays for them when someone actually downloads a bill.
- */
+// Saving a slip as a PDF.
 
 /** Rasterise at 3× so the small print stays sharp when the PDF is zoomed or printed. */
 const SCALE = 3;
@@ -18,12 +9,7 @@ const PDF_WIDTH_MM = 80;
 /** `AP-HQ-2609-0039` → `AP-HQ-2609-0039.pdf`, with anything filesystem-hostile stripped. */
 const fileName = (billNumber) => `${String(billNumber || 'bill').replace(/[^\w.-]+/g, '-')}.pdf`;
 
-/**
- * Renders the mounted slip to a PDF and saves it.
- *
- * @param {HTMLElement} element the mounted slip (`#print-area`)
- * @param {object} bill the bill it renders, for the file name and metadata
- */
+// Renders the mounted slip to a PDF and saves it.
 export const downloadBillPdf = async (element, bill) => {
   if (!element) throw new Error('The bill slip is not ready yet.');
 
@@ -53,5 +39,3 @@ export const downloadBillPdf = async (element, bill) => {
   pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, PDF_WIDTH_MM, heightMm);
   pdf.save(fileName(bill?.billNumber));
 };
-
-export default downloadBillPdf;

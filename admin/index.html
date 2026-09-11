@@ -8,44 +8,32 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!--
-      The stylesheet is fetched as a non-blocking `print` sheet and promoted to
-      `all` once it lands, so a slow Google Fonts response can no longer hold up
-      first paint. `display=swap` means text is readable in the fallback face
-      until the webfont arrives, and the <noscript> copy keeps it working
-      without JavaScript.
-    -->
+
     <link
+      id="webfonts"
       href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Great+Vibes&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
       media="print"
-      onload="this.media='all'; this.onload=null;"
     />
+    <!-- Promote the print stylesheet to all media once it loads, without an inline onload handler. -->
+    <script>
+      (function () {
+        var sheet = document.getElementById('webfonts');
+        if (!sheet) return;
+        sheet.addEventListener('load', function promote() {
+          sheet.media = 'all';
+          sheet.removeEventListener('load', promote);
+        });
+      })();
+    </script>
     <noscript>
       <link
         href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Great+Vibes&family=Inter:wght@400;500;600;700&display=swap"
         rel="stylesheet"
       />
     </noscript>
-    <!--
-      TWO layers, because the browser files a bookmark and a history entry
-      under whatever <title> it reads at load — far too early for React to
-      have corrected it from Settings.
 
-      1. The static title below is this deployment’s store name, written out.
-         It is the only copy of the name left in the codebase, and it exists
-         so a COLD visit (nothing cached yet: a new device, a cleared
-         browser, an incognito window) is branded on the very first frame
-         instead of reading "Admin".
-      2. The script then overrides it with the last name we actually saw,
-         from the localStorage key SettingsContext writes ('ab:siteName' —
-         see src/utils/branding.js, and keep the key and the " — Admin"
-         suffix in step). So renaming the store in Settings still wins, and
-         the static name below is only ever a first-load stand-in.
-
-      Rebranding therefore means editing the name here as well as in
-      Settings, or a cold visit shows the old one until settings land.
-    -->
+    <!-- Static title for a cold first paint; the script below restores the saved store name. -->
     <title>Angelz Desire — Admin</title>
     <script>
       try {
@@ -64,7 +52,7 @@
     </style>
   </head>
   <body>
-    <!-- Same two layers as the title: written-out name, cache wins over it. -->
+    <!-- Static store name for a cold first paint; the cached name below wins. -->
     <div id="root"><div id="boot">Angelz Desire</div></div>
     <script>
       try {

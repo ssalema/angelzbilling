@@ -29,7 +29,8 @@ import ErrorOutline from '@mui/icons-material/ErrorOutline';
 import CheckRounded from '@mui/icons-material/CheckRounded';
 import { formatCurrency, formatGrams, formatNumber, unitsFromGrams } from '../../../utils/format.js';
 import { basePricingFor, computeFinalPrice, sizeGramsFor } from '../perfumeSchema.js';
-import { CARD_PAD, DISCOUNT_COLOR, ICON, brand, numericText, surface } from '../../../theme/index.js';
+import SectionTitle from '../../../components/common/SectionTitle.jsx';
+import { CARD_PAD, CARD_RADIUS, GUTTER, INSET_RADIUS, DISCOUNT_COLOR, ICON, brand, numericText, surface } from '../../../theme/index.js';
 import { IMG } from '../../../utils/image.js';
 
 const Row = ({ label, value }) => (
@@ -43,11 +44,7 @@ const Row = ({ label, value }) => (
   </Stack>
 );
 
-/**
- * Final step: a read-only rendering of everything entered, plus the publish
- * decision. Anything that would block publishing is surfaced here rather than
- * failing silently on save.
- */
+// Final step: a read-only rendering of everything entered, plus the publish decision.
 const StepPreview = () => {
   const { control } = useFormContext();
   const data = useWatch({ control });
@@ -83,7 +80,7 @@ const StepPreview = () => {
 
   return (
     <Box>
-      <Grid container spacing={2.5}>
+      <Grid container spacing={GUTTER.page}>
         {/* ── Visual preview ── */}
         <Grid item xs={12} md={5}>
           <Card sx={{ p: CARD_PAD, position: { md: 'sticky' }, top: 84 }}>
@@ -94,7 +91,7 @@ const StepPreview = () => {
             <Box
               sx={{
                 mt: 1,
-                borderRadius: 3,
+                borderRadius: `${CARD_RADIUS}px`,
                 overflow: 'hidden',
                 bgcolor: surface.plumFaint,
                 aspectRatio: '1',
@@ -231,9 +228,7 @@ const StepPreview = () => {
           )}
 
           <Card sx={{ p: CARD_PAD, mb: 2.5 }}>
-            <Typography variant="h6" sx={{ mb: 1.5 }}>
-              Publish status
-            </Typography>
+            <SectionTitle title="Publish status" />
 
             {/* Each option is its own card; StatusOption owns the form binding. */}
             <RadioGroup value={data.status}>
@@ -261,9 +256,7 @@ const StepPreview = () => {
           </Card>
 
           <Card sx={{ p: CARD_PAD }}>
-            <Typography variant="h6" sx={{ mb: 1 }}>
-              Summary
-            </Typography>
+            <SectionTitle title="Summary" />
 
             <Row label="SKU" value={data.sku?.toUpperCase()} />
             <Row label="Brand" value={data.brand} />
@@ -288,7 +281,7 @@ const StepPreview = () => {
             />
 
             {data.hasVariants && variants.length > 0 && (
-              <Accordion elevation={0} sx={{ mt: 1.5, border: 1, borderColor: 'divider', borderRadius: 2, '&:before': { display: 'none' } }}>
+              <Accordion elevation={0} sx={{ mt: 1.5, border: 1, borderColor: 'divider', borderRadius: `${CARD_RADIUS}px`, '&:before': { display: 'none' } }}>
                 <AccordionSummary expandIcon={<ExpandMore />}>
                   <Typography variant="subtitle2">All {variants.length} variants</Typography>
                 </AccordionSummary>
@@ -298,7 +291,7 @@ const StepPreview = () => {
                       <Paper
                         key={variant.sku || index}
                         variant="outlined"
-                        sx={{ px: 1.5, py: 1, borderRadius: 2, opacity: variant.isActive ? 1 : 0.55 }}
+                        sx={{ px: 1.5, py: 1, borderRadius: `${INSET_RADIUS}px`, opacity: variant.isActive ? 1 : 0.55 }}
                       >
                         <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
                           <Box sx={{ minWidth: 0 }}>
@@ -374,7 +367,7 @@ const StatusOption = ({ option }) => {
       sx={{
         p: 1.5,
         mb: 1,
-        borderRadius: 2.5,
+        borderRadius: `${CARD_RADIUS}px`,
         cursor: option.disabled ? 'not-allowed' : 'pointer',
         opacity: option.disabled ? 0.5 : 1,
         borderColor: status === option.value ? 'primary.main' : 'divider',

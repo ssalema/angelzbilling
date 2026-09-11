@@ -29,18 +29,9 @@ const rangeQuery = z.object({
 const router = Router();
 router.use(authenticate);
 
-/**
- * Every widget here is a read-only aggregation over bills and perfumes, so the
- * page is served from one branch-scoped cache entry per widget and cleared by
- * any write that moves a figure. `cacheResponse` sits after `validate` so the
- * key is built from the normalised query (range already defaulted to 'month')
- * and two requests that mean the same thing hash to the same entry.
- */
 const cached = [validate({ query: rangeQuery }), cacheResponse()];
 
-// Every widget for one range in a single response — what the page asks for on
-// load. The per-widget routes below stay for the case a user narrows one card's
-// range on its own. Cached on the same key rules as the rest.
+// Every widget for one range in a single response — what the page asks for on load.
 router.get('/overview', cached, getOverview);
 
 router.get('/summary', cached, getSummary);

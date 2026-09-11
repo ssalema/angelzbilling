@@ -1,11 +1,4 @@
-/**
- * Offline fallbacks for the address picker.
- *
- * The state and city directory is far too large to bundle, so it is fetched
- * (and cached) in geo.service.js. India is the exception: it is the default
- * country, so the branch form has to keep working when the upstream directory
- * is unreachable.
- */
+// Offline fallbacks for the address picker.
 
 /** States and union territories, as India Post spells them. */
 export const INDIA_STATES = [

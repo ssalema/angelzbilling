@@ -24,11 +24,7 @@ const SliceTooltip = ({ active, payload }) => {
 
 const RADIAN = Math.PI / 180;
 
-/**
- * Percentage labels sit just outside the arc. Recharts' default placement pushes
- * them past the chart box, so the slice at the top of the circle gets clipped by
- * the card edge. Position them ourselves and keep the radii small enough to fit.
- */
+// Percentage labels sit just outside the arc.
 const renderPercentLabel = ({ cx, cy, midAngle, outerRadius, percentage, index }) => {
   if (percentage < 8) return null;
   const radius = outerRadius + 16;
@@ -48,10 +44,7 @@ const renderPercentLabel = ({ cx, cy, midAngle, outerRadius, percentage, index }
   );
 };
 
-/**
- * Shared donut/pie card used for both "Bill status" and "Payment preference".
- * `donut` toggles the hole, matching the two reference charts.
- */
+// Shared donut/pie card used for both "Bill status" and "Payment preference".
 const BreakdownChart = ({
   title,
   data,

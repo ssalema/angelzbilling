@@ -4,17 +4,7 @@ import ApiError from '../../utils/ApiError.js';
 import { findCountry, postalMetaFor } from '../../utils/countries.js';
 import { INDIA_STATES } from './geo.data.js';
 
-/**
- * Address directory: states, cities and postal-code lookup.
- *
- * Three public directories back this module — countriesnow.space for the
- * state/city tree, India Post for Indian pincodes and Zippopotam for the rest.
- * They are free and unauthenticated, which also means they are occasionally
- * slow or down, so every call is short-timeout, cached in memory, and degrades
- * to "no suggestions" rather than an error the admin cannot act on. Both the
- * form and the API keep these fields free text, so a failed lookup only ever
- * costs a little typing.
- */
+// Address directory: states, cities and postal-code lookup.
 
 // Base URLs and the timeout come from config so a deployment can point at a
 // mirror, an internal proxy or a stub without touching this module.
@@ -161,11 +151,6 @@ const lookupZippopotam = async (iso2, code) => {
   };
 };
 
-/**
- * Resolves a postal code to { country, state, city, areas }, or null when the
- * directory has no such code — the controller turns that into a 404 the form
- * shows as "we could not find that one, fill the address in yourself".
- */
 export const lookupPostalCode = async (countryValue, codeValue) => {
   const country = resolveCountry(countryValue);
   const code = String(codeValue || '').trim();

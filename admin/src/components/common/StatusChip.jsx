@@ -6,11 +6,7 @@ const StatusChip = ({ status, label, size = 'small', sx, onClick, ...rest }) => 
   const key = String(status || '').toLowerCase();
   const tone = statusColors[key] || { color: '#6B5C70', bg: '#EFEAF1' };
 
-  /**
-   * The pill doubles as the status toggle, and it usually sits in a row that
-   * opens an edit dialog when clicked. Without this, one tap asked to change the
-   * status AND opened the record behind it — two dialogs over each other.
-   */
+  // The pill doubles as the status toggle, and it usually sits in a row that opens an edit dialog when clicked.
   const handleClick = onClick
     ? (event) => {
         event.stopPropagation();

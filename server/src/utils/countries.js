@@ -1,13 +1,4 @@
-/**
- * Country dialling codes for every contact-number field in the app.
- *
- * The same file lives in `admin/src/utils` and `server/src/utils` so the browser
- * and the API agree on which numbers are valid — edit both together.
- *
- * Each row is [name, iso2, dial, minDigits, maxDigits, primary?] where the digit
- * counts describe the *national* number, i.e. what is typed after the dial code.
- * India is a fixed 10, the US and Canada a fixed 10, Germany a range, and so on.
- */
+// Country dialling codes for every contact-number field in the app.
 
 const ROWS = [
   ['Afghanistan', 'AF', '+93', 9, 9],
@@ -270,10 +261,7 @@ export const countryByDial = (dial) => {
   return matches.find((country) => country.primary) || matches[0] || null;
 };
 
-/**
- * Allowed digit count for a dial code. Where a code is shared the bounds widen
- * to cover every country using it, so nobody is locked out of their own number.
- */
+// Allowed digit count for a dial code.
 export const digitsFor = (dial) => {
   const matches = COUNTRIES.filter((country) => country.dial === dial);
   if (!matches.length) return { min: 4, max: 15 };
@@ -293,10 +281,7 @@ export const digitsLabel = (dial) => {
 
 export const onlyDigits = (value) => String(value ?? '').replace(/\D/g, '');
 
-/**
- * Validates one contact number against its dial code.
- * Returns an error message, or null when the number is acceptable.
- */
+// Validates one contact number against its dial code.
 const contactNumberIssue = (dial, number) => {
   if (!isDialCode(dial)) return 'Choose a country code';
   const raw = String(number ?? '').trim();
@@ -310,11 +295,7 @@ const contactNumberIssue = (dial, number) => {
   return null;
 };
 
-/**
- * Zod glue: report a bad contact number on the *number* field, since that is
- * where the user is looking. Kept free of a zod import so this file stays a
- * plain data module both halves of the app can share.
- */
+// Zod glue: report a bad contact number on the *number* field, since that is where the user is looking.
 export const addContactNumberIssue = (ctx, { dial, number, path, required = true }) => {
   const digits = onlyDigits(number);
   if (!digits) {
@@ -336,24 +317,14 @@ export const formatContactNumber = (dial, number, fallback = 'NA') => {
 
 /* ───────────────────────────── Postal codes ───────────────────────────── */
 
-/**
- * Countries whose postal code the address form can resolve to a place.
- * India goes through India Post; every other code here goes through Zippopotam.
- * A country left out is still labelled and validated below — it just never
- * fills itself in.
- */
+// Countries whose postal code the address form can resolve to a place.
 const POSTAL_LOOKUP_COUNTRIES = new Set(
   'IN US CA GB AU NZ MY ZA JP PH TH RU HU PL PT NL AT BE CH CZ DE DK ES FI FR IT NO SE TR MX PK BD'.split(
     ' '
   )
 );
 
-/**
- * What a postal code is called locally, plus a sample. `digits` is a fixed
- * numeric length; countries with alphanumeric or variable-length codes leave it
- * out and fall back to POSTAL_PATTERN, so an unusual but genuine code is never
- * rejected. Anything missing from the table is simply "Postal code".
- */
+// What a postal code is called locally, plus a sample.
 const POSTAL_META = {
   IN: { label: 'Pincode', example: '400001', digits: 6 },
   US: { label: 'ZIP code', example: '90210', digits: 5 },
@@ -399,11 +370,7 @@ const POSTAL_META = {
 
 const DEFAULT_POSTAL_META = { label: 'Postal code', example: '' };
 
-/**
- * 2–12 characters of letters, digits, spaces and hyphens. Tight per-country
- * rules belong in a postal directory, not in a form that has to accept every
- * address a shop might have.
- */
+// 2–12 characters of letters, digits, spaces and hyphens.
 const POSTAL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9 -]{1,11}$/;
 
 export const DEFAULT_COUNTRY = 'India';
@@ -431,11 +398,7 @@ export const postalMetaFor = (country) => {
   };
 };
 
-/**
- * Validates a postal code against its country.
- * Returns an error message, or null when the code is acceptable (blank included
- * — a branch address is allowed to be incomplete).
- */
+// Validates a postal code against its country.
 const postalCodeIssue = (country, value) => {
   const code = String(value ?? '').trim();
   if (!code) return null;

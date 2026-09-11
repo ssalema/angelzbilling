@@ -1,20 +1,7 @@
-/**
- * Reads an .xlsx (or .csv) file in the browser, and nowhere else.
- *
- * The bulk stock screen must never hand a spreadsheet to the server: the file
- * is opened here, the cells are pulled out, and the `File` is dropped the
- * moment this returns. Nothing is uploaded, nothing is written to disk, and no
- * copy of the sheet outlives the dialog — only the rows the admin reviews.
- *
- * That rules out sending it to an API, and it also rules out shipping a
- * megabyte of parser to do it. An .xlsx is a ZIP of XML, both of which the
- * browser can already read: `DecompressionStream` inflates the entries and
- * `DOMParser` reads the sheet. So this file is the whole reader, with no
- * third-party dependency to keep patched.
- */
+// Reads an .xlsx (or .csv) file in the browser, and nowhere else.
 
 /** Anything larger is not a stock sheet — it is the wrong file. */
-export const MAX_SHEET_BYTES = 5 * 1024 * 1024;
+const MAX_SHEET_BYTES = 5 * 1024 * 1024;
 
 /** What the file picker offers, and what `readSheet` will actually open. */
 export const SHEET_TYPES =
@@ -28,14 +15,7 @@ export class SheetError extends Error {}
 const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_SIGNATURE = 0x02014b50;
 
-/**
- * The archive's entries, as `{ name -> Uint8Array }`.
- *
- * Read from the central directory at the end of the file rather than by
- * walking local headers front to back: the local header's sizes are allowed to
- * be zero when a data descriptor follows, and streamed-out workbooks do exactly
- * that. The central directory always carries the real ones.
- */
+// The archive's entries, as `{ name -> Uint8Array }`.
 const readZip = async (buffer) => {
   const bytes = new Uint8Array(buffer);
   const view = new DataView(buffer);
@@ -112,14 +92,7 @@ const parseXml = (bytes) => {
   return doc;
 };
 
-/**
- * Descendant elements with this local name.
- *
- * Walked by hand rather than through `getElementsByTagName`, because that
- * matches on the qualified name and a workbook may or may not prefix its
- * elements. Comparing `localName` sidesteps the namespace entirely, and the
- * documents here are five levels deep, so a walk costs nothing.
- */
+// Descendant elements with this local name.
 const tags = (node, name) => {
   const found = [];
   const walk = (parent) => {
@@ -140,13 +113,7 @@ const isInside = (node, name) => {
   return false;
 };
 
-/**
- * The shared string table. Every repeated piece of text in a workbook — which
- * is every perfume name — is stored once here and referenced by index.
- *
- * A string split across runs (`<r>`) is joined back up; the phonetic guides
- * Excel adds for East Asian text are dropped, or "ZUMAR" would read "ZUMARズマー".
- */
+// The shared string table.
 const readSharedStrings = (bytes) => {
   if (!bytes) return [];
   return tags(parseXml(bytes), 'si').map((si) =>
@@ -261,15 +228,6 @@ const readCsv = (text) => {
 
 /* ────────────────────────────── Public ────────────────────────────── */
 
-/**
- * Opens a spreadsheet and returns `{ headers, rows }`, where each row is an
- * object keyed by the sheet's own header text.
- *
- * `onProgress` is called with 0–100 so the caller can draw the same upload
- * frame the media panels use. Reading a local file is near-instant, so the
- * figure marks the three real stages — read, unzip, lay out the cells — rather
- * than pretending to be a network transfer.
- */
 export const readSheet = async (file, onProgress) => {
   if (!file) throw new SheetError('No file was chosen.');
   if (file.size > MAX_SHEET_BYTES) {

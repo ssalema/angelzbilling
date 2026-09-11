@@ -17,23 +17,9 @@ import PaymentsOutlined from '@mui/icons-material/PaymentsOutlined';
 import DialogCloseButton from '../../components/common/DialogCloseButton.jsx';
 import SummaryRow from '../../components/common/SummaryRow.jsx';
 import { formatCurrency, formatDate } from '../../utils/format.js';
-import { FONT, ICON, numericText, statusColors, surface } from '../../theme/index.js';
+import { FONT, ICON, INSET_RADIUS, numericText, statusColors, surface } from '../../theme/index.js';
 
-/**
- * Raised over the billing form when the number just typed belongs to a customer
- * who still owes money.
- *
- * This is a warning, not a gate: the shop decides whether to sell to someone
- * with an open balance, and blocking the sale would leave a customer standing at
- * the counter while a biller hunts for a workaround. What it must not do is let
- * the bill be rung up while nobody at the counter knows there is a balance — so
- * it interrupts once, names the bills, and only then gets out of the way.
- *
- * Getting out of the way has to be deliberate: a stray click on the backdrop or
- * a reflexive Escape would dismiss the warning before anyone read it, which is
- * the one failure this dialog exists to prevent. The cross and the Continue
- * billing button are the only ways past it.
- */
+// Raised over the billing form when the number just typed belongs to a customer who still owes money.
 const PendingBillsDialog = ({ open, customer, onClose, onCollect }) => {
   const bills = customer?.pendingBills || [];
   if (!bills.length) return null;
@@ -50,7 +36,7 @@ const PendingBillsDialog = ({ open, customer, onClose, onCollect }) => {
     <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
       <DialogCloseButton onClose={onClose} label="Continue billing" />
 
-      <DialogTitle sx={{ pb: 0.5 }}>
+      <DialogTitle sx={{ pb: 1, pr: 6 }}>
         <Stack direction="row" spacing={1.25} alignItems="center">
           <WarningAmberRounded sx={{ fontSize: ICON.action, color: statusColors.pending.color }} />
           <Box>
@@ -65,7 +51,7 @@ const PendingBillsDialog = ({ open, customer, onClose, onCollect }) => {
       </DialogTitle>
 
       <DialogContent>
-        <Box sx={{ p: 1.5, mb: 2, borderRadius: 2, bgcolor: surface.plumFaint }}>
+        <Box sx={{ p: 1.5, mb: 2, borderRadius: `${INSET_RADIUS}px`, bgcolor: surface.plumFaint }}>
           <Stack direction="row" justifyContent="space-between" alignItems="baseline">
             <Typography variant="body2" color="text.secondary">
               Total pending
@@ -134,7 +120,7 @@ const PendingBillsDialog = ({ open, customer, onClose, onCollect }) => {
       </DialogContent>
 
       {/* Each bill above carries its own way out; this just gets on with the sale. */}
-      <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+      <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
         <Button variant="contained" onClick={onClose}>
           Continue billing
         </Button>

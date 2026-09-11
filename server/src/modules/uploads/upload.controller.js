@@ -10,17 +10,9 @@ import {
   isBrandingAsset,
 } from '../../config/cloudinary.js';
 
-/**
- * The destination folder arrives as a plain form field, so it is caller input
- * and is never interpolated into a Cloudinary path as-is: one slug segment,
- * no separators and no dots, which rules out escaping CLOUDINARY_FOLDER.
- */
 const FOLDER_PATTERN = /^[a-z0-9][a-z0-9_-]{0,39}$/;
 
-/**
- * Branding has its own guarded endpoints under /settings. Letting it be written
- * here too would hand any branch admin a way around the superadmin gate.
- */
+// Branding has its own guarded endpoints under /settings.
 const RESERVED_FOLDERS = new Set(['branding']);
 
 const resolveFolder = (raw) => {
@@ -39,10 +31,7 @@ export const removeAssetSchema = z.object({
   resourceType: z.enum(['image', 'video']).default('image'),
 });
 
-/**
- * POST /uploads — multipart `files` (repeatable) plus a `folder` field.
- * Responds with the asset array the media picker stores on the perfume.
- */
+// POST /uploads — multipart `files` (repeatable) plus a `folder` field.
 export const uploadAssets = asyncHandler(async (req, res) => {
   const files = req.files || [];
   if (!files.length) throw ApiError.badRequest('Choose at least one file to upload');
@@ -63,13 +52,7 @@ export const uploadAssets = asyncHandler(async (req, res) => {
   });
 });
 
-/**
- * DELETE /uploads — body { publicId, resourceType }.
- *
- * Two guards stand between an admin and the rest of the Cloudinary account:
- * the id must live under this store's folder (400), and it must not be a
- * branding asset (403), which only a superadmin may replace via /settings.
- */
+// DELETE /uploads — body { publicId, resourceType }.
 export const removeAsset = asyncHandler(async (req, res) => {
   const { publicId, resourceType } = req.body;
 

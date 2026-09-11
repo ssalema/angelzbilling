@@ -10,32 +10,45 @@ import settingsRoutes from '../modules/settings/settings.routes.js';
 import uploadRoutes from '../modules/uploads/upload.routes.js';
 import geoRoutes from '../modules/geo/geo.routes.js';
 import { attachFeatures } from '../utils/featureFlags.js';
+import authenticate from '../middlewares/authenticate.js';
+import { authorize } from '../middlewares/authorize.js';
+import { snapshot } from '../middlewares/metrics.js';
+import { dashboardCacheStats, lifetimeCache, catalogueCache, lookupCache } from '../middlewares/cache.js';
+import { userCacheStats } from '../utils/userCache.js';
+import { socketStats } from '../config/socket.js';
 
 const router = Router();
 
-/**
- * Liveness and readiness in one. A check that only proves Express is up keeps a
- * platform routing traffic at an instance whose database has gone away, so the
- * driver's own connection state is the answer here — and an API that cannot
- * reach Mongo reports 503 rather than a cheerful 200.
- */
+// Liveness and readiness in one.
 const DB_STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
 
 router.get('/health', (_req, res) => {
-  const database = DB_STATES[mongoose.connection.readyState] || 'unknown';
-  const healthy = database === 'connected';
+  const healthy = DB_STATES[mongoose.connection.readyState] === 'connected';
 
   return res.status(healthy ? 200 : 503).json({
     success: healthy,
     message: healthy ? 'Server is Working' : 'The database is not reachable',
-    data: {
-      status: healthy ? 'ok' : 'degraded',
-      database,
-      uptime: Math.round(process.uptime()),
-      timestamp: new Date().toISOString(),
-    },
+    data: { status: healthy ? 'ok' : 'degraded', timestamp: new Date().toISOString() },
   });
 });
+
+router.get('/metrics', authenticate, authorize('superadmin'), (_req, res) =>
+  res.json({
+    success: true,
+    message: 'Metrics collected',
+    data: snapshot({
+      caches: {
+        dashboard: dashboardCacheStats(),
+        lifetime: lifetimeCache.stats,
+        catalogue: catalogueCache.stats,
+        lookup: lookupCache.stats,
+        account: userCacheStats(),
+      },
+      // This worker's live connections; under the cluster each reports its share.
+      realtime: socketStats(),
+    }),
+  })
+);
 
 // Every route below may need to know whether branches are switched on, and the
 // scoping helpers that ask are synchronous — so the flag is resolved up front.

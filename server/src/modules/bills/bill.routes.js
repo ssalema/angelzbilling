@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { z } from 'zod';
 import authenticate from '../../middlewares/authenticate.js';
 import { invalidateDashboardOnWrite } from '../../middlewares/cache.js';
+import { announceOnWrite } from '../../middlewares/realtime.js';
 import validate from '../../middlewares/validate.js';
 import { authorize } from '../../middlewares/authorize.js';
+import { lookupLimiter } from '../../middlewares/security.js';
 import {
   createBillSchema,
   listBillQuerySchema,
@@ -25,13 +27,11 @@ import {
 
 const router = Router();
 router.use(authenticate);
-// Bills feed dashboard figures — any write here makes the cached analytics
-// wrong, so it drops them. `scoped` because a bill belongs to exactly one
-// location: raising one at Fort drops Fort's cached figures and the
-// all-branches roll-up, and leaves every other branch's alone. Without that, a
-// busy till flushed the whole cache every few seconds and nothing survived to
-// be served.
+// Bills feed dashboard figures — any write here makes the cached analytics wrong, so it drops them.
 router.use(invalidateDashboardOnWrite({ except: ['/preview'], scoped: true }));
+// And the open panels at that location are told, so a bill raised at one counter
+// lands on the other screens without anyone reloading. See middlewares/realtime.js.
+router.use(announceOnWrite({ resource: 'bills', scoped: true, except: ['/preview'] }));
 
 const statsQuery = z.object({
   range: z.enum(['today', 'week', 'month', 'year', 'all', 'custom']).optional().default('month'),
@@ -43,9 +43,12 @@ const statsQuery = z.object({
 router.get('/', validate({ query: listBillQuerySchema }), listBills);
 router.get('/stats', validate({ query: statsQuery }), getBillStats);
 
-// Recalls a returning customer from their past bills, so the biller types the
-// number once instead of the whole form again. Must stay above '/:id'.
-router.get('/customers', validate({ query: customerLookupQuerySchema }), lookupCustomers);
+router.get(
+  '/customers',
+  lookupLimiter,
+  validate({ query: customerLookupQuerySchema }),
+  lookupCustomers
+);
 
 // Any signed-in account may raise a bill — that is the billing staff's whole job.
 router.post('/preview', validate({ body: createBillSchema.partial({ paymentMethod: true }) }), previewBill);
@@ -53,9 +56,7 @@ router.post('/', validate({ body: createBillSchema }), createBill);
 
 router.get('/:id', validate({ params: idParamSchema }), getBill);
 
-// Collecting the balance on a pending bill. Taking money at the counter is the
-// billing staff's job, exactly like raising the bill was, so this is not gated
-// on admin — only on the location the bill belongs to.
+// Collecting the balance on a pending bill.
 router.patch(
   '/:id/payment',
   validate({ params: idParamSchema, body: collectPaymentSchema }),

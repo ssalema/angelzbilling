@@ -4,12 +4,7 @@ import TrendingDown from '@mui/icons-material/TrendingDown';
 import TrendingFlat from '@mui/icons-material/TrendingFlat';
 import { CARD_PAD, ICON, numericText } from '../../../theme/index.js';
 
-
-/**
- * The summary tile used four times across the top of the dashboard.
- * Label, big value, a growth pill and a supporting caption — matching the
- * reference layout, in the perfume palette.
- */
+// The summary tile used four times across the top of the dashboard.
 const StatCard = ({ label, value, caption, growth, icon: Icon, color = '#3E2545', loading }) => {
   if (loading) {
     return (

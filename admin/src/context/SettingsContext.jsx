@@ -6,10 +6,6 @@ import { cacheSiteName, cachedSiteName, documentTitle } from '../utils/branding.
 
 const SettingsContext = createContext(null);
 
-/**
- * Store identity (name, logo, favicon, bill prefix) is loaded once and shared,
- * so the sidebar, the bill print header and the browser tab all agree.
- */
 export const SettingsProvider = ({ children }) => {
   const { isAuthenticated, booting, bootSettings } = useAuth();
   const [settings, setSettings] = useState(null);
@@ -27,16 +23,6 @@ export const SettingsProvider = ({ children }) => {
     }
   }, [isAuthenticated]);
 
-  /**
-   * Boot used to cost two serial round trips: this provider reads
-   * `isAuthenticated`, so it could not ask for settings until the auth refresh
-   * had come back, and only then made a request of its own — with the app
-   * showing its splash for both.
-   *
-   * The session response now carries the store profile with it, so for a
-   * signed-in user there is nothing left to fetch here. Only the signed-out
-   * case still needs a request, for the login screen's logo and name.
-   */
   useEffect(() => {
     // Wait for the auth attempt to resolve; acting on the interim state would
     // fire the public request and then immediately supersede it.
@@ -66,15 +52,6 @@ export const SettingsProvider = ({ children }) => {
     }
   }, [settings]);
 
-  /**
-   * The shared money formatters are plain functions, not hooks, so the store's
-   * currency has to be pushed into them.
-   *
-   * Deliberately during render rather than in an effect: an effect runs AFTER
-   * the children have painted, so the first screen of the session would render
-   * its amounts under the default symbol and never re-render to correct itself.
-   * The call is idempotent and returns early when nothing changed.
-   */
   configureCurrency({
     // Nested from /settings, flat from the signed-out /settings/public payload.
     currency: settings?.billing?.currency || settings?.currency,

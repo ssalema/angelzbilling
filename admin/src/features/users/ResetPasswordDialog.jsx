@@ -13,7 +13,8 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
-import { RHFTextField } from '../../components/form/RHFControls.jsx';
+import { RHFPasswordField } from '../../components/form/RHFControls.jsx';
+import { PASSWORD_HINT } from '../../utils/constants.js';
 import DialogCloseButton from '../../components/common/DialogCloseButton.jsx';
 import { userApi } from '../../api/endpoints.js';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
@@ -86,14 +87,17 @@ const ResetPasswordDialog = ({ open, user, onClose }) => {
             </Alert>
 
             <Stack spacing={2.25}>
-              <RHFTextField
+              <RHFPasswordField
                 name="password"
-                label="New password"
-                type="text"
+                label="New password *"
+                /* An admin is setting this *for someone else* and has to read it
+                   back to pass on, so it starts legible — but unlike before it
+                   can be hidden again on a screen other people can see. */
+                defaultVisible
                 autoFocus
-                helperText="At least 8 characters with upper case, lower case and a number"
+                helperText={PASSWORD_HINT}
               />
-              <RHFTextField name="confirmPassword" label="Confirm password" type="text" />
+              <RHFPasswordField name="confirmPassword" label="Confirm password *" defaultVisible />
             </Stack>
           </DialogContent>
 

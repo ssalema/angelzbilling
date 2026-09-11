@@ -1,9 +1,6 @@
 import { z } from 'zod';
 
-/**
- * Mirrors the server's Zod schema so the wizard catches problems before a round
- * trip. The server still re-validates — this copy is UX, that one is truth.
- */
+// Mirrors the server's Zod schema so the wizard catches problems before a round trip.
 
 const media = z.object({
   url: z.string().min(1),
@@ -24,8 +21,6 @@ const variantSchema = z.object({
   mrp: z.coerce.number({ invalid_type_error: 'Enter a price' }).min(0, 'Price cannot be negative'),
   discountPercent: z.coerce.number().min(0, 'Cannot be negative').max(100, 'Cannot exceed 100%').default(0),
   // Read-only here: the server derives it from the Size option ("100gm" -> 100).
-  // This is how much the perfume's shared stock drops per unit sold — a variant
-  // has no stock field of its own, because every size pours from one bulk pool.
   sizeGrams: z.coerce.number().min(0).optional(),
   isActive: z.boolean().default(true),
   image: z.object({ url: z.string().default(''), publicId: z.string().default('') }).default({ url: '', publicId: '' }),
@@ -50,17 +45,12 @@ export const perfumeSchema = z
     concentration: z.string().trim().max(80).default(''),
     shortDescription: z.string().trim().max(300, 'Keep this under 300 characters').default(''),
     description: z.string().trim().max(8000).default(''),
-    // Pricing is not typed on this step any more: it belongs to the variants
-    // step. With one size only, that step's base price fills these in; with
-    // variants on, they are derived from the cheapest active row on save.
+    // Pricing is not typed on this step any more: it belongs to the variants step.
     mrp: z.coerce.number({ invalid_type_error: 'Enter a price' }).min(0, 'Price cannot be negative').default(0),
     discountPercent: z.coerce.number().min(0, 'Cannot be negative').max(100, 'Cannot exceed 100%').default(0),
     // Stock is bulk weight in grams throughout, so decimals are allowed. This is
     // the perfume's ONE inventory figure — variants draw down this same pool.
     sizeGrams: z.coerce.number().min(0, 'Pack size cannot be negative').default(0),
-    // Required, and above zero: a perfume with an empty pool cannot be sold, so
-    // the weight held is asked for on step one rather than discovered at the
-    // till. A draft still saves without it — that path checks name and SKU only.
     stock: z.coerce
       .number({ invalid_type_error: 'Enter the stock you hold, in grams' })
       .positive('Enter the stock you hold, in grams')
@@ -219,12 +209,6 @@ const parseGrams = (text) => {
   return Number.isFinite(grams) && grams > 0 ? grams : 0;
 };
 
-/**
- * Mirrors the server's resolveSizeGrams: an explicit fill size wins, otherwise
- * we read it off the Size option ("100gm" -> 100) and finally the label, so the
- * wizard shows the same bottle counts the API will enforce. This is the weight
- * removed from the perfume's shared stock per unit of this size sold.
- */
 export const sizeGramsFor = (target) => {
   const explicit = Number(target?.sizeGrams);
   if (Number.isFinite(explicit) && explicit > 0) return explicit;
@@ -235,25 +219,7 @@ export const sizeGramsFor = (target) => {
   return parseGrams(sizeOption) || parseGrams(target?.label) || 1;
 };
 
-/**
- * The smallest fill this perfume can still be poured into — mirrors the server's
- * smallestFillGrams. It decides whether ANY unit is sellable out of the shared
- * weight, so it is the divisor behind every "units left" figure on screen.
- */
-export const smallestFillGramsFor = (data) => {
-  const variants = data?.variants || [];
-  const active = variants.filter((v) => v?.isActive !== false);
-  const sizes = (active.length ? active : variants).map((v) => sizeGramsFor(v));
-  if (data?.hasVariants && sizes.length) return Math.min(...sizes);
-  return sizeGramsFor(data);
-};
-
-/**
- * The perfume-level price the API and every listing still expect. Pricing is
- * entered per variant now, so with variants on this is the cheapest active row
- * (what a storefront shows as "from ..."); without them it is the single base
- * price typed on the variants step.
- */
+// The perfume-level price the API and every listing still expect.
 export const basePricingFor = (data) => {
   const variants = data?.variants || [];
   const active = variants.filter((v) => v?.isActive !== false);

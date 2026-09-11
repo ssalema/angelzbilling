@@ -23,14 +23,7 @@ import {
 } from '../../utils/countries.js';
 import { ICON } from '../../theme/index.js';
 
-/**
- * The one contact-number input used everywhere in the admin.
- *
- * It drives two form fields: `codeName` holds the dial code ("+91") and `name`
- * holds the national digits, so a saved number always renders as "+91 9812521138".
- * The digit length is enforced per country — a fixed 10 for India, 8 for
- * Singapore, a range where the country genuinely allows one.
- */
+// The one contact-number input used everywhere in the admin.
 const RHFContactNumber = ({
   name,
   codeName,

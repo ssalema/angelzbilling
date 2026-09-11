@@ -1,14 +1,4 @@
-/**
- * Turning an uploaded price sheet into reviewable rows.
- *
- * Kept apart from the dialog so the rules an admin is shown before uploading —
- * the column names, exact name matching, blank means unchanged — are the same
- * rules the file is actually judged by, written once.
- *
- * The sheet carries one column per fill size. Every size is independent: a
- * blank cell leaves that size at the price it already has, and nothing is
- * derived from anything else.
- */
+// Turning an uploaded price sheet into reviewable rows.
 
 import { SIZE_GRAMS, parsePrice, priceIssue } from './sizePricing.js';
 
@@ -35,13 +25,7 @@ export const SHEET_RULES = [
 /** Header matching is forgiving about case and spacing, and nothing else. */
 const headerKey = (value) => String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 
-/**
- * Reads the header row into the columns this screen understands.
- *
- * Size columns are matched by pattern rather than against a fixed list, so a
- * perfume sold in an unusual fill — a 200gm, say — can be repriced by adding a
- * "200gm Price" column, with no change here.
- */
+// Reads the header row into the columns this screen understands.
 export const findColumns = (headers = []) => {
   const name = headers.find((header) => headerKey(header) === headerKey(COLUMN_NAME)) ?? null;
 
@@ -61,14 +45,6 @@ export const findColumns = (headers = []) => {
 
 const normaliseName = (value) => String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 
-/**
- * The sheet's rows, checked against everything that can be judged without the
- * catalogue: the name is present, at least one price was given, every price
- * given is a positive number, and the perfume has not already been listed.
- *
- * Rows keep their original sheet line number so a flagged row can be found and
- * fixed in the file the admin still has open.
- */
 export const buildSheetRows = (records, columns) => {
   const seen = new Set();
 
@@ -110,16 +86,7 @@ export const buildSheetRows = (records, columns) => {
   });
 };
 
-/**
- * Merges the catalogue's answer into the sheet's rows.
- *
- * `matches` comes back from the server in the same order it was asked, one
- * entry per name that got as far as being worth looking up.
- *
- * A price for a size the perfume does not sell is dropped and reported rather
- * than written — "500gm Price" against a perfume with no 500gm bottle is a
- * mistake in the sheet, not an instruction to create one.
- */
+// Merges the catalogue's answer into the sheet's rows.
 export const applyMatches = (rows, matches) => {
   const queue = [...matches];
 
@@ -160,10 +127,6 @@ export const applyMatches = (rows, matches) => {
   });
 };
 
-/**
- * A matched row's sizes as the review table wants them — the same shape
- * `sizeRows` produces for the single tab, so both flows share one table.
- */
 export const reviewRowsFor = (row) => {
   const wanted = new Map(row.prices.map((price) => [price.sizeGrams, price.mrp]));
 

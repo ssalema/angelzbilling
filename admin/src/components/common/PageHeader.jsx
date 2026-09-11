@@ -3,10 +3,6 @@ import NavigateNext from '@mui/icons-material/NavigateNext';
 import { Link as RouterLink } from 'react-router-dom';
 import { FONT, ICON } from '../../theme/index.js';
 
-/**
- * The title block every page starts with: breadcrumbs, heading, subtitle and
- * an action slot on the right (which wraps below the title on mobile).
- */
 const PageHeader = ({ title, subtitle, breadcrumbs = [], action, sx }) => (
   <Box sx={{ mb: 3, ...sx }}>
     {breadcrumbs.length > 0 && (

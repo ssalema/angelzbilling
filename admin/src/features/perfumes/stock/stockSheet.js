@@ -1,20 +1,11 @@
-/**
- * Turning an uploaded stock sheet into reviewable rows.
- *
- * Kept apart from the dialog so the rules an admin is shown before uploading —
- * the two column names, grams, numeric, no duplicates — are the same rules the
- * file is actually judged by, written once.
- */
+// Turning an uploaded stock sheet into reviewable rows.
 
 /** The two columns the sheet must carry, spelled exactly like this. */
 export const COLUMN_NAME = 'Perfume Name';
 /** Spelled with its unit, because a column headed "Stock" invites "1.5 kg". */
 export const COLUMN_STOCK = 'Stock (GM)';
 
-/**
- * Headings that also mean the stock column. A sheet written before the heading
- * carried its unit still reads correctly — the figure was always grams.
- */
+// Headings that also mean the stock column.
 const STOCK_ALIASES = [COLUMN_STOCK, 'Stock', 'Stock GM', 'Stock in GM', 'Stock (gm)'];
 
 /** The rules shown above the dropzone, in the order they are checked. */
@@ -36,12 +27,7 @@ export const findColumns = (headers = []) => {
   return { name: match(COLUMN_NAME), stock: match(...STOCK_ALIASES) };
 };
 
-/**
- * Grams out of a cell. Thousands separators and a trailing "gm" are the two
- * things a real sheet carries that a plain `Number()` would choke on; a unit we
- * do not understand is rejected rather than assumed, because reading "1.5 kg"
- * as 1.5 grams is the one mistake this screen must never make.
- */
+// Grams out of a cell.
 export const parseGrams = (raw) => {
   const text = String(raw ?? '').trim().replace(/,/g, '').replace(/\s*(gm|gms|g|grams?)$/i, '');
   if (!text) return NaN;
@@ -58,14 +44,6 @@ export const parseTypedGrams = (raw) => {
 
 const normaliseName = (value) => String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 
-/**
- * The sheet's rows, checked against everything that can be judged without the
- * catalogue: the name is present, the stock is a positive number, and the
- * perfume has not already been listed.
- *
- * Rows keep their original sheet line number so a flagged row can be found and
- * fixed in the file the admin still has open.
- */
 export const buildSheetRows = (records, columns) => {
   const seen = new Set();
 
@@ -92,12 +70,7 @@ export const buildSheetRows = (records, columns) => {
   });
 };
 
-/**
- * Merges the catalogue's answer into the sheet's rows.
- *
- * `matches` comes back from the server in the same order it was asked, one
- * entry per name that got as far as being worth looking up.
- */
+// Merges the catalogue's answer into the sheet's rows.
 export const applyMatches = (rows, matches) => {
   const queue = [...matches];
 

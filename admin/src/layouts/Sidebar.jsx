@@ -24,10 +24,6 @@ export const SIDEBAR_WIDTH = 264;
 const SidebarContent = ({ onNavigate }) => {
   const { user } = useAuth();
   const { siteName, logo: storeLogo, branchesEnabled } = useSettings();
-  // Staff of a branch that carries its own logo work under that logo — unless
-  // branches are switched off, when only the store's own logo exists. The Head
-  // Office has no branch record, so it falls through to the store logo, which
-  // is its logo.
   const branch = branchesEnabled ? user?.branch : null;
   // The server resolves 'its own, or none' into effectiveLogo — same rule the
   // branch table and the bill header read.

@@ -10,19 +10,7 @@ import { geoApi } from '../../api/endpoints.js';
 import useDebounce from '../../hooks/useDebounce.js';
 import { ICON } from '../../theme/index.js';
 
-/**
- * One address block, wired to react-hook-form.
- *
- * Country drives everything: it decides which states are offered, a state
- * decides which cities are offered, and a postal code typed into the last field
- * fills the state and city back in from the postal directory. Every field stays
- * free text underneath — the lists are suggestions, so an address the directory
- * has never heard of can still be saved.
- *
- * Expects the form to hold { line1, city, state, pincode, country } under
- * `prefix`, which is how every address in the app is shaped. Renders bare grid
- * items, so it belongs inside a <Grid container>.
- */
+// One address block, wired to react-hook-form.
 const AddressFields = ({ prefix = 'address', disabled = false }) => {
   const { control, setValue } = useFormContext();
 

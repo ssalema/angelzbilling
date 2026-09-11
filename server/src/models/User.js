@@ -9,6 +9,9 @@ const ROLE_LABELS = {
   staff: 'Billing Staff',
 };
 
+// The human name for a role, as a plain function.
+export const roleLabelFor = (role) => ROLE_LABELS[role] || role;
+
 const refreshTokenSchema = new mongoose.Schema(
   {
     tokenHash: { type: String, required: true },
@@ -45,14 +48,7 @@ const userSchema = new mongoose.Schema(
     phone: { type: String, trim: true, default: '' },
     phoneCountryCode: { type: String, trim: true, default: '+91' },
     role: { type: String, enum: ROLES, default: 'staff', index: true },
-    /**
-     * The branch this account belongs to; null means the whole store.
-     *
-     * For an admin or staff account it is what scopes them — they see and touch
-     * their branch only. On a superadmin it means something different: they
-     * still SEE everything, but may only make changes inside that branch. Only
-     * a superadmin may have null here, and that one is the main Super Admin.
-     */
+    // The branch this account belongs to; null means the whole store.
     branch: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', default: null },
     avatar: {
       url: { type: String, default: '' },
@@ -61,11 +57,7 @@ const userSchema = new mongoose.Schema(
     isActive: { type: Boolean, default: true },
     lastLoginAt: { type: Date, default: null },
     passwordChangedAt: { type: Date, default: null },
-    /**
-     * Per-account brute-force brake. The IP rate limiter alone is defeated by a
-     * botnet or a spoofed X-Forwarded-For; this follows the account instead, so
-     * guessing one password stays expensive no matter where it is guessed from.
-     */
+    // Per-account brute-force brake.
     failedLoginAttempts: { type: Number, default: 0, select: false },
     lockedUntil: { type: Date, default: null, select: false },
     refreshTokens: { type: [refreshTokenSchema], default: [], select: false },

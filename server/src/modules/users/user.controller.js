@@ -18,15 +18,7 @@ import { getPagination, getSort, escapeRegex, round2 } from '../../utils/query.j
 
 const SORTABLE = ['createdAt', 'name', 'email', 'role', 'lastLoginAt'];
 
-/**
- * Who may CHANGE an account.
- *
- * Every Super Admin can list and open every account — the read endpoints below
- * are deliberately unscoped. Writing is where a branch assignment bites: a
- * Super Admin pinned to a branch manages that branch's team only, and never
- * another Super Admin (those sit above the branch structure, so they belong to
- * the main Super Admin alone).
- */
+// Who may CHANGE an account.
 const assertCanManageUser = (req, target) => {
   if (isGlobalSuperAdmin(req.user)) return;
   if (target.role === 'superadmin') {
@@ -35,12 +27,6 @@ const assertCanManageUser = (req, target) => {
   assertBranchWrite(req, target.branch?._id || target.branch);
 };
 
-/**
- * The main Super Admin — no branch, and the only account that can edit the main
- * business details — must never be the one that disappears. Demoting, branching,
- * deactivating or deleting the last one would leave the store with nobody able
- * to change its own name.
- */
 const assertAnotherMainSuperAdminRemains = async (excludeId) => {
   const remaining = await User.countDocuments({
     role: 'superadmin',
@@ -147,10 +133,6 @@ export const createUser = asyncHandler(async (req, res) => {
     ]);
   }
 
-  // With branches switched off there is nothing to pin an account to, so the
-  // branch is neither asked for nor required. Otherwise null is a real answer:
-  // it posts the account to the Head Office. A Super Admin may carry a branch
-  // too — for them it caps what they can change, not what they can see.
   const assignedBranch = branchesOn(req) ? toBranchId(branch) : null;
   if (assignedBranch) {
     const branchDoc = await Branch.findById(assignedBranch);
@@ -221,9 +203,6 @@ export const updateUser = asyncHandler(async (req, res) => {
   }
 
   Object.assign(user, req.body);
-  // With branches off, leave whatever the account already had untouched, so
-  // flipping the switch back on restores the old scoping rather than orphaning
-  // every account that happened to be edited while it was off.
   user.branch = branchesOn(req) ? nextBranch || null : previousBranch;
   await user.save();
   await user.populate('branch', 'name code');

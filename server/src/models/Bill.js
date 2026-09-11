@@ -1,12 +1,7 @@
 import mongoose from 'mongoose';
 
-export const PAYMENT_METHODS = ['cash', 'card', 'upi', 'bank_transfer'];
-/**
- * A bill is 'pending' while any part of it is still owed. It is not a draft —
- * the goods have already left the shelf and the stock is already deducted; only
- * the money is incomplete. Collecting the balance moves that same document to
- * 'paid', so a part payment never mints a second bill number.
- */
+const PAYMENT_METHODS = ['cash', 'card', 'upi', 'bank_transfer'];
+// A bill is 'pending' while any part of it is still owed.
 const BILL_STATUSES = ['paid', 'pending', 'refunded'];
 
 const PAYMENT_METHOD_LABELS = {
@@ -16,10 +11,7 @@ const PAYMENT_METHOD_LABELS = {
   bank_transfer: 'Bank Transfer',
 };
 
-/**
- * Every line snapshots the perfume exactly as it was sold. A price change or a
- * perfume deletion tomorrow must not alter what this customer actually paid.
- */
+// Every line snapshots the perfume exactly as it was sold.
 const billItemSchema = new mongoose.Schema(
   {
     perfume: { type: mongoose.Schema.Types.ObjectId, ref: 'Perfume', required: true },
@@ -54,11 +46,7 @@ const actorSchema = new mongoose.Schema(
   { _id: false }
 );
 
-/**
- * One instalment of money actually received. The first entry is written when the
- * bill is raised; every later one is a balance collected against that same bill.
- * Together they always add up to `amountPaid`.
- */
+// One instalment of money actually received.
 const paymentEntrySchema = new mongoose.Schema(
   {
     amount: { type: Number, required: true, min: 0 },
@@ -66,12 +54,7 @@ const paymentEntrySchema = new mongoose.Schema(
     at: { type: Date, default: Date.now },
     by: { type: actorSchema, required: true },
     note: { type: String, trim: true, default: '', maxlength: 300 },
-    /**
-     * True only for the money taken as the bill was raised. The slip prints that
-     * one as "During Billing" and stamps every later one with its own date, so this
-     * cannot be inferred from position: a bill raised with nothing paid has no
-     * billing-time entry at all, and its first collection is not one either.
-     */
+    // True only for the money taken as the bill was raised.
     atBilling: { type: Boolean, default: false },
   },
   { _id: true }
@@ -122,12 +105,7 @@ const billSchema = new mongoose.Schema(
     taxAmount: { type: Number, default: 0, min: 0 },
     grandTotal: { type: Number, required: true, min: 0 },
     amountPaid: { type: Number, default: 0, min: 0 },
-    /**
-     * What is still owed. Stored rather than derived because outstanding money
-     * is summed across bills in aggregations, and Mongo cannot group on a
-     * virtual. Always `grandTotal - amountPaid`, and forced to 0 by a refund —
-     * a bill whose money has been handed back is owed nothing.
-     */
+    // What is still owed.
     amountDue: { type: Number, default: 0, min: 0, index: true },
 
     /** The audit trail: money in, and every status change. Append-only. */
@@ -164,19 +142,7 @@ const billSchema = new mongoose.Schema(
 billSchema.index({ createdAt: -1 });
 billSchema.index({ 'branch.id': 1, createdAt: -1 });
 billSchema.index({ status: 1, createdAt: -1 });
-/**
- * The bill list is nearly always branch-scoped AND status-filtered before it is
- * sorted by date, and a two-field index cannot serve all three. This is the
- * shape that screen actually asks for.
- */
 billSchema.index({ 'branch.id': 1, status: 1, createdAt: -1 });
-/**
- * `grandTotal` is offered as a sort column by the list endpoint but had no
- * index, so sorting by it loaded every matching bill and sorted them in memory
- * — which Mongo aborts outright once the set passes 32 MB. Every other sortable
- * column (createdAt, billNumber, status, amountDue) was already indexed; this
- * was the one that would have failed, and only once the shop got busy.
- */
 billSchema.index({ grandTotal: -1 });
 billSchema.index({ billNumber: 'text', 'customer.name': 'text', 'customer.mobile': 'text' });
 
@@ -196,12 +162,7 @@ billSchema.virtual('paymentMethodLabel').get(function paymentMethodLabel() {
   return PAYMENT_METHOD_LABELS[this.paymentMethod] || this.paymentMethod;
 });
 
-/**
- * A refund gives the money back, so a refunded bill earns nothing. Everything
- * else counts — but revenue is what was *collected* (`amountPaid`), never what
- * was billed, so a part-paid bill contributes only the cash actually taken and
- * its balance stays outstanding rather than being booked early.
- */
+// A refund gives the money back, so a refunded bill earns nothing.
 billSchema.statics.revenueMatch = () => ({ status: { $ne: 'refunded' } });
 
 export const Bill = mongoose.model('Bill', billSchema);

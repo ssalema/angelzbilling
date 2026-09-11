@@ -12,17 +12,6 @@ import { refreshFeatures } from '../../utils/featureFlags.js';
 
 const SORTABLE = ['createdAt', 'name', 'code'];
 
-/**
- * The branch switch and the branch list are two views of one fact: branch
- * management is on exactly while at least one location is active. Activating a
- * branch by hand therefore switches it back on, and deactivating the last
- * active one switches it off — without this the panel read "Branches off" over
- * a table of active branches, and the rest of the app kept its branch columns,
- * filters and pickers hidden while branches were live.
- *
- * A store with no branches at all is left alone: the switch is then the admin's
- * own choice, and forcing it off would hide the button that adds the first one.
- */
 const syncBranchesFeature = async () => {
   const [total, active] = await Promise.all([
     Branch.countDocuments({}),
@@ -41,9 +30,6 @@ const syncBranchesFeature = async () => {
   settings.updatedFields.set('features:branches', new Date());
   await settings.save();
 
-  // Branch scoping reads a cached copy of this flag and the print header a
-  // cached copy of the document; both go, so the next request already sees the
-  // switch in its new position.
   refreshFeatures();
   Settings.invalidateCache();
 };
@@ -103,9 +89,6 @@ export const listBranches = asyncHandler(async (req, res) => {
     billCount: billMap[String(b._id)] || 0,
   }));
 
-  // Records written before the switch followed the list — or edited straight in
-  // the database — can still disagree with it. The check is a no-op once they
-  // agree, so listing the branches quietly repairs the switch.
   if (isGlobalSuperAdmin(req.user)) await syncBranchesFeature();
 
   return sendPaginated(res, { message: 'Branches loaded', items: enriched, page, limit, total });
@@ -115,9 +98,6 @@ export const getBranch = asyncHandler(async (req, res) => {
   const branch = await Branch.findById(req.params.id).lean();
   if (!branch) throw ApiError.notFound('Branch not found');
 
-  // The list endpoint already pins a scoped role to their own branch; without
-  // this, reading one by id walked straight past that and exposed every other
-  // branch's address, phone and GSTIN.
   assertBranchAccess(req, branch._id);
 
   return sendSuccess(res, { message: 'Branch loaded', data: withBranding(branch) });
@@ -141,9 +121,6 @@ export const updateBranch = asyncHandler(async (req, res) => {
   // Reading every branch is fine for any Super Admin; editing one is not.
   assertBranchWrite(req, branch._id);
 
-  // Activation is store-wide, and the edit form carries an isActive switch —
-  // without this, a branch Super Admin could close their own location through
-  // the form after being refused at the status route.
   if (
     !isGlobalSuperAdmin(req.user) &&
     req.body.isActive !== undefined &&
@@ -215,12 +192,6 @@ export const toggleBranchStatus = asyncHandler(async (req, res) => {
   });
 });
 
-/**
- * A branch's own branding replaces the store's everywhere that branch is shown:
- * the logo heads its bills and its admins' sidebar, the favicon is the mark on
- * the printed slip and in the branch table. Uploading either turns
- * `hasOwnLogo` on, so the toggle and the artwork can never disagree.
- */
 export const uploadBranchBranding = asyncHandler(async (req, res) => {
   const kind = req.params.kind; // 'logo' | 'favicon'
   const branch = await Branch.findById(req.params.id);

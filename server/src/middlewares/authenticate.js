@@ -1,13 +1,13 @@
 import User from '../models/User.js';
 import ApiError from '../utils/ApiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
-import { verifyAccessToken } from '../utils/tokens.js';
+import { verifyAccessToken, isAccessTokenRevoked } from '../utils/tokens.js';
+import { getCachedUser, setCachedUser } from '../utils/userCache.js';
 
-/**
- * Verifies the Bearer access token and loads a fresh user document.
- * Reading the user on every request means a deactivated account or a role
- * change takes effect immediately, without waiting for the token to expire.
- */
+/** The branch fields the sidebar and the printed bill header both read. */
+const BRANCH_FIELDS = 'name code address phone phoneCountryCode gstin isActive hasOwnLogo logo favicon';
+
+// Verifies the Bearer access token and resolves the account behind it.
 export const authenticate = asyncHandler(async (req, _res, next) => {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : null;
@@ -24,11 +24,25 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
 
   if (payload.tokenType !== 'access') throw ApiError.unauthorized('Invalid authentication token');
 
-  const user = await User
-    .findById(payload.sub)
-    // The sidebar prints under a branch's own logo when it has one, so /auth/me
-    // has to carry the same branch fields login and refresh do.
-    .populate('branch', 'name code address phone phoneCountryCode gstin isActive hasOwnLogo logo favicon');
+  if (isAccessTokenRevoked(payload.jti)) {
+    throw ApiError.unauthorized('You have been signed out. Please sign in again.');
+  }
+
+  req.tokenId = payload.jti;
+
+  let user = getCachedUser(payload.sub);
+
+  if (!user) {
+    user = await User
+      .findById(payload.sub)
+      // The sidebar prints under a branch's own logo when it has one, so /auth/me
+      // has to carry the same branch fields login and refresh do.
+      .populate('branch', BRANCH_FIELDS)
+      .lean();
+    // Only a usable account is worth caching.
+    if (user?.isActive) setCachedUser(payload.sub, user);
+  }
+
   if (!user) throw ApiError.unauthorized('This account no longer exists');
   if (!user.isActive) throw ApiError.forbidden('Your account has been deactivated. Contact the super admin.');
 

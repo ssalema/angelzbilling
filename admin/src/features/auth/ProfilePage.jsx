@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -17,17 +17,13 @@ import {
   Chip,
   CircularProgress,
   Alert,
-  InputAdornment,
-  IconButton,
 } from '@mui/material';
 import SaveOutlined from '@mui/icons-material/SaveOutlined';
 import PersonOutline from '@mui/icons-material/PersonOutline';
 import LockResetOutlined from '@mui/icons-material/LockResetOutlined';
-import Visibility from '@mui/icons-material/Visibility';
-import VisibilityOff from '@mui/icons-material/VisibilityOff';
 
 import PageHeader from '../../components/common/PageHeader.jsx';
-import { RHFTextField } from '../../components/form/RHFControls.jsx';
+import { RHFTextField, RHFPasswordField } from '../../components/form/RHFControls.jsx';
 import RHFContactNumber from '../../components/form/RHFContactNumber.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
@@ -35,9 +31,9 @@ import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { authApi } from '../../api/endpoints.js';
 import { applyServerErrors } from '../../api/client.js';
 import { formatDate, initials } from '../../utils/format.js';
-import { ROLE_LABELS, locationLabel } from '../../utils/constants.js';
+import { ROLE_LABELS, locationLabel, PASSWORD_HINT } from '../../utils/constants.js';
 import { DEFAULT_DIAL_CODE, addContactNumberIssue } from '../../utils/countries.js';
-import { CARD_PAD, ICON, brand } from '../../theme/index.js';
+import { CARD_PAD, GUTTER, ICON, brand } from '../../theme/index.js';
 import { IMG } from '../../utils/image.js';
 
 const profileSchema = z
@@ -82,7 +78,6 @@ const ProfilePage = () => {
   const snackbar = useSnackbar();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [showPasswords, setShowPasswords] = useState(false);
 
   const tab = searchParams.get('tab') === 'password' ? 'password' : 'profile';
 
@@ -143,10 +138,10 @@ const ProfilePage = () => {
         breadcrumbs={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Profile' }]}
       />
 
-      <Grid container spacing={2.5}>
+      <Grid container spacing={GUTTER.page}>
         {/* Identity card */}
         <Grid item xs={12} md={4}>
-          <Card sx={{ p: 3, textAlign: 'center' }}>
+          <Card sx={{ p: CARD_PAD, textAlign: 'center' }}>
             <Avatar
               src={IMG.thumb(user?.avatar?.url) || undefined}
               sx={{ width: 84, height: 84, mx: 'auto', bgcolor: brand.plum, fontSize: 30, fontWeight: 700 }}
@@ -222,7 +217,7 @@ const ProfilePage = () => {
               {tab === 'profile' ? (
                 <FormProvider {...profileForm}>
                   <form onSubmit={profileForm.handleSubmit(saveProfile)} noValidate>
-                    <Grid container spacing={2.25}>
+                    <Grid container spacing={GUTTER.cards}>
                       <Grid item xs={12} sm={6}>
                         <RHFTextField name="name" label="Full name" />
                       </Grid>
@@ -266,38 +261,21 @@ const ProfilePage = () => {
                       asked to sign in again straight away.
                     </Alert>
 
-                    <Stack spacing={2.25} sx={{ maxWidth: 420 }}>
-                      <RHFTextField
+                    <Stack spacing={GUTTER.cards} sx={{ maxWidth: 420 }}>
+                      <RHFPasswordField
                         name="currentPassword"
-                        label="Current password"
-                        type={showPasswords ? 'text' : 'password'}
+                        label="Current password *"
                         autoComplete="current-password"
-                        InputProps={{
-                          endAdornment: (
-                            <InputAdornment position="end">
-                              <IconButton
-                                size="small"
-                                onClick={() => setShowPasswords((s) => !s)}
-                                aria-label={showPasswords ? 'Hide passwords' : 'Show passwords'}
-                                edge="end"
-                              >
-                                {showPasswords ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
-                              </IconButton>
-                            </InputAdornment>
-                          ),
-                        }}
                       />
-                      <RHFTextField
+                      <RHFPasswordField
                         name="newPassword"
-                        label="New password"
-                        type={showPasswords ? 'text' : 'password'}
+                        label="New password *"
                         autoComplete="new-password"
-                        helperText="At least 8 characters with upper case, lower case and a number"
+                        helperText={PASSWORD_HINT}
                       />
-                      <RHFTextField
+                      <RHFPasswordField
                         name="confirmPassword"
-                        label="Confirm new password"
-                        type={showPasswords ? 'text' : 'password'}
+                        label="Confirm new password *"
                         autoComplete="new-password"
                       />
                     </Stack>

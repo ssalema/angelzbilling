@@ -34,23 +34,11 @@ export const createBillSchema = z.object({
   paymentMethod: z.enum(['cash', 'card', 'upi', 'bank_transfer'], {
     errorMap: () => ({ message: 'Choose a payment method' }),
   }),
-  /**
-   * Deliberately left without a default. Omitting the field means "use the
-   * store's default tax", which the controller reads from Settings; defaulting
-   * it to 0 here made that fallback unreachable, so a store configured for 18%
-   * quietly billed everything at 0 whenever the client did not send the number.
-   */
+  // Deliberately left without a default.
   taxPercent: z.coerce.number().min(0).max(100).optional(),
   /** Whole-bill discount in currency, applied after line discounts. */
   extraDiscount: z.coerce.number().min(0).optional().default(0),
-  /**
-   * How much of the bill the customer is settling right now.
-   *
-   * Omitted means "the whole thing" — that is the Full Paid path, and the
-   * server fills in the grand total it just computed rather than trusting a
-   * number the client worked out. A value below the total is a part payment:
-   * the same bill is saved as pending with the balance still owed.
-   */
+  // How much of the bill the customer is settling right now.
   amountPaid: z.coerce.number().min(0, 'Amount received cannot be negative').optional(),
   notes: z.string().trim().max(1000).optional().default(''),
   // Only the Head Office Super Admin may send this: a branch id, or the Head
@@ -86,11 +74,7 @@ export const updateStatusSchema = z.object({
   reason: z.string().trim().max(300).optional().default(''),
 });
 
-/**
- * Collecting the balance on a pending bill. This never re-prices anything and
- * never touches stock — it is money arriving against a bill that already exists,
- * so the only things it carries are the amount, how it came in, and a note.
- */
+// Collecting the balance on a pending bill.
 export const collectPaymentSchema = z.object({
   amount: z.coerce
     .number({ invalid_type_error: 'Enter the amount received' })
@@ -102,11 +86,7 @@ export const collectPaymentSchema = z.object({
 
 export const idParamSchema = z.object({ id: objectId });
 
-/**
- * Customer directory lookup. There is no Customer collection — a customer *is*
- * the set of bills raised against their number, so one of these is required:
- * `mobile` for an exact recall, `q` for the type-ahead suggestions.
- */
+// Customer directory lookup.
 export const customerLookupQuerySchema = z
   .object({
     mobile: z.string().trim().regex(/^[0-9]*$/, 'Contact number must be digits only').max(15).optional().default(''),

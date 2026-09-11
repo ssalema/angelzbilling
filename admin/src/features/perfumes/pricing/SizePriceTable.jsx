@@ -15,26 +15,8 @@ import {
 import { currencySymbol, formatCurrency } from '../../../utils/format.js';
 import { CARD_RADIUS, FONT, numericText, surface } from '../../../theme/index.js';
 
-/**
- * One perfume's sizes, with what each costs now beside what it would cost.
- *
- * Shared by both repricing flows so the figures an admin approves are laid out
- * the same whether they were typed here or read out of a spreadsheet. Current
- * price is muted and struck through once a size moves; the new one carries the
- * weight, because the eye should land on what is about to change.
- *
- * With `editable`, the New price column is where the repricing actually
- * happens — one independent box per size. Leaving a box blank is not a change:
- * it keeps that size at the price it already has, which is why the placeholder
- * shows the current figure rather than nothing.
- */
+// One perfume's sizes, with what each costs now beside what it would cost.
 const SizePriceTable = ({ rows, dense = false, editable = false, onEdit, disabled = false }) => (
-  /**
-   * The panel hugs the table rather than filling the row it sits in — three
-   * short columns stretched across a full-width dialog left a lake of nothing
-   * after the size chip. `maxWidth` keeps that honest on a narrow window, where
-   * the inner box scrolls instead.
-   */
   <Box
     sx={{
       border: 1,
@@ -112,17 +94,9 @@ const SizePriceTable = ({ rows, dense = false, editable = false, onEdit, disable
                     onChange={(event) => onEdit?.(row.sizeGrams, event.target.value.replace(/[^\d.]/g, ''))}
                     disabled={disabled}
                     error={Boolean(row.issue)}
-                    // Only when there is something to say. A permanently blank
-                    // helper line under all six boxes was most of this table's
-                    // height, and it never carried a word.
+                    // Only when there is something to say.
                     helperText={row.issue || undefined}
-                    // The current price as the placeholder says what happens if
-                    // this box is left alone, without pre-filling a value the
-                    // admin would then have to clear.
                     placeholder={row.currentMrp > 0 ? String(row.currentMrp) : ''}
-                    // The theme makes every TextField fullWidth, which turns it
-                    // into a block box that the cell's right-alignment cannot
-                    // shift. Inline-flex lets it sit under the column heading.
                     fullWidth={false}
                     inputProps={{ step: 'any', min: 0, style: { textAlign: 'right' } }}
                     InputProps={{ startAdornment: <InputAdornment position="start">{currencySymbol()}</InputAdornment> }}

@@ -65,12 +65,7 @@ export const billSchema = z.object({
   taxPercent: z.coerce.number().min(0).max(100).default(0),
   extraDiscount: z.coerce.number().min(0, 'Cannot be negative').default(0),
 
-  /**
-   * Full Paid or Partial Paid. Only the amount is different — the bill itself
-   * is identical either way, which is why this never reaches the server: it
-   * sends `amountPaid` and the server decides the status from the total it
-   * computed itself.
-   */
+  // Full Paid or Partial Paid.
   paymentTerm: z.enum(['full', 'partial']).default('full'),
   amountPaid: z.coerce.number().min(0, 'Cannot be negative').default(0),
 
@@ -125,10 +120,7 @@ export const emptyBill = {
 
 const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
-/**
- * Same arithmetic as the server's calculateTotals, so the live preview never
- * disagrees with the saved bill.
- */
+// Same arithmetic as the server's calculateTotals, so the live preview never disagrees with the saved bill.
 export const calculateTotals = (items = [], { taxPercent = 0, extraDiscount = 0 } = {}) => {
   const lines = items.map((item) => {
     const mrp = Number(item.mrp) || 0;

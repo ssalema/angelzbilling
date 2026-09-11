@@ -3,7 +3,7 @@ import Refresh from '@mui/icons-material/Refresh';
 import LockOutlined from '@mui/icons-material/LockOutlined';
 import SearchOff from '@mui/icons-material/SearchOff';
 import ErrorOutline from '@mui/icons-material/ErrorOutline';
-import { CARD_PAD, ICON, brand, surface } from '../../theme/index.js';
+import { CARD_PAD, INSET_RADIUS, ICON, brand, surface } from '../../theme/index.js';
 
 /* Every screen shares these four states so the app never shows a blank panel. */
 
@@ -145,12 +145,7 @@ export const ChartSkeleton = ({ height = 280 }) => (
   </Box>
 );
 
-/**
- * The placeholder for a whole panel. Detail pages used to drop a bare grey
- * rectangle here, which is a different shape from the card that replaces it —
- * this keeps the border, the padding and a plausible run of lines, so the
- * layout does not shift when the data lands.
- */
+// The placeholder for a whole panel.
 export const CardSkeleton = ({ height = 200, lines = 4 }) => (
   <Card sx={{ p: CARD_PAD, height, display: 'flex', flexDirection: 'column', gap: 1 }}>
     <Skeleton variant="text" width="40%" height={16} />
@@ -160,13 +155,8 @@ export const CardSkeleton = ({ height = 200, lines = 4 }) => (
     ))}
   </Card>
 );
-/* ─────────────────────── Whole-page skeletons ───────────────────────
- * These stand in for a screen that has not arrived yet — a lazily loaded
- * route chunk, most often. They mirror the real layout (header block, filter
- * bar, table, cards), so nothing jumps when the real screen replaces them.
- */
 
-export const PageHeaderSkeleton = ({ breadcrumbs = true, action = false }) => (
+const PageHeaderSkeleton = ({ breadcrumbs = true, action = false }) => (
   <Box sx={{ mb: 3 }}>
     {breadcrumbs && <Skeleton variant="text" width={180} height={14} sx={{ mb: 0.75 }} />}
     <Stack
@@ -184,10 +174,10 @@ export const PageHeaderSkeleton = ({ breadcrumbs = true, action = false }) => (
   </Box>
 );
 
-export const FilterBarSkeleton = ({ fields = 3 }) => (
+const FilterBarSkeleton = ({ fields = 3 }) => (
   <Box sx={{ p: CARD_PAD }}>
     <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1.5 }}>
-      <Skeleton variant="rounded" height={40} sx={{ borderRadius: 2, flex: '1 1 260px', minWidth: 180 }} />
+      <Skeleton variant="rounded" height={40} sx={{ borderRadius: `${INSET_RADIUS}px`, flex: '1 1 260px', minWidth: 180 }} />
       {Array.from({ length: fields }).map((_, index) => (
         <Skeleton key={index} variant="rounded" width={140} height={40} sx={{ borderRadius: 2 }} />
       ))}
@@ -195,7 +185,7 @@ export const FilterBarSkeleton = ({ fields = 3 }) => (
   </Box>
 );
 
-export const StatCardsSkeleton = ({ count = 4 }) => (
+const StatCardsSkeleton = ({ count = 4 }) => (
   <Grid container spacing={2.25} sx={{ mb: 2.5 }}>
     {Array.from({ length: count }).map((_, index) => (
       <Grid item xs={12} sm={6} lg={12 / count} key={index}>
@@ -210,7 +200,7 @@ export const StatCardsSkeleton = ({ count = 4 }) => (
 );
 
 /** Search and filters over a table: the perfumes, bills and users screens. */
-export const ListPageSkeleton = ({ stats = 0, columns = 6, rows = 8, filters = 3 }) => (
+const ListPageSkeleton = ({ stats = 0, columns = 6, rows = 8, filters = 3 }) => (
   <Box>
     <PageHeaderSkeleton action />
     {stats > 0 && <StatCardsSkeleton count={stats} />}
@@ -223,7 +213,7 @@ export const ListPageSkeleton = ({ stats = 0, columns = 6, rows = 8, filters = 3
 );
 
 /** A single record across two columns: bill detail, perfume detail. */
-export const DetailPageSkeleton = ({ height = 360 }) => (
+const DetailPageSkeleton = ({ height = 360 }) => (
   <Box>
     <PageHeaderSkeleton action />
     <Grid container spacing={2.5}>
@@ -238,7 +228,7 @@ export const DetailPageSkeleton = ({ height = 360 }) => (
 );
 
 /** A long form or wizard: create bill, perfume form, settings, profile. */
-export const FormPageSkeleton = ({ aside = true, height = 420, fields = 6 }) => (
+const FormPageSkeleton = ({ aside = true, height = 420, fields = 6 }) => (
   <Box>
     <PageHeaderSkeleton action />
     <Grid container spacing={2.5}>
@@ -250,11 +240,11 @@ export const FormPageSkeleton = ({ aside = true, height = 420, fields = 6 }) => 
             {Array.from({ length: fields }).map((_, index) => (
               <Grid item xs={12} sm={6} key={index}>
                 <Skeleton variant="text" width="45%" height={13} />
-                <Skeleton variant="rounded" height={44} sx={{ borderRadius: 2, mt: 0.5 }} />
+                <Skeleton variant="rounded" height={44} sx={{ borderRadius: `${INSET_RADIUS}px`, mt: 0.5 }} />
               </Grid>
             ))}
           </Grid>
-          <Skeleton variant="rounded" height={90} sx={{ borderRadius: 2, mt: 2 }} />
+          <Skeleton variant="rounded" height={90} sx={{ borderRadius: `${INSET_RADIUS}px`, mt: 2 }} />
         </Card>
       </Grid>
       {aside && (
@@ -267,7 +257,7 @@ export const FormPageSkeleton = ({ aside = true, height = 420, fields = 6 }) => 
 );
 
 /** The dashboard: four tiles, two charts, two panels. */
-export const DashboardSkeleton = () => (
+const DashboardSkeleton = () => (
   <Box>
     <PageHeaderSkeleton action />
     <StatCardsSkeleton count={4} />
@@ -300,11 +290,6 @@ export const DashboardSkeleton = () => (
   </Box>
 );
 
-/**
- * Picks the skeleton that matches the route being loaded, so the placeholder
- * already has the shape of the screen that is about to replace it. Used as
- * the Suspense fallback for the lazily loaded feature chunks.
- */
 export const RouteSkeleton = ({ pathname = '' }) => {
   const path = pathname.replace(/\/+$/, '');
 
@@ -328,5 +313,3 @@ export const RouteSkeleton = ({ pathname = '' }) => {
 
   return <ListPageSkeleton columns={5} rows={6} filters={2} />;
 };
-
-export default EmptyState;

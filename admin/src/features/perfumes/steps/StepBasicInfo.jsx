@@ -9,12 +9,9 @@ import {
 import SectionTitle from '../../../components/common/SectionTitle.jsx';
 import { FRAGRANCE_FAMILIES, CONCENTRATIONS } from '../../../utils/constants.js';
 import { formatGrams } from '../../../utils/format.js';
-import { CARD_PAD } from '../../../theme/index.js';
+import { CARD_PAD, GUTTER } from '../../../theme/index.js';
 
-/**
- * Re-exported so every wizard step opens its panels the same way. It used to be
- * private here, and the other steps hand-rolled the pattern instead.
- */
+// Re-exported so every wizard step opens its panels the same way.
 export const SectionCard = ({ title, description, action, children }) => (
   <Card sx={{ p: CARD_PAD, mb: 2.5 }}>
     <SectionTitle title={title} description={description} action={action} />
@@ -35,7 +32,7 @@ const StepBasicInfo = ({ facets, isEdit }) => {
   return (
     <Box>
       <SectionCard title="Basic information" description="The essentials that identify this fragrance.">
-        <Grid container spacing={2.25}>
+        <Grid container spacing={GUTTER.cards}>
           <Grid item xs={12} md={8}>
             <RHFTextField
               name="name"
@@ -96,7 +93,7 @@ const StepBasicInfo = ({ facets, isEdit }) => {
         title="Inventory"
         description="One bulk weight for the whole perfume — every size is poured from it. Prices are set on the Variants step."
       >
-        <Grid container spacing={2.25}>
+        <Grid container spacing={GUTTER.cards}>
           <Grid item xs={12} sm={6}>
             <RHFNumberField
               name="stock"

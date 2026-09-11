@@ -1,13 +1,4 @@
-/**
- * Per-size pricing, browser side.
- *
- * Mirrors the server's `utils/sizePricing.js`. Every fill carries its own
- * price and nothing is derived: typing a new 1000gm price leaves the 25gm
- * exactly where it was, and a size left blank keeps the price it has.
- *
- * This file only works out what to SHOW. The prices an admin approves are sent
- * as an explicit per-size list, and the server writes those and nothing else.
- */
+// Per-size pricing, browser side.
 
 import { currencySymbol, formatCurrency } from '../../../utils/format.js';
 import { sizeGramsFor } from '../perfumeSchema.js';
@@ -15,18 +6,13 @@ import { sizeGramsFor } from '../perfumeSchema.js';
 /** The fills the catalogue sells, smallest first, in grams. */
 export const SIZE_GRAMS = [25, 50, 100, 250, 500, 1000];
 
-export const MIN_PRICE = 1;
-export const MAX_PRICE = 10_000_000;
+const MIN_PRICE = 1;
+const MAX_PRICE = 10_000_000;
 
 /** Escaped for a character class — the symbol is any string the admin typed. */
 const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
 
-/**
- * A price typed into a box, or read out of a spreadsheet cell.
- * Thousands separators and a leading currency symbol are the two things a real
- * sheet carries that a bare `Number()` would choke on. The symbol is whatever
- * Settings > Billing configures, so it is read rather than assumed.
- */
+// A price typed into a box, or read out of a spreadsheet cell.
 export const parsePrice = (raw) => {
   if (raw === '' || raw === null || raw === undefined) return NaN;
   const strip = new RegExp(`[${escapeRe(currencySymbol())},\\s]`, 'g');
@@ -45,15 +31,7 @@ export const priceIssue = (value) => {
   return '';
 };
 
-/**
- * One row per size the perfume sells, smallest fill first, carrying what it
- * costs now and what it would cost.
- *
- * `edits` is keyed by grams and holds whatever is in the box right now — a raw
- * string, because it is mid-typing. A blank box is not a change: `newMrp` falls
- * back to the current price and `changed` stays false, which is the whole point
- * of the screen.
- */
+// One row per size the perfume sells, smallest fill first, carrying what it costs now and what it would cost.
 export const sizeRows = (perfume, edits = {}) =>
   (perfume?.variants || [])
     .map((variant) => {
@@ -82,7 +60,7 @@ export const sizeRows = (perfume, edits = {}) =>
     .sort((a, b) => a.sizeGrams - b.sizeGrams);
 
 /** Cheapest and dearest across a set of prices, ignoring unpriced sizes. */
-export const rangeOf = (values = []) => {
+const rangeOf = (values = []) => {
   const priced = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
   if (!priced.length) return null;
   return { min: Math.min(...priced), max: Math.max(...priced) };
