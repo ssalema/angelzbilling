@@ -144,8 +144,21 @@ export const listBills = asyncHandler(async (req, res) => {
     'billNumber customer.name customer.mobile customer.mobileCountryCode grandTotal amountDue ' +
     'paymentMethod status branch billedBy.name billedBy.id createdAt items.quantity';
 
+  /**
+   * The Payment column names the mode of the LAST payment taken, not the one
+   * chosen when the bill was raised — a bill rung up as cash and settled later
+   * by UPI has to read UPI. Only that one entry is needed, so `$slice: -1`
+   * keeps the audit trail off the wire: payments are pushed in the order they
+   * are collected, so the final element is the most recent one.
+   */
   const [items, total, totals] = await Promise.all([
-    Bill.find(filter).select(LIST_FIELDS).sort(getSort(sort, SORTABLE)).skip(skip).limit(limit).lean(),
+    Bill.find(filter)
+      .select(LIST_FIELDS)
+      .slice('payments', -1)
+      .sort(getSort(sort, SORTABLE))
+      .skip(skip)
+      .limit(limit)
+      .lean(),
     Bill.countDocuments(filter),
     Bill.aggregate([
       // Money actually collected across the whole filter — a part-paid bill

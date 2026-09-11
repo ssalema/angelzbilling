@@ -70,13 +70,15 @@ const StepPreview = () => {
   // Publish readiness — same rules the server enforces, explained up front.
   const blockers = [];
   if (!data.images?.length) blockers.push('At least one perfume image is required');
+  // Nothing in the pool means sold out on day one, so stock is a condition of
+  // publishing rather than a warning to read past.
+  if (!totalStock) blockers.push('Enter the stock you hold — a perfume with none cannot be published');
   if (!Number(pricing.mrp)) blockers.push(data.hasVariants ? 'Price at least one active variant' : 'A price must be set');
   if (data.hasVariants && !variants.length) blockers.push('Generate at least one variant combination');
 
   const warnings = [];
   if (!data.shortDescription) warnings.push('No short description — listings will look sparse');
   if (!data.category) warnings.push('No category set, so category filters will not find this perfume');
-  if (totalStock === 0) warnings.push('Stock is zero grams, so this will show as sold out');
   if (!data.features?.length) warnings.push('No features listed');
 
   return (

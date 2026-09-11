@@ -119,7 +119,7 @@ const LoginPage = () => {
             {siteName}
           </Typography>
           <Typography sx={{ color: brand.goldLight, letterSpacing: '0.22em', fontSize: FONT.micro, textTransform: 'uppercase', mt: 0.5 }}>
-            Billing & Inventory Admin
+            Billing & Inventory
           </Typography>
         </Box>
 
@@ -134,7 +134,7 @@ const LoginPage = () => {
         </Box>
 
         <Typography sx={{ fontSize: FONT.small, color: onPlum.textGhost }}>
-          © {new Date().getFullYear()} {siteName}. Staff access only.
+          © {new Date().getFullYear()} {siteName}. Admin & Staff access only.
         </Typography>
       </Box>
 
@@ -235,7 +235,7 @@ const LoginPage = () => {
           </Divider>
 
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center' }}>
-            Accounts are created by a Super Admin from the Users module. Contact your administrator if you
+            Accounts are created by a Super Admin. Contact your administrator if you
             cannot sign in.
           </Typography>
         </Card>

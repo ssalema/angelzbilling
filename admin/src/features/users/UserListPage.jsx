@@ -385,8 +385,7 @@ const UserListPage = () => {
           rows={items}
           loading={users.loading}
           error={users.error}
-          onRetry={users.reload}
-          onRowClick={(row) => (canManage(row) ? setFormUser(row) : undefined)}
+          onRetry={users.reload}
           page={filters.page}
           limit={filters.limit}
           total={meta.total}

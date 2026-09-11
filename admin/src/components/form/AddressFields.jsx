@@ -80,6 +80,8 @@ const AddressFields = ({ prefix = 'address', disabled = false }) => {
   const debouncedPincode = useDebounce(pincode.trim(), 600);
   // Remembers what was last looked up so re-renders don't re-fetch the same code.
   const lastLookup = useRef('');
+  // A code the form was loaded with is already matched; only a typed one is new.
+  const typed = useRef(false);
 
   useEffect(() => {
     const code = debouncedPincode;
@@ -87,6 +89,7 @@ const AddressFields = ({ prefix = 'address', disabled = false }) => {
 
     if (!code || !postal.supportsLookup) {
       lastLookup.current = '';
+      typed.current = false;
       setLookup({ status: 'idle', message: '', areas: [] });
       return undefined;
     }
@@ -96,15 +99,30 @@ const AddressFields = ({ prefix = 'address', disabled = false }) => {
       setLookup({ status: 'idle', message: '', areas: [] });
       return undefined;
     }
+    // Editing a saved address: the state and city that came with the code are
+    // already in the form, so opening the dialog must not fire a lookup.
+    if (!typed.current) {
+      lastLookup.current = key;
+      setLookup({ status: 'idle', message: '', areas: [] });
+      return undefined;
+    }
     if (lastLookup.current === key) return undefined;
     lastLookup.current = key;
 
     let live = true;
+    let settled = false;
     setLookup({ status: 'loading', message: '', areas: [] });
     geoApi
       .postalCode(country, code)
       .then((found) => {
-        if (!live || !found) return;
+        settled = true;
+        if (!live) return;
+        // A 200 with nothing in it must not leave the field spinning forever.
+        if (!found) {
+          lastLookup.current = '';
+          setLookup({ status: 'error', message: `No address found for ${code}`, areas: [] });
+          return;
+        }
         const options = { shouldDirty: true, shouldValidate: true };
         if (found.state) setValue(field('state'), found.state, options);
         if (found.city) setValue(field('city'), found.city, options);
@@ -115,6 +133,7 @@ const AddressFields = ({ prefix = 'address', disabled = false }) => {
         });
       })
       .catch((error) => {
+        settled = true;
         if (!live) return;
         // Let the admin retype the same code once the directory recovers.
         lastLookup.current = '';
@@ -128,6 +147,9 @@ const AddressFields = ({ prefix = 'address', disabled = false }) => {
       });
     return () => {
       live = false;
+      // A run cut short before it answered leaves no result to show, so forget
+      // the code and let the next run ask again.
+      if (!settled) lastLookup.current = '';
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedPincode, country, postal.iso2, postal.supportsLookup, postal.digits]);
@@ -137,7 +159,7 @@ const AddressFields = ({ prefix = 'address', disabled = false }) => {
     if (lookup.status === 'done') return `Matched ${lookup.message}`;
     if (lookup.status === 'error') return lookup.message;
     if (!postal.supportsLookup && country) return `Automatic lookup is not available for ${country}`;
-    return postal.example ? `e.g. ${postal.example} — fills state and city automatically` : ' ';
+    return ' ';
   };
 
   const pincodeIcon = () => {
@@ -231,26 +253,6 @@ const AddressFields = ({ prefix = 'address', disabled = false }) => {
       </Grid>
 
       <Grid item xs={12} sm={6}>
-        <Controller
-          name={field('pincode')}
-          control={control}
-          render={({ field: control_, fieldState }) => (
-            <TextField
-              {...control_}
-              value={control_.value ?? ''}
-              label={postal.label}
-              disabled={disabled}
-              fullWidth
-              inputProps={{ maxLength: 12 }}
-              InputProps={{ endAdornment: <InputAdornment position="end">{pincodeIcon()}</InputAdornment> }}
-              error={Boolean(fieldState.error) || lookup.status === 'error'}
-              helperText={fieldState.error?.message || pincodeHelper()}
-            />
-          )}
-        />
-      </Grid>
-
-      <Grid item xs={12} sm={6}>
         {renderPicker({
           name: 'state',
           label: 'State',
@@ -269,6 +271,30 @@ const AddressFields = ({ prefix = 'address', disabled = false }) => {
           loading: loadingCities,
           extraHelper: country && !state ? 'Pick a state first' : undefined,
         })}
+      </Grid>
+
+      <Grid item xs={12} sm={6}>
+        <Controller
+          name={field('pincode')}
+          control={control}
+          render={({ field: control_, fieldState }) => (
+            <TextField
+              {...control_}
+              value={control_.value ?? ''}
+              onChange={(event) => {
+                typed.current = true;
+                control_.onChange(event);
+              }}
+              label={postal.label}
+              disabled={disabled}
+              fullWidth
+              inputProps={{ maxLength: 12 }}
+              InputProps={{ endAdornment: <InputAdornment position="end">{pincodeIcon()}</InputAdornment> }}
+              error={Boolean(fieldState.error) || lookup.status === 'error'}
+              helperText={fieldState.error?.message || pincodeHelper()}
+            />
+          )}
+        />
       </Grid>
     </>
   );

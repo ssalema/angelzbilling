@@ -106,9 +106,10 @@ const SizePriceTable = ({ rows, dense = false, editable = false, onEdit, disable
               <TableCell align="right">
                 {editable ? (
                   <TextField
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={row.input}
-                    onChange={(event) => onEdit?.(row.sizeGrams, event.target.value)}
+                    onChange={(event) => onEdit?.(row.sizeGrams, event.target.value.replace(/[^\d.]/g, ''))}
                     disabled={disabled}
                     error={Boolean(row.issue)}
                     // Only when there is something to say. A permanently blank

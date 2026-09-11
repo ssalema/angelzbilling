@@ -300,12 +300,6 @@ const CreateBillPage = () => {
     () => snackbar.warning('Please complete the highlighted fields before previewing')
   );
 
-  const startNewBill = () => {
-    reset({ ...emptyBill, taxPercent: defaultTaxPercent || 0 });
-    setSavedBill(null);
-    setPerfumeQuery('');
-  };
-
   const handleDownload = async () => {
     setDownloading(true);
     try {
@@ -342,8 +336,8 @@ const CreateBillPage = () => {
           {savedBill.amountDue > 0 && (
             <>
               {' '}
-              <strong>{formatCurrency(savedBill.amountDue, { precise: true })}</strong> is still due — collect it
-              from the bill record when the customer pays.
+              <strong>{formatCurrency(savedBill.amountDue, { precise: true })}</strong> is still due — update it
+              in the bill record when the customer pays.
             </>
           )}
         </Alert>
@@ -359,9 +353,6 @@ const CreateBillPage = () => {
             onClick={handleDownload}
           >
             Download bill
-          </Button>
-          <Button variant="outlined" startIcon={<AddShoppingCartOutlined />} onClick={startNewBill}>
-            Create another bill
           </Button>
           <Button startIcon={<ReceiptLongOutlined />} onClick={() => navigate('/billing')}>
             Go to bill records
@@ -433,7 +424,6 @@ const CreateBillPage = () => {
                     label="Bill by"
                     value={user?.name || ''}
                     InputProps={{ readOnly: true }}
-                    helperText="Taken from your signed-in account"
                     sx={{ bgcolor: surface.plumFaint }}
                   />
                   {branchesEnabled &&
@@ -615,16 +605,16 @@ const CreateBillPage = () => {
                                     <TextField
                                       {...qty}
                                       value={qty.value ?? ''}
-                                      onChange={(e) =>
-                                        qty.onChange(e.target.value === '' ? '' : Number(e.target.value))
-                                      }
-                                      type="number"
+                                      onChange={(e) => {
+                                        const raw = e.target.value.replace(/[^\d]/g, '');
+                                        qty.onChange(raw === '' ? '' : Number(raw));
+                                      }}
+                                      type="text"
+                                      inputMode="numeric"
                                       variant="standard"
                                       error={Boolean(fieldState.error)}
                                       helperText={fieldState.error?.message}
                                       inputProps={{
-                                        min: 1,
-                                        max: unitsCeilingFor(watched.items?.[index] || field, index),
                                         style: { textAlign: 'center', fontSize: 13 },
                                       }}
                                       sx={{ width: 76 }}

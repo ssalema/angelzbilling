@@ -14,7 +14,6 @@ import {
   CircularProgress,
 } from '@mui/material';
 import AddCardOutlined from '@mui/icons-material/AddCardOutlined';
-import VisibilityOutlined from '@mui/icons-material/VisibilityOutlined';
 import PrintOutlined from '@mui/icons-material/PrintOutlined';
 import DownloadOutlined from '@mui/icons-material/DownloadOutlined';
 import ReceiptLongOutlined from '@mui/icons-material/ReceiptLongOutlined';
@@ -54,6 +53,19 @@ import {
   isDefaultRange,
 } from '../../utils/constants.js';
 import { ICON, brand, statusColors } from '../../theme/index.js';
+
+/**
+ * The Payment column reads like the slip does: it names the mode of the most
+ * recent payment, not the one picked when the bill was raised. A bill rung up
+ * as cash and later settled by UPI shows UPI. The list endpoint sends only the
+ * last payment entry, so `payments[0]` here IS that entry. Bills with nothing
+ * collected yet, and older entries saved without a mode, fall back to the mode
+ * the bill was raised with.
+ */
+const latestMethodLabel = (row) => {
+  const method = row.payments?.[0]?.method || row.paymentMethod;
+  return PAYMENT_METHOD_LABELS[method] || method;
+};
 
 const BillListPage = () => {
   const navigate = useNavigate();
@@ -261,9 +273,7 @@ const BillListPage = () => {
       label: 'Payment',
       align: 'center',
       hideBelow: 'md',
-      render: (row) => (
-        <Chip size="small" variant="outlined" label={PAYMENT_METHOD_LABELS[row.paymentMethod] || row.paymentMethod} />
-      ),
+      render: (row) => <Chip size="small" variant="outlined" label={latestMethodLabel(row)} />,
     },
     {
       key: 'branch',
@@ -332,11 +342,6 @@ const BillListPage = () => {
               </IconButton>
             </Tooltip>
           )}
-          <Tooltip title="View bill">
-            <IconButton size="small" onClick={() => navigate(`/billing/${row.id}`)}>
-              <VisibilityOutlined sx={{ fontSize: ICON.action }} />
-            </IconButton>
-          </Tooltip>
           <Tooltip title="Download bill">
             <span>
               <IconButton

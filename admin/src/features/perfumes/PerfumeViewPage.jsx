@@ -57,6 +57,50 @@ import {
 import { FONT, CARD_HEAD_PAD, CARD_PAD, DISCOUNT_COLOR, ICON, brand, numericText, surface } from '../../theme/index.js';
 import { IMG } from '../../utils/image.js';
 
+/**
+ * What the last write changed, in words. The server stores a slug beside
+ * `updatedBy` on every path that touches a perfume — the wizard, the stock and
+ * price screens, a bulk sheet — so "Updated by Lucifer" can say what Lucifer
+ * actually changed.
+ */
+const UPDATE_ACTION_LABELS = {
+  created: 'Created',
+  'bulk-upload': 'Bulk upload',
+  details: 'Details update',
+  stock: 'Stock update',
+  'bulk-stock': 'Stock update (bulk)',
+  price: 'Price update',
+  'bulk-price': 'Price update (bulk)',
+  status: 'Status update',
+  archived: 'Archived',
+};
+
+/** Adding a perfume is not an update to it — these two are creation, not change. */
+const CREATION_ACTIONS = new Set(['created', 'bulk-upload']);
+
+/**
+ * Whether anyone has actually changed this perfume since it was added. A brand
+ * new one carries an `updatedAt` equal to the moment it was created, which
+ * would otherwise read as an edit that never happened.
+ */
+const wasUpdated = (perfume) => {
+  if (perfume.updatedAction) return !CREATION_ACTIONS.has(perfume.updatedAction);
+
+  // Perfumes written before the action was recorded have no slug to read, so
+  // the stamps decide: a second's drift is the write itself, not an edit.
+  const created = new Date(perfume.createdAt).getTime();
+  const updated = new Date(perfume.updatedAt).getTime();
+  return Number.isFinite(created) && Number.isFinite(updated) && updated - created > 1000;
+};
+
+/** "Lucifer — Stock", or just the name when the change predates this field. */
+const byLine = (user, action) => {
+  const name = user?.name;
+  if (!name) return '';
+  const what = UPDATE_ACTION_LABELS[action];
+  return what ? `${name} — ${what}` : name;
+};
+
 const Row = ({ label, value }) => (
   <Stack direction="row" justifyContent="space-between" spacing={2} sx={{ py: 0.7 }}>
     <Typography variant="body2" color="text.secondary">
@@ -199,6 +243,31 @@ const PerfumeViewPage = () => {
                 ))}
               </Stack>
             )}
+          </Card>
+
+          {/* Metadata */}
+          <Card sx={{ p: CARD_PAD, mt: 2.5 }}>
+            <Typography variant="h6" sx={{ mb: 1 }}>
+              Catalogue details
+            </Typography>
+            <Row label="SKU" value={perfume.sku} />
+            <Row label="Brand" value={perfume.brand} />
+            <Row label="Category" value={[perfume.category, perfume.subCategory].filter(Boolean).join(' → ')} />
+            <Row label="Fragrance family" value={perfume.fragranceFamily} />
+            <Row label="Concentration" value={perfume.concentration} />
+            <Row label="Tags" value={perfume.tags?.join(', ')} />
+            <Divider sx={{ my: 1 }} />
+            <Row label="Created" value={formatDate(perfume.createdAt, 'time')} />
+            <Row
+              label="Created by"
+              value={byLine(perfume.createdBy, perfume.createdVia === 'bulk-upload' ? 'bulk-upload' : 'created')}
+            />
+            {/* Both read NA until someone actually changes something. */}
+            <Row label="Last updated" value={wasUpdated(perfume) ? formatDate(perfume.updatedAt, 'time') : ''} />
+            <Row
+              label="Updated by"
+              value={wasUpdated(perfume) ? byLine(perfume.updatedBy, perfume.updatedAction) : ''}
+            />
           </Card>
         </Grid>
 
@@ -429,7 +498,7 @@ const PerfumeViewPage = () => {
           )}
 
           {/* Description, features, FAQs */}
-          <Card sx={{ p: CARD_PAD, mb: 2.5 }}>
+          <Card sx={{ p: CARD_PAD }}>
             <Typography variant="h6" sx={{ mb: 1.25 }}>
               About this fragrance
             </Typography>
@@ -489,24 +558,6 @@ const PerfumeViewPage = () => {
                 ))}
               </>
             )}
-          </Card>
-
-          {/* Metadata */}
-          <Card sx={{ p: CARD_PAD }}>
-            <Typography variant="h6" sx={{ mb: 1 }}>
-              Catalogue details
-            </Typography>
-            <Row label="SKU" value={perfume.sku} />
-            <Row label="Brand" value={perfume.brand} />
-            <Row label="Category" value={[perfume.category, perfume.subCategory].filter(Boolean).join(' → ')} />
-            <Row label="Fragrance family" value={perfume.fragranceFamily} />
-            <Row label="Concentration" value={perfume.concentration} />
-            <Row label="Tags" value={perfume.tags?.join(', ')} />
-            <Divider sx={{ my: 1 }} />
-            <Row label="Created" value={formatDate(perfume.createdAt, 'time')} />
-            <Row label="Created by" value={perfume.createdBy?.name} />
-            <Row label="Last updated" value={formatDate(perfume.updatedAt, 'time')} />
-            <Row label="Updated by" value={perfume.updatedBy?.name} />
           </Card>
         </Grid>
       </Grid>

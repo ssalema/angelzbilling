@@ -51,7 +51,10 @@ export const perfumeApi = {
   stockSearch: (params) => api.get('/perfumes/stock/search', { params }).then(unwrapFull),
   addStock: (id, payload) => api.patch(`/perfumes/${id}/stock`, payload).then((r) => r.data),
   resolveStockNames: (names) => api.post('/perfumes/stock/resolve', { names }).then(unwrap),
-  bulkAddStock: (items) => api.post('/perfumes/stock/bulk', { items }).then((r) => r.data),
+  // `source` only labels the audit line on each perfume — 'single' when the
+  // one-perfume screen sent it, 'bulk' when a reviewed sheet did.
+  bulkAddStock: (items, source = 'bulk') =>
+    api.post('/perfumes/stock/bulk', { items, source }).then((r) => r.data),
 
   /* ── Repricing ──
    * Each of these carries a BASE price — what a kilo of the perfume costs —
@@ -61,7 +64,8 @@ export const perfumeApi = {
    */
   priceSearch: (params) => api.get('/perfumes/price/search', { params }).then(unwrapFull),
   resolvePriceNames: (names) => api.post('/perfumes/price/resolve', { names }).then(unwrap),
-  bulkUpdatePrices: (items) => api.post('/perfumes/price/bulk', { items }).then((r) => r.data),
+  bulkUpdatePrices: (items, source = 'bulk') =>
+    api.post('/perfumes/price/bulk', { items, source }).then((r) => r.data),
 
   /* ── Bulk catalogue upload ──
    * Creating perfumes from a sheet, rather than one at a time in the wizard.

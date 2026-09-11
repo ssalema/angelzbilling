@@ -107,7 +107,7 @@ const SingleStockUpdate = ({ onUpdated }) => {
     try {
       // The same endpoint the bulk tab uses: one round trip, and each row an
       // atomic increment, whether there is one of them or sixty.
-      const result = await perfumeApi.bulkAddStock(payload);
+      const result = await perfumeApi.bulkAddStock(payload, 'single');
       const { updated, failed = [] } = result.data || {};
 
       if (failed.length) {
@@ -282,9 +282,10 @@ const SingleStockUpdate = ({ onUpdated }) => {
                         </TableCell>
                         <TableCell align="right">
                           <TextField
-                            type="number"
+                            type="text"
+                            inputMode="decimal"
                             value={row.newStock}
-                            onChange={(event) => editRow(row.id, event.target.value)}
+                            onChange={(event) => editRow(row.id, event.target.value.replace(/[^\d.]/g, ''))}
                             disabled={saving}
                             error={Boolean(error)}
                             // No blank placeholder line when the row is fine: a
@@ -292,7 +293,7 @@ const SingleStockUpdate = ({ onUpdated }) => {
                             // it lifts the box off the row's centre line and the
                             // column reads as misaligned against the name beside it.
                             helperText={error}
-                            inputProps={{ step: 'any', style: { textAlign: 'right' } }}
+                            inputProps={{ style: { textAlign: 'right' } }}
                             InputProps={{ endAdornment: <InputAdornment position="end">gm</InputAdornment> }}
                             sx={{ width: 146 }}
                           />

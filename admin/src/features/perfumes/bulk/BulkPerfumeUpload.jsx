@@ -322,8 +322,9 @@ const BulkPerfumeUpload = ({ onCreated }) => {
         <Alert severity="info" sx={{ mb: 2 }}>
           Nothing has been saved yet. Each perfume below will be created with the{' '}
           <strong>SKU shown</strong>, carrying on from the last one in your catalogue. Click a{' '}
-          <strong>photo slot</strong> to add that perfume’s picture from your computer — a row left
-          without one is saved as a draft. Press Add perfumes to create the lot.
+          <strong>photo slot</strong> to add that perfume’s picture from your computer — a row
+          without a photo, or without stock in the sheet, is saved as a draft. Press Add perfumes to
+          create the lot.
         </Alert>
 
         {flagged.length > 0 && (
@@ -381,15 +382,23 @@ const BulkPerfumeUpload = ({ onCreated }) => {
                         </TableCell>
 
                         <TableCell align="right">
-                          <Typography
-                            sx={{
-                              ...numericText,
-                              fontSize: FONT.body,
-                              color: row.stock ? 'text.primary' : 'text.disabled',
-                            }}
+                          <Tooltip
+                            title={
+                              row.stock
+                                ? ''
+                                : 'No stock in the sheet — this perfume is saved as a draft'
+                            }
                           >
-                            {row.stock ? formatGrams(row.stock) : 'NA'}
-                          </Typography>
+                            <Typography
+                              sx={{
+                                ...numericText,
+                                fontSize: FONT.body,
+                                color: row.stock ? 'text.primary' : 'warning.main',
+                              }}
+                            >
+                              {row.stock ? formatGrams(row.stock) : 'NA'}
+                            </Typography>
+                          </Tooltip>
                         </TableCell>
 
                         {pricedSizes.map((grams) => {

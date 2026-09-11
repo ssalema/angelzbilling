@@ -338,7 +338,9 @@ export const createPerfume = asyncHandler(async (req, res) => {
   const perfume = await Perfume.create({
     ...payload,
     createdBy: req.user._id,
+    createdVia: 'manual',
     updatedBy: req.user._id,
+    updatedAction: 'created',
   });
 
   return sendCreated(res, {
@@ -377,8 +379,22 @@ export const updatePerfume = asyncHandler(async (req, res) => {
     const orphaned = perfume.videos.filter((i) => i.publicId && !keep.has(i.publicId));
     await Promise.all(orphaned.map((i) => destroyAsset(i.publicId, 'video')));
   }
+  // Variant photos are swapped a slot at a time rather than removed from a list,
+  // so the same diff is done by id: a picture no longer used by any variant, and
+  // not adopted by the gallery, has nothing left pointing at it.
+  if (Array.isArray(req.body.variants)) {
+    const keep = new Set(
+      [...req.body.variants.map((v) => v.image?.publicId), ...(req.body.images || []).map((i) => i.publicId)].filter(
+        Boolean
+      )
+    );
+    const orphaned = perfume.variants.filter((v) => v.image?.publicId && !keep.has(v.image.publicId));
+    await Promise.all(orphaned.map((v) => destroyAsset(v.image.publicId, 'image')));
+  }
 
-  Object.assign(perfume, req.body, { updatedBy: req.user._id });
+  // The editor can change anything about the perfume, so the audit line says
+  // "details" rather than pretending to know which field moved.
+  Object.assign(perfume, req.body, { updatedBy: req.user._id, updatedAction: 'details' });
   await perfume.save();
 
   return sendSuccess(res, { message: `"${perfume.name}" updated`, data: decorate(perfume.toObject()) });
@@ -392,8 +408,13 @@ export const updatePerfumeStatus = asyncHandler(async (req, res) => {
     throw ApiError.badRequest('Add at least one perfume image before publishing');
   }
 
+  if (req.body.status === 'published' && !(Number(perfume.stock) > 0)) {
+    throw ApiError.badRequest('Add stock before publishing');
+  }
+
   perfume.status = req.body.status;
   perfume.updatedBy = req.user._id;
+  perfume.updatedAction = 'status';
   await perfume.save();
 
   return sendSuccess(res, {
@@ -440,6 +461,7 @@ export const adjustStock = asyncHandler(async (req, res) => {
   if (lowStockThreshold !== undefined) perfume.lowStockThreshold = lowStockThreshold;
 
   perfume.updatedBy = req.user._id;
+  perfume.updatedAction = 'stock';
   await perfume.save();
 
   return sendSuccess(res, { message: 'Stock updated', data: decorate(perfume.toObject()) });
@@ -477,10 +499,10 @@ const stockOption = (perfume) => {
  * perfume that still holds enough grams, so the guard is the query, not a
  * read-then-write that two admins can interleave.
  */
-const incrementStock = (id, delta, userId) =>
+const incrementStock = (id, delta, userId, action = 'stock') =>
   Perfume.findOneAndUpdate(
     delta < 0 ? { _id: id, stock: { $gte: -delta } } : { _id: id },
-    { $inc: { stock: delta }, $set: { updatedBy: userId } },
+    { $inc: { stock: delta }, $set: { updatedBy: userId, updatedAction: action } },
     { new: true }
   )
     .select(`${STOCK_FIELDS} mrp discountPercent finalPrice sizeGrams hasVariants variants createdAt`)
@@ -574,7 +596,10 @@ export const resolveStockNames = asyncHandler(async (req, res) => {
  * round trip for a thousand perfumes, and each row still an atomic `$inc`.
  */
 export const bulkAdjustStock = asyncHandler(async (req, res) => {
-  const { items } = req.body;
+  const { items, source } = req.body;
+  // The single stock screen posts here too, so the audit line follows the
+  // screen the admin actually used rather than the route they happened to hit.
+  const action = source === 'single' ? 'stock' : 'bulk-stock';
 
   // The same perfume twice in one sheet would race itself inside the bulk
   // write, so the rows are folded into a single movement per perfume first.
@@ -612,7 +637,7 @@ export const bulkAdjustStock = asyncHandler(async (req, res) => {
         // The guard is repeated in the filter, not just checked above: the read
         // is a moment old and a bill may have drawn the weight down since.
         filter: delta < 0 ? { _id: id, stock: { $gte: -delta } } : { _id: id },
-        update: { $inc: { stock: delta }, $set: { updatedBy: req.user._id } },
+        update: { $inc: { stock: delta }, $set: { updatedBy: req.user._id, updatedAction: action } },
       },
     });
   });
@@ -765,7 +790,10 @@ export const resolvePriceNames = asyncHandler(async (req, res) => {
  * `sizeGrams` is deliberately untouched: repricing never moves a fill size.
  */
 export const bulkUpdatePrices = asyncHandler(async (req, res) => {
-  const { items } = req.body;
+  const { items, source } = req.body;
+  // As with stock: the single repricing screen shares this endpoint, and the
+  // audit line should name the screen, not the route.
+  const action = source === 'single' ? 'price' : 'bulk-price';
 
   // The same perfume twice in one sheet is a contradiction, not an addition —
   // the last set of prices given wins, which is what correcting a row means.
@@ -831,6 +859,7 @@ export const bulkUpdatePrices = asyncHandler(async (req, res) => {
             discountPercent: Number(cheapest?.discountPercent) || 0,
             finalPrice: computeFinalPrice(cheapest?.mrp, cheapest?.discountPercent),
             updatedBy: req.user._id,
+            updatedAction: action,
           },
         },
       },
@@ -860,6 +889,7 @@ export const deletePerfume = asyncHandler(async (req, res) => {
   if (billed > 0) {
     perfume.status = 'archived';
     perfume.updatedBy = req.user._id;
+    perfume.updatedAction = 'archived';
     await perfume.save();
     return sendSuccess(res, {
       message: `"${perfume.name}" appears on ${billed} bill(s), so it has been archived instead of deleted. Your bill history stays intact.`,
@@ -993,12 +1023,14 @@ const bulkPerfumeDoc = (item, sku, userId) => {
     mrp: cheapest.mrp,
     discountPercent: 0,
     finalPrice: cheapest.sellingPrice,
-    // A perfume cannot be published without an image — the same rule the wizard
-    // and the status endpoint enforce — so a row with no photo lands as a draft
-    // and waits for one rather than being rejected outright.
-    status: images.length ? 'published' : 'draft',
+    // A perfume cannot be published without an image or stock — the same rules
+    // the wizard and the status endpoint enforce — so a row missing either lands
+    // as a draft and waits rather than being rejected outright.
+    status: images.length && Number(item.stock) > 0 ? 'published' : 'draft',
     createdBy: userId,
+    createdVia: 'bulk-upload',
     updatedBy: userId,
+    updatedAction: 'bulk-upload',
   };
 };
 

@@ -184,10 +184,14 @@ export const deleteBranch = asyncHandler(async (req, res) => {
     );
   }
 
-  const logoId = branch.logo?.publicId;
+  // Both branding slots, not just the logo: a branch can own a favicon too, and
+  // once the document is gone nothing else knows that asset ever existed.
+  const brandingIds = Object.keys(BRANDING)
+    .map((kind) => branch[kind]?.publicId)
+    .filter(Boolean);
   await branch.deleteOne();
   await syncBranchesFeature();
-  if (logoId) await destroyAsset(logoId, 'image');
+  await Promise.all(brandingIds.map((publicId) => destroyAsset(publicId, 'image')));
 
   return sendSuccess(res, { message: `Branch "${branch.name}" deleted` });
 });

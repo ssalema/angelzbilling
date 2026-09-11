@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
-import { Grid, Button, Box } from '@mui/material';
+import { Grid, Button, Box, Stack } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import AddRounded from '@mui/icons-material/AddRounded';
+import UploadFileOutlined from '@mui/icons-material/UploadFileOutlined';
 import CurrencyRupeeRounded from '@mui/icons-material/CurrencyRupeeRounded';
 import ReceiptLongOutlined from '@mui/icons-material/ReceiptLongOutlined';
 import Inventory2Outlined from '@mui/icons-material/Inventory2Outlined';
@@ -14,6 +15,7 @@ import BreakdownChart from './components/BreakdownChart.jsx';
 import TopPerfumes from './components/TopPerfumes.jsx';
 import { RecentBills, LowStockAlerts } from './components/RecentBills.jsx';
 import { InlineError } from '../../components/common/StateViews.jsx';
+import BulkUploadDialog from '../perfumes/bulk/BulkUploadDialog.jsx';
 
 import { dashboardApi } from '../../api/endpoints.js';
 import useApiResource from '../../hooks/useApiResource.js';
@@ -55,6 +57,8 @@ const useSharedWidget = (overview, key, shared, fetcher, deps) => {
 const DashboardPage = () => {
   const { isAdmin, isSuperAdmin, user } = useAuth();
   const { branchesEnabled } = useSettings();
+
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   // The main range drives the summary cards and the revenue chart together.
   const [mainRange, setMainRange] = useState(DEFAULT_DATE_RANGE);
@@ -131,9 +135,16 @@ const DashboardPage = () => {
         }
         action={
           isAdmin && (
-            <Button component={RouterLink} to="/perfumes/new" variant="contained" startIcon={<AddRounded />}>
-              Add perfume
-            </Button>
+            <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1.25, justifyContent: { sm: 'flex-end' } }}>
+              {/* Filling the catalogue starts here as often as it does on the
+                  perfumes list, so the same door is offered on both. */}
+              <Button variant="outlined" startIcon={<UploadFileOutlined />} onClick={() => setBulkOpen(true)}>
+                Bulk upload
+              </Button>
+              <Button component={RouterLink} to="/perfumes/new" variant="contained" startIcon={<AddRounded />}>
+                Add perfume
+              </Button>
+            </Stack>
           )
         }
       />
@@ -314,6 +325,17 @@ const DashboardPage = () => {
           />
         </Grid>
       </Grid>
+
+      <BulkUploadDialog
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        // New perfumes change the catalogue counts and can clear or add low
+        // stock warnings, so both widgets are refreshed behind the dialog.
+        onCreated={() => {
+          summary.reload();
+          lowStock.reload();
+        }}
+      />
     </Box>
   );
 };

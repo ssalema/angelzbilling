@@ -58,7 +58,13 @@ export const perfumeSchema = z
     // Stock is bulk weight in grams throughout, so decimals are allowed. This is
     // the perfume's ONE inventory figure — variants draw down this same pool.
     sizeGrams: z.coerce.number().min(0, 'Pack size cannot be negative').default(0),
-    stock: z.coerce.number().min(0, 'Stock cannot be negative').default(0),
+    // Required, and above zero: a perfume with an empty pool cannot be sold, so
+    // the weight held is asked for on step one rather than discovered at the
+    // till. A draft still saves without it — that path checks name and SKU only.
+    stock: z.coerce
+      .number({ invalid_type_error: 'Enter the stock you hold, in grams' })
+      .positive('Enter the stock you hold, in grams')
+      .default(0),
     lowStockThreshold: z.coerce.number().min(0).default(100),
     hsnCode: z.string().trim().max(20).default(''),
     barcode: z.string().trim().max(60).default(''),
@@ -179,7 +185,9 @@ export const emptyPerfume = {
   mrp: '',
   discountPercent: 0,
   sizeGrams: '',
-  stock: 0,
+  // Blank rather than zero: the weight held is the admin's to type, and a
+  // pre-filled 0 reads as an answer already given.
+  stock: '',
   lowStockThreshold: 100,
   hsnCode: '',
   barcode: '',

@@ -500,7 +500,6 @@ const SettingsPage = () => {
                           label="Staff discount limit"
                           suffix="%"
                           disabled={!isMainSuperAdmin}
-                          helperText="The most Billing Staff may take off a line or a bill. Admins can go higher."
                           inputProps={{ min: 0, max: 100, step: '1' }}
                         />
                       </Grid>

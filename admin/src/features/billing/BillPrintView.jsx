@@ -41,6 +41,9 @@ const money = (value) => formatAmount(value);
 /** How a collected instalment is dated on the slip: "06 Sept 2026, 04:49 PM". */
 const stamp = (at) => `${formatDate(at, 'medium')}, ${formatDate(at, 'clock').toUpperCase()}`;
 
+/** "upi" → "UPI". An unmapped code prints as it is stored rather than blank. */
+const methodLabel = (method) => PAYMENT_METHOD_LABELS[method] || method || '';
+
 /** Browsers drop background fills when printing — the black stamps must opt back in. */
 const KEEP_FILL = { WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' };
 
@@ -66,6 +69,19 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
    * customer's proof of what they already handed over.
    */
   const showInstalments = amountDue > 0 || instalments.length > 1;
+
+  /**
+   * `bill.paymentMethod` is the mode chosen when the bill was raised and it is
+   * never rewritten by a later collection, so on a part-paid bill it names the
+   * wrong counter: ₹150 taken as cash at billing, the ₹100 balance settled by
+   * UPI a week later, and the slip still says Cash.
+   *
+   * The line describes the payment this slip is being handed over for, which is
+   * always the most recent one — UPI in that example. The earlier modes are not
+   * lost; the instalment breakdown above is the record of those.
+   */
+  const latestMethod = instalments.length ? instalments[instalments.length - 1].method : '';
+  const modeValue = methodLabel(latestMethod || bill.paymentMethod);
 
   // A bill rung up at a branch prints that branch's GSTIN, not head office's.
   const gstin = branch.gstin || shop.gstin;
@@ -240,7 +256,7 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
           <Box sx={{ minWidth: 0 }}>
             <MetaRow
               label="Payment Mode"
-              value={PAYMENT_METHOD_LABELS[bill.paymentMethod] || bill.paymentMethod}
+              value={modeValue}
               width={bill.transactionId ? 104 : 'auto'}
               nowrap
             />

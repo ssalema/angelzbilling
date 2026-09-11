@@ -13,7 +13,6 @@ import {
   Chip,
 } from '@mui/material';
 import AddRounded from '@mui/icons-material/AddRounded';
-import VisibilityOutlined from '@mui/icons-material/VisibilityOutlined';
 import EditOutlined from '@mui/icons-material/EditOutlined';
 import DeleteOutline from '@mui/icons-material/DeleteOutline';
 import Inventory2Outlined from '@mui/icons-material/Inventory2Outlined';
@@ -290,12 +289,6 @@ const PerfumeListPage = () => {
     },
     actionsColumn((row) => (
         <Stack direction="row" spacing={0.25} justifyContent="center">
-          <Tooltip title="View details">
-            <IconButton size="small" onClick={() => navigate(`/perfumes/${row.id}`)}>
-              <VisibilityOutlined sx={{ fontSize: ICON.action }} />
-            </IconButton>
-          </Tooltip>
-
           {isAdmin && (
             <>
               <Tooltip title="Edit perfume">

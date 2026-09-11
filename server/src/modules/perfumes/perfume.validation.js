@@ -154,6 +154,12 @@ const publishReadiness = (data, ctx) => {
   if (!Number(data.mrp)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['mrp'], message: 'Set a price before publishing' });
   }
+  // A perfume with an empty pool is sold out the moment it is listed. Undefined
+  // is left alone: a partial update that never mentions stock is not claiming
+  // the shelf is empty, and the status route checks the stored figure instead.
+  if (data.stock !== undefined && !(Number(data.stock) > 0)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['stock'], message: 'Add stock before publishing' });
+  }
 };
 
 export const createPerfumeSchema = z
@@ -240,7 +246,15 @@ export const resolveStockNamesSchema = z.object({
     .max(MAX_BULK_STOCK_ROWS, `Up to ${MAX_BULK_STOCK_ROWS} rows can be matched at once`),
 });
 
+/**
+ * Which screen sent the rows. The single and bulk screens share this endpoint,
+ * so only the caller knows whether this was one correction or a sheet — and the
+ * audit line on the perfume says which.
+ */
+const updateSource = z.enum(['single', 'bulk']).optional().default('bulk');
+
 export const bulkStockSchema = z.object({
+  source: updateSource,
   items: z
     .array(z.object({ id: objectId, addStock: gramsDelta }))
     .min(1, 'Nothing to update')
@@ -284,6 +298,7 @@ export const resolvePriceNamesSchema = z.object({
 });
 
 export const bulkPriceSchema = z.object({
+  source: updateSource,
   items: z
     .array(
       z.object({

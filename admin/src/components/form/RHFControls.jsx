@@ -50,11 +50,15 @@ export const RHFNumberField = ({ name, helperText, prefix, suffix, ...props }) =
           {...field}
           value={field.value ?? ''}
           onChange={(event) => {
-            const raw = event.target.value;
+            // A text box, not type="number": the browser's spinner arrows sat on
+            // top of the value and stepped it on a stray scroll. Digits are kept
+            // by hand instead, so nothing but a number can be typed.
+            const raw = event.target.value.replace(/[^\d.]/g, '');
             // Keep the field empty-able while typing; commit a number otherwise.
             field.onChange(raw === '' ? '' : Number(raw));
           }}
-          type="number"
+          type="text"
+          inputMode="decimal"
           error={Boolean(fieldState.error)}
           helperText={fieldState.error?.message || helperText}
           InputProps={{

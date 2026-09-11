@@ -8,8 +8,7 @@ import {
 } from '../../../components/form/RHFControls.jsx';
 import SectionTitle from '../../../components/common/SectionTitle.jsx';
 import { FRAGRANCE_FAMILIES, CONCENTRATIONS } from '../../../utils/constants.js';
-import { formatGrams, formatNumber, unitsFromGrams } from '../../../utils/format.js';
-import { smallestFillGramsFor } from '../perfumeSchema.js';
+import { formatGrams } from '../../../utils/format.js';
 import { CARD_PAD } from '../../../theme/index.js';
 
 /**
@@ -25,18 +24,13 @@ export const SectionCard = ({ title, description, action, children }) => (
 
 const StepBasicInfo = ({ facets, isEdit }) => {
   const { control } = useFormContext();
-  const [sizeGrams, stock, lowStockThreshold, hasVariants, variants] = useWatch({
+  const [stock, lowStockThreshold] = useWatch({
     control,
-    name: ['sizeGrams', 'stock', 'lowStockThreshold', 'hasVariants', 'variants'],
+    name: ['stock', 'lowStockThreshold'],
   });
 
   const stockGrams = Number(stock) || 0;
   const isLow = stockGrams <= (Number(lowStockThreshold) || 0);
-
-  // This is the perfume's ONE stock, so what it covers depends on which fill it
-  // is poured into: the pack size when there are no variants, otherwise the
-  // smallest active variant size (the best case).
-  const packSize = smallestFillGramsFor({ hasVariants, variants, sizeGrams });
 
   return (
     <Box>
@@ -84,7 +78,6 @@ const StepBasicInfo = ({ facets, isEdit }) => {
               name="shortDescription"
               label="Short description"
               placeholder="One line that sums up the scent"
-              helperText="Appears under the perfume name in listings"
             />
           </Grid>
           <Grid item xs={12}>
@@ -111,10 +104,8 @@ const StepBasicInfo = ({ facets, isEdit }) => {
               inputProps={{ min: 0, step: 'any' }}
               helperText={
                 stockGrams > 0
-                  ? `${formatGrams(stockGrams)} — up to ${formatNumber(
-                      unitsFromGrams(stockGrams, packSize)
-                    )} bottle(s) of ${formatGrams(packSize)}`
-                  : 'The whole perfume, variants included, sells from this weight'
+                  ? formatGrams(stockGrams)
+                  : 'Required — the whole perfume, variants included, sells from this weight'
               }
             />
           </Grid>

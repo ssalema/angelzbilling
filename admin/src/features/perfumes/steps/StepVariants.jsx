@@ -133,11 +133,15 @@ const VariantRow = ({ index, attributeNames, onRemove, onOpenDetail, expanded, p
               <TextField
                 {...field}
                 value={field.value ?? ''}
-                onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
-                type="number"
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/[^\d.]/g, '');
+                  field.onChange(raw === '' ? '' : Number(raw));
+                }}
+                type="text"
+                inputMode="decimal"
                 variant="standard"
                 error={Boolean(fieldState.error)}
-                inputProps={{ min: 0, step: '0.01', style: { fontSize: 13, textAlign: 'right' } }}
+                inputProps={{ style: { fontSize: 13, textAlign: 'right' } }}
               />
             )}
           />
@@ -151,11 +155,15 @@ const VariantRow = ({ index, attributeNames, onRemove, onOpenDetail, expanded, p
               <TextField
                 {...field}
                 value={field.value ?? ''}
-                onChange={(e) => field.onChange(e.target.value === '' ? '' : Number(e.target.value))}
-                type="number"
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/[^\d.]/g, '');
+                  field.onChange(raw === '' ? '' : Number(raw));
+                }}
+                type="text"
+                inputMode="decimal"
                 variant="standard"
                 error={Boolean(fieldState.error)}
-                inputProps={{ min: 0, max: 100, step: '0.01', style: { fontSize: 13, textAlign: 'right' } }}
+                inputProps={{ style: { fontSize: 13, textAlign: 'right' } }}
               />
             )}
           />

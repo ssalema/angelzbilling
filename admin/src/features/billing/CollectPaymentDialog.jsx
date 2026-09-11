@@ -117,14 +117,14 @@ const CollectPaymentDialog = ({ open, bill, onClose, onCollected }) => {
 
         <TextField
           label="Amount received *"
-          type="number"
+          type="text"
+          inputMode="decimal"
           value={amount}
-          onChange={(event) => setAmount(event.target.value)}
+          onChange={(event) => setAmount(event.target.value.replace(/[^\d.]/g, ''))}
           autoFocus
           fullWidth
           error={Boolean(error)}
           helperText={error || 'Leave it at the full balance, or type what the customer paid today'}
-          inputProps={{ min: 0, max: due, step: '0.01' }}
           InputProps={{ startAdornment: <InputAdornment position="start">{currencySymbol()}</InputAdornment> }}
         />
 

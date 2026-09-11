@@ -418,7 +418,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
       >
         <SectionTitle
           title="Branch management"
-          description="Every bill records the location it was raised at. The Head Office — the main business on the General tab — is one of those locations; the branches below are the others."
+          description="Every bill is saved against the store it was billed from. Your Head Office is the main store you set up on the General tab. Add your other stores here as branches."
           sx={{ mb: 0 }}
         />
         <Stack direction="row" spacing={1.5} alignItems="center" sx={{ flexShrink: 0 }}>
@@ -492,7 +492,6 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
         loading={branches.loading}
         error={branches.error}
         onRetry={branches.reload}
-        onRowClick={canEdit ? (row) => (canEditBranch(row.id) ? setFormBranch(row) : undefined) : undefined}
         page={page}
         limit={limit}
         total={items.length}

@@ -344,12 +344,13 @@ const BulkStockUpdate = ({ onUpdated }) => {
                         </TableCell>
                         <TableCell align="right">
                           <TextField
-                            type="number"
+                            type="text"
+                            inputMode="decimal"
                             value={row.newStock}
-                            onChange={(event) => editRow(row.key, event.target.value)}
+                            onChange={(event) => editRow(row.key, event.target.value.replace(/[^\d.]/g, ''))}
                             disabled={saving}
                             error={invalid}
-                            inputProps={{ step: 'any', min: 0, style: { textAlign: 'right' } }}
+                            inputProps={{ style: { textAlign: 'right' } }}
                             InputProps={{
                               endAdornment: <InputAdornment position="end">gm</InputAdornment>,
                             }}

@@ -48,11 +48,11 @@ export const PRICE_COLUMNS = SIZE_GRAMS.map(priceColumnFor);
 /** The rules shown above the dropzone, in the order they are checked. */
 export const SHEET_RULES = [
   `The first row must be a header. It needs a "${COLUMN_NAME}" column, and may also carry "${COLUMN_CATEGORY}" and "${COLUMN_STOCK}", plus a price column for each size — ${PRICE_COLUMNS.join(', ')}.`,
-  'Leave out the SKU. Every new perfume is numbered automatically, carrying on from the last one in your catalogue.',
-  'Leave out the photos too. The sheet is for the figures — you add each perfume’s picture on the review screen, one click per row, before anything is saved.',
+  'Every new perfume SKU is automatically numbered, carrying on from the last one in your catalogue.',
+  'You add each perfume’s picture on the review screen, one click per row, before anything is saved.',
   'Give a price for at least one size. A size left blank is a size this perfume does not sell — no price is ever worked out from another price.',
   'Prices must be a number above zero. Negative and non-numeric cells are flagged and skipped.',
-  'Stock is the weight you hold, written in grams (gm) as a plain number: 1500, not "1.5 kg". Leave it blank for none.',
+  'Stock is the weight you hold, written in grams (gm) as a plain number: 1500, not "1.5 kg".',
   'A name already in your catalogue is flagged, never overwritten — this screen only ever adds new perfumes.',
   'List each perfume once. A name that repeats in the sheet is flagged, and only its first row is used.',
 ];
@@ -211,11 +211,11 @@ export const applyChecks = (rows, checks) => {
 /**
  * What a row will be created as.
  *
- * Publishing needs an image, exactly as it does in the wizard, so this follows
- * the photo: a row is a draft until one is added on the review screen, and
- * becomes published the moment it has one.
+ * Publishing needs an image and stock, exactly as it does in the wizard: a
+ * perfume with nothing on the shelf would go straight out as sold out, so a row
+ * missing either is created as a draft and waits rather than being rejected.
  */
-export const statusFor = (row) => (row.photo ? 'published' : 'draft');
+export const statusFor = (row) => (row.photo && Number(row.stock) > 0 ? 'published' : 'draft');
 
 /** The rows that will actually be sent — everything the server needs, and nothing else. */
 export const toPayload = (rows) =>

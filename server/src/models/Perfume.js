@@ -4,6 +4,25 @@ import { resolveSizeGrams, unitsFromGrams, smallestFillGrams } from '../utils/gr
 
 const PERFUME_STATUSES = ['draft', 'published', 'archived'];
 
+/** How a perfume got into the catalogue — typed into the wizard, or uploaded in a sheet. */
+export const PERFUME_SOURCES = ['manual', 'bulk-upload'];
+
+/**
+ * What the last write actually changed, so "Updated by Lucifer" can say *what*
+ * Lucifer touched. Kept as slugs; the admin turns them into labels.
+ */
+export const PERFUME_UPDATE_ACTIONS = [
+  'created',
+  'bulk-upload',
+  'details',
+  'stock',
+  'bulk-stock',
+  'price',
+  'bulk-price',
+  'status',
+  'archived',
+];
+
 export const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
 export const computeFinalPrice = (mrp = 0, discountPercent = 0) =>
@@ -131,7 +150,14 @@ const perfumeSchema = new mongoose.Schema(
     tags: { type: [String], default: [] },
 
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    createdVia: { type: String, enum: PERFUME_SOURCES, default: 'manual' },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    /**
+     * The kind of the last change — 'stock', 'price', 'details'… Written beside
+     * `updatedBy` on every path that touches a perfume, so the view page can
+     * show who changed it and what they changed in one line.
+     */
+    updatedAction: { type: String, enum: PERFUME_UPDATE_ACTIONS, default: 'created' },
   },
   {
     timestamps: true,

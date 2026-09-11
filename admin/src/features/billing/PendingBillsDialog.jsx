@@ -27,7 +27,12 @@ import { FONT, ICON, numericText, statusColors, surface } from '../../theme/inde
  * with an open balance, and blocking the sale would leave a customer standing at
  * the counter while a biller hunts for a workaround. What it must not do is let
  * the bill be rung up while nobody at the counter knows there is a balance — so
- * it interrupts once, names the bills, and gets out of the way.
+ * it interrupts once, names the bills, and only then gets out of the way.
+ *
+ * Getting out of the way has to be deliberate: a stray click on the backdrop or
+ * a reflexive Escape would dismiss the warning before anyone read it, which is
+ * the one failure this dialog exists to prevent. The cross and the Continue
+ * billing button are the only ways past it.
  */
 const PendingBillsDialog = ({ open, customer, onClose, onCollect }) => {
   const bills = customer?.pendingBills || [];
@@ -35,8 +40,14 @@ const PendingBillsDialog = ({ open, customer, onClose, onCollect }) => {
 
   const totalDue = bills.reduce((sum, bill) => sum + Number(bill.amountDue || 0), 0);
 
+  // MUI reports why a close was asked for; only the deliberate ones get through.
+  const handleClose = (_event, reason) => {
+    if (reason === 'backdropClick' || reason === 'escapeKeyDown') return;
+    onClose?.();
+  };
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
       <DialogCloseButton onClose={onClose} label="Continue billing" />
 
       <DialogTitle sx={{ pb: 0.5 }}>

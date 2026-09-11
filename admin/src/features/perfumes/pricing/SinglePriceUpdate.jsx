@@ -127,7 +127,7 @@ const SinglePriceUpdate = ({ onUpdated }) => {
     setSaving(true);
     try {
       // Only the sizes that moved are sent; the server leaves the rest alone.
-      const result = await perfumeApi.bulkUpdatePrices(payload);
+      const result = await perfumeApi.bulkUpdatePrices(payload, 'single');
       const { updated, failed = [] } = result.data || {};
 
       if (failed.length) {
