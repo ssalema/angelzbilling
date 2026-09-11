@@ -1,6 +1,6 @@
 import { Card, Box, Typography, Stack, Divider } from '@mui/material';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
-import DateRangeControl from '../../../components/common/DateRangeControl.jsx';
+import PeriodControl from '../../../components/common/PeriodControl.jsx';
 import SectionTitle from '../../../components/common/SectionTitle.jsx';
 import { ChartSkeleton, ErrorState, EmptyState } from '../../../components/common/StateViews.jsx';
 import { formatCurrency, formatNumber } from '../../../utils/format.js';
@@ -64,16 +64,12 @@ const BreakdownChart = ({
 
   return (
     <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Stack
-        direction="row"
-        justifyContent="space-between"
-        alignItems="center"
-        spacing={1}
-        sx={CARD_HEAD_PAD}
-      >
-        <SectionTitle title={title} sx={{ mb: 0 }} />
-        <DateRangeControl value={range} onChange={onRangeChange} onReset={onReset} canReset={canReset} width={130} />
-      </Stack>
+      {/* The period control needs the full width of a card this narrow, so it
+          sits on its own line under the title rather than beside it. */}
+      <Box sx={CARD_HEAD_PAD}>
+        <SectionTitle title={title} sx={{ mb: 1.5 }} />
+        <PeriodControl value={range} onChange={onRangeChange} onReset={onReset} canReset={canReset} />
+      </Box>
 
       <Divider />
 

@@ -77,6 +77,9 @@ export const onPlum = {
 
 // One padding scale for cards, so a panel body sits the same distance from its edge on every screen.
 export const CARD_PAD = { xs: 2, sm: 2.5 };
+
+/** The corner every input wears, shared with the controls built to match one. */
+export const FIELD_RADIUS = '10px';
 export const CARD_HEAD_PAD = { px: { xs: 2, sm: 2.5 }, pt: { xs: 2, sm: 2.25 }, pb: 1.75 };
 
 // The single-image frame — store logo, favicon, branch logo.
@@ -249,7 +252,7 @@ const theme = createTheme({
     MuiButton: {
       defaultProps: { disableElevation: true },
       styleOverrides: {
-        root: { borderRadius: 10, paddingInline: 18, minHeight: 40 },
+        root: { borderRadius: FIELD_RADIUS, paddingInline: 18, minHeight: 40 },
         contained: {
           '&.Mui-disabled': { color: '#fff', backgroundColor: alpha(brand.plum, 0.55) },
           '&.Mui-disabled .MuiCircularProgress-root': { color: '#fff' },
@@ -298,7 +301,7 @@ const theme = createTheme({
     MuiOutlinedInput: {
       styleOverrides: {
         root: {
-          borderRadius: 10,
+          borderRadius: FIELD_RADIUS,
           backgroundColor: '#fff',
           '& fieldset': { borderColor: brand.line },
           '&:hover fieldset': { borderColor: alpha(brand.plum, 0.4) },

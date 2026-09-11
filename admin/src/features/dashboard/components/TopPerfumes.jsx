@@ -10,7 +10,7 @@ import {
   Cell,
   LabelList,
 } from 'recharts';
-import DateRangeControl from '../../../components/common/DateRangeControl.jsx';
+import PeriodControl from '../../../components/common/PeriodControl.jsx';
 import SectionTitle from '../../../components/common/SectionTitle.jsx';
 import { ChartSkeleton, ErrorState, EmptyState } from '../../../components/common/StateViews.jsx';
 import { formatCurrency, formatNumber, truncate } from '../../../utils/format.js';
@@ -39,26 +39,27 @@ const TopPerfumes = ({ data, loading, error, onRetry, range, onRangeChange, onRe
 
   return (
     <Card sx={{ height: '100%' }}>
-      <Stack
-        direction={{ xs: 'column', sm: 'row' }}
-        justifyContent="space-between"
-        alignItems={{ xs: 'stretch', sm: 'center' }}
-        spacing={1.5}
-        sx={CARD_HEAD_PAD}
-      >
-        <SectionTitle
-          title="Top selling perfumes"
-          description={`By ${by === 'revenue' ? 'revenue earned' : 'units sold'}`}
-          sx={{ mb: 0 }}
-        />
+      <Box sx={CARD_HEAD_PAD}>
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          justifyContent="space-between"
+          alignItems={{ xs: 'stretch', sm: 'center' }}
+          spacing={1.5}
+          sx={{ mb: 1.5 }}
+        >
+          <SectionTitle
+            title="Top selling perfumes"
+            description={`By ${by === 'revenue' ? 'revenue earned' : 'units sold'}`}
+            sx={{ mb: 0 }}
+          />
 
-        <Stack direction="row" spacing={1} alignItems="center">
           <ToggleButtonGroup
             value={by}
             exclusive
             size="small"
             onChange={(_e, next) => next && onByChange(next)}
             sx={{
+              alignSelf: { xs: 'flex-start', sm: 'center' },
               '& .MuiToggleButton-root': { px: 1.3, py: 0.4, fontSize: FONT.tiny, textTransform: 'none', borderColor: 'divider' },
               '& .Mui-selected': { bgcolor: surface.plumMuted, color: 'primary.main !important' },
             }}
@@ -66,9 +67,10 @@ const TopPerfumes = ({ data, loading, error, onRetry, range, onRangeChange, onRe
             <ToggleButton value="units">Units</ToggleButton>
             <ToggleButton value="revenue">Revenue</ToggleButton>
           </ToggleButtonGroup>
-          <DateRangeControl value={range} onChange={onRangeChange} onReset={onReset} canReset={canReset} width={130} />
         </Stack>
-      </Stack>
+
+        <PeriodControl value={range} onChange={onRangeChange} onReset={onReset} canReset={canReset} />
+      </Box>
 
       <Divider />
 

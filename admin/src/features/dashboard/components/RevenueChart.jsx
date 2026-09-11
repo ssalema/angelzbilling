@@ -20,11 +20,12 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
 } from 'recharts';
-import DateRangeControl from '../../../components/common/DateRangeControl.jsx';
+import PeriodControl from '../../../components/common/PeriodControl.jsx';
 import SectionTitle from '../../../components/common/SectionTitle.jsx';
 import { ChartSkeleton, ErrorState, EmptyState } from '../../../components/common/StateViews.jsx';
 import { formatCurrency, formatCompactCurrency, formatNumber, formatChartKey } from '../../../utils/format.js';
-import { CHART_METRICS, DEFAULT_DATE_RANGE, isDefaultRange } from '../../../utils/constants.js';
+import { CHART_METRICS } from '../../../utils/constants.js';
+import { currentPeriod, isCurrentPeriod } from '../../../utils/period.js';
 import { FONT, CARD_PAD, ICON, SHADOW, brand, numericText, onPlum, surface } from '../../../theme/index.js';
 
 const metricLabel = {
@@ -67,10 +68,10 @@ const RevenueChart = ({ data, loading, error, onRetry, range, onRangeChange, gro
   const [metric, setMetric] = useState('revenue');
 
   // Reset clears both of this card's filters: the metric and the range.
-  const canReset = metric !== 'revenue' || !isDefaultRange(range);
+  const canReset = metric !== 'revenue' || !isCurrentPeriod(range);
   const handleReset = () => {
     setMetric('revenue');
-    onRangeChange(DEFAULT_DATE_RANGE);
+    onRangeChange(currentPeriod());
   };
 
   const points =
@@ -131,36 +132,29 @@ const RevenueChart = ({ data, loading, error, onRetry, range, onRangeChange, gro
             </Typography>
           </Box>
 
-          <Stack
-            direction="row"
-            spacing={1}
-            alignItems="center"
-            justifyContent={{ xs: 'flex-start', md: 'flex-end' }}
-            flexWrap="wrap"
-            useFlexGap
+          <Select
+            value={metric}
+            onChange={(e) => setMetric(e.target.value)}
+            size="small"
+            sx={{
+              minWidth: 150,
+              alignSelf: { xs: 'flex-start', md: 'center' },
+              bgcolor: 'background.paper',
+              fontSize: FONT.small,
+              fontWeight: 600,
+            }}
           >
-            <Select
-              value={metric}
-              onChange={(e) => setMetric(e.target.value)}
-              size="small"
-              sx={{ minWidth: 150, bgcolor: 'background.paper', fontSize: FONT.small, fontWeight: 600 }}
-            >
-              {CHART_METRICS.map((option) => (
-                <MenuItem key={option.value} value={option.value} sx={{ fontSize: FONT.body }}>
-                  {option.label}
-                </MenuItem>
-              ))}
-            </Select>
-
-            <DateRangeControl
-              value={range}
-              onChange={onRangeChange}
-              onReset={handleReset}
-              canReset={canReset}
-              width={150}
-            />
-          </Stack>
+            {CHART_METRICS.map((option) => (
+              <MenuItem key={option.value} value={option.value} sx={{ fontSize: FONT.body }}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </Select>
         </Stack>
+
+        <Box sx={{ mt: 2 }}>
+          <PeriodControl value={range} onChange={onRangeChange} onReset={handleReset} canReset={canReset} />
+        </Box>
       </Box>
 
       <Divider />

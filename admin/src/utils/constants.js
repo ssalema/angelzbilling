@@ -76,20 +76,6 @@ export const CONCENTRATIONS = [
   'Incense',
 ];
 
-export const DATE_RANGES = [
-  { value: 'month', label: 'Month' },
-  { value: 'year', label: 'Year' },
-  { value: 'all', label: 'All time' },
-  { value: 'custom', label: 'Custom' },
-];
-
-/** Every range control starts here, and every "reset filters" returns here. */
-export const DEFAULT_DATE_RANGE = { range: 'month' };
-
-/** True while a range control is still on its default — nothing to reset. */
-export const isDefaultRange = (value) =>
-  (value?.range || DEFAULT_DATE_RANGE.range) === DEFAULT_DATE_RANGE.range && !value?.from && !value?.to;
-
 export const CHART_METRICS = [
   { value: 'revenue', label: 'Revenue' },
   { value: 'bills', label: 'Bills' },

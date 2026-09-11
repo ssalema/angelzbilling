@@ -23,7 +23,8 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
 import { formatCurrency, formatNumber } from '../../utils/format.js';
 import { GUTTER, brand } from '../../theme/index.js';
-import { DEFAULT_DATE_RANGE, isDefaultRange, locationLabel } from '../../utils/constants.js';
+import { locationLabel } from '../../utils/constants.js';
+import { currentPeriod, isCurrentPeriod } from '../../utils/period.js';
 
 const useSharedWidget = (overview, key, shared, fetcher, deps) => {
   const own = useApiResource(fetcher, [...deps, shared], { immediate: !shared });
@@ -45,15 +46,15 @@ const DashboardPage = () => {
   const [bulkOpen, setBulkOpen] = useState(false);
 
   // The main range drives the summary cards and the revenue chart together.
-  const [mainRange, setMainRange] = useState(DEFAULT_DATE_RANGE);
-  const [statusRange, setStatusRange] = useState(DEFAULT_DATE_RANGE);
-  const [paymentRange, setPaymentRange] = useState(DEFAULT_DATE_RANGE);
-  const [topRange, setTopRange] = useState(DEFAULT_DATE_RANGE);
+  const [mainRange, setMainRange] = useState(currentPeriod);
+  const [statusRange, setStatusRange] = useState(currentPeriod);
+  const [paymentRange, setPaymentRange] = useState(currentPeriod);
+  const [topRange, setTopRange] = useState(currentPeriod);
   const [topBy, setTopBy] = useState('units');
 
   // Each card resets only its own filters — that is the point of owning them.
   const resetTop = () => {
-    setTopRange(DEFAULT_DATE_RANGE);
+    setTopRange(currentPeriod());
     setTopBy('units');
   };
 
@@ -237,8 +238,8 @@ const DashboardPage = () => {
             onRetry={billStatus.reload}
             range={statusRange}
             onRangeChange={setStatusRange}
-            onReset={() => setStatusRange(DEFAULT_DATE_RANGE)}
-            canReset={!isDefaultRange(statusRange)}
+            onReset={() => setStatusRange(currentPeriod())}
+            canReset={!isCurrentPeriod(statusRange)}
             emptyMessage="No bills raised in this period."
             insight={() => {
               const settled = billStatus.data?.settledPercentage;
@@ -262,8 +263,8 @@ const DashboardPage = () => {
             onRetry={payments.reload}
             range={paymentRange}
             onRangeChange={setPaymentRange}
-            onReset={() => setPaymentRange(DEFAULT_DATE_RANGE)}
-            canReset={!isDefaultRange(paymentRange)}
+            onReset={() => setPaymentRange(currentPeriod())}
+            canReset={!isCurrentPeriod(paymentRange)}
             donut={false}
             emptyMessage="No payments recorded in this period."
             insight={(segments) => {
@@ -284,7 +285,7 @@ const DashboardPage = () => {
           range={topRange}
           onRangeChange={setTopRange}
           onReset={resetTop}
-          canReset={!isDefaultRange(topRange) || topBy !== 'units'}
+          canReset={!isCurrentPeriod(topRange) || topBy !== 'units'}
           by={topBy}
           onByChange={setTopBy}
         />

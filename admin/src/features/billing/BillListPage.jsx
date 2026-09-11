@@ -32,7 +32,7 @@ import {
   FilterSelect,
   FilterReset,
 } from '../../components/common/FilterBar.jsx';
-import DateRangeControl from '../../components/common/DateRangeControl.jsx';
+import PeriodControl from '../../components/common/PeriodControl.jsx';
 
 import { billApi, branchApi } from '../../api/endpoints.js';
 import useApiResource from '../../hooks/useApiResource.js';
@@ -49,9 +49,8 @@ import {
   PAYMENT_METHOD_LABELS,
   HEAD_OFFICE,
   locationOf,
-  DEFAULT_DATE_RANGE,
-  isDefaultRange,
 } from '../../utils/constants.js';
+import { allTimePeriod, currentPeriod, isCurrentPeriod } from '../../utils/period.js';
 import { GUTTER, ICON, brand, statusColors } from '../../theme/index.js';
 
 const latestMethodLabel = (row) => {
@@ -79,7 +78,7 @@ const BillListPage = () => {
   // The pending row whose balance is being collected, if any.
   const [paymentBill, setPaymentBill] = useState(null);
 
-  const [range, setRange] = useState(DEFAULT_DATE_RANGE);
+  const [range, setRange] = useState(currentPeriod);
   const [filters, setFilters] = useState({
     search: '',
     status: 'all',
@@ -195,7 +194,7 @@ const BillListPage = () => {
 
   const resetFilters = () => {
     setFilters((prev) => ({ ...prev, search: '', status: 'all', paymentMethod: 'all', branch: '', page: 1 }));
-    setRange(DEFAULT_DATE_RANGE);
+    setRange(currentPeriod());
   };
 
   const refreshAll = () => {
@@ -210,7 +209,7 @@ const BillListPage = () => {
     filters.status !== 'all' ||
     filters.paymentMethod !== 'all' ||
     Boolean(filters.branch) ||
-    !isDefaultRange(range);
+    !isCurrentPeriod(range);
 
   const columns = [
     {
@@ -431,6 +430,13 @@ const BillListPage = () => {
         </Grid>
 
         <Card>
+          {/* The period governs the summary cards as well as the list, so it
+              leads the card on a line of its own rather than queueing up with
+              the row filters. Reset lives once, at the end of the filter bar. */}
+          <Box sx={{ px: 1.75, py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+            <PeriodControl value={range} onChange={setRange} />
+          </Box>
+
           <FilterBar>
             <FilterSearch
               placeholder="Search bill number, customer name or contact number…"
@@ -485,8 +491,6 @@ const BillListPage = () => {
               </FilterSelect>
             )}
 
-            <DateRangeControl label="Date" value={range} onChange={setRange} />
-
             <FilterReset onClick={resetFilters} disabled={!isFiltered} />
           </FilterBar>
 
@@ -519,7 +523,7 @@ const BillListPage = () => {
                       variant="outlined"
                       onClick={() => {
                         patch({ search: '', status: 'all', paymentMethod: 'all', branch: '' });
-                        setRange({ range: 'all' });
+                        setRange(allTimePeriod());
                       }}
                     >
                       Clear filters
