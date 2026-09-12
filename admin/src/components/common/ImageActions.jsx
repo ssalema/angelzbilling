@@ -49,20 +49,26 @@ const ImageActions = ({
       zIndex: 1,
     }}
   >
-    <Tooltip title={replaceLabel}>
-      <span>
-        <IconButton size="small" onClick={onReplace} disabled={disabled} aria-label={replaceLabel}>
-          <SwapHorizRounded sx={{ fontSize: ICON.action, color: '#fff' }} />
-        </IconButton>
-      </span>
-    </Tooltip>
-    <Tooltip title={removeLabel}>
-      <span>
-        <IconButton size="small" onClick={onRemove} disabled={disabled} aria-label={removeLabel}>
-          <DeleteOutline sx={{ fontSize: ICON.action, color: '#FF8A8A' }} />
-        </IconButton>
-      </span>
-    </Tooltip>
+    {/* Each half is drawn only where it has somewhere to go — a slot whose
+        image is already its own picker needs the remove button alone. */}
+    {onReplace && (
+      <Tooltip title={replaceLabel}>
+        <span>
+          <IconButton size="small" onClick={onReplace} disabled={disabled} aria-label={replaceLabel}>
+            <SwapHorizRounded sx={{ fontSize: ICON.action, color: '#fff' }} />
+          </IconButton>
+        </span>
+      </Tooltip>
+    )}
+    {onRemove && (
+      <Tooltip title={removeLabel}>
+        <span>
+          <IconButton size="small" onClick={onRemove} disabled={disabled} aria-label={removeLabel}>
+            <DeleteOutline sx={{ fontSize: ICON.action, color: '#FF8A8A' }} />
+          </IconButton>
+        </span>
+      </Tooltip>
+    )}
   </Stack>
 );
 

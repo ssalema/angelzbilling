@@ -1,5 +1,7 @@
 import asyncHandler from '../../utils/asyncHandler.js';
+import ApiError from '../../utils/ApiError.js';
 import { sendSuccess } from '../../utils/ApiResponse.js';
+import { uploadBuffer, destroyAsset } from '../../config/cloudinary.js';
 import { REFRESH_COOKIE, refreshCookieOptions, revokeAccessToken } from '../../utils/tokens.js';
 import * as authService from './auth.service.js';
 import User, { roleLabelFor } from '../../models/User.js';
@@ -14,6 +16,9 @@ const storeProfile = (settings) => ({
   billing: settings.billing,
   features: { branches: settings.features?.branches !== false },
 });
+
+// The branch fields every controller here populates before calling `publicUser`.
+const BRANCH_FIELDS = 'name code address phone phoneCountryCode gstin isActive hasOwnLogo logo favicon';
 
 const publicUser = (user) => ({
   id: user._id,
@@ -105,13 +110,58 @@ export const updateProfileController = asyncHandler(async (req, res) => {
       },
     },
     { new: true, runValidators: true }
-  ).populate('branch', 'name code address phone phoneCountryCode gstin isActive hasOwnLogo logo favicon');
+  ).populate('branch', BRANCH_FIELDS);
 
   // The same account may be open in another tab — it should not keep showing
   // the old name in the sidebar.
   emit('user:profile', { user: publicUser(user) }, { rooms: [userRoom(user._id)] });
 
   return sendSuccess(res, { message: 'Profile updated', data: { user: publicUser(user) } });
+});
+
+// Writes the account's new photo, tells the other tabs, and answers the caller.
+const saveAvatar = async (req, res, { avatar, message }) => {
+  const user = await User.findByIdAndUpdate(
+    req.user._id,
+    { $set: { avatar } },
+    { new: true, runValidators: true }
+  ).populate('branch', BRANCH_FIELDS);
+
+  // The sidebar and topbar of every other open tab show this photo too.
+  emit('user:profile', { user: publicUser(user) }, { rooms: [userRoom(user._id)] });
+
+  return sendSuccess(res, { message, data: { user: publicUser(user) } });
+};
+
+export const uploadAvatarController = asyncHandler(async (req, res) => {
+  if (!req.file) throw ApiError.badRequest('Choose a photo to upload');
+
+  const previous = req.user.avatar?.publicId;
+  const asset = await uploadBuffer(req.file.buffer, { folder: 'avatars', resourceType: 'image' });
+
+  const response = await saveAvatar(req, res, {
+    avatar: { url: asset.url, publicId: asset.publicId },
+    message: 'Profile photo updated',
+  });
+
+  // The replaced photo belongs to nobody now — clearing it is housekeeping, and
+  // a failure there must not turn a saved photo into an error the user sees.
+  if (previous && previous !== asset.publicId) await destroyAsset(previous, 'image');
+
+  return response;
+});
+
+export const removeAvatarController = asyncHandler(async (req, res) => {
+  const previous = req.user.avatar?.publicId;
+
+  const response = await saveAvatar(req, res, {
+    avatar: { url: '', publicId: '' },
+    message: 'Profile photo removed',
+  });
+
+  if (previous) await destroyAsset(previous, 'image');
+
+  return response;
 });
 
 export const changePasswordController = asyncHandler(async (req, res) => {

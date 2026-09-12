@@ -13,7 +13,6 @@ import {
   Stack,
   Button,
   Divider,
-  Avatar,
   Chip,
   CircularProgress,
   Alert,
@@ -23,6 +22,7 @@ import PersonOutline from '@mui/icons-material/PersonOutline';
 import LockResetOutlined from '@mui/icons-material/LockResetOutlined';
 
 import PageHeader from '../../components/common/PageHeader.jsx';
+import ProfilePhoto from './ProfilePhoto.jsx';
 import { RHFTextField, RHFPasswordField } from '../../components/form/RHFControls.jsx';
 import RHFContactNumber from '../../components/form/RHFContactNumber.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -30,11 +30,10 @@ import { useSettings } from '../../context/SettingsContext.jsx';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { authApi } from '../../api/endpoints.js';
 import { applyServerErrors } from '../../api/client.js';
-import { formatDate, initials } from '../../utils/format.js';
+import { formatDate } from '../../utils/format.js';
 import { ROLE_LABELS, locationLabel, PASSWORD_HINT } from '../../utils/constants.js';
 import { DEFAULT_DIAL_CODE, addContactNumberIssue } from '../../utils/countries.js';
 import { CARD_PAD, GUTTER, ICON, brand } from '../../theme/index.js';
-import { IMG } from '../../utils/image.js';
 
 const profileSchema = z
   .object({
@@ -142,12 +141,7 @@ const ProfilePage = () => {
         {/* Identity card */}
         <Grid item xs={12} md={4}>
           <Card sx={{ p: CARD_PAD, textAlign: 'center' }}>
-            <Avatar
-              src={IMG.thumb(user?.avatar?.url) || undefined}
-              sx={{ width: 84, height: 84, mx: 'auto', bgcolor: brand.plum, fontSize: 30, fontWeight: 700 }}
-            >
-              {initials(user?.name)}
-            </Avatar>
+            <ProfilePhoto />
 
             <Typography variant="h5" sx={{ mt: 2 }}>
               {user?.name}

@@ -9,12 +9,28 @@ const unwrap = (response) => response.data?.data;
 const unwrapFull = (response) => ({ items: response.data?.data ?? [], meta: response.data?.meta ?? {} });
 const message = (response) => response.data?.message;
 
+// Axios config that reports upload percentage.
+const withProgress = (onProgress) =>
+  onProgress
+    ? {
+        onUploadProgress: (event) => {
+          if (event.total) onProgress(Math.round((event.loaded * 100) / event.total));
+        },
+      }
+    : undefined;
+
 /* ─────────────────────────────── Auth ─────────────────────────────── */
 export const authApi = {
   login: (payload) => api.post('/auth/login', payload).then((r) => r.data.data),
   logout: () => api.post('/auth/logout').then(message),
   me: () => api.get('/auth/me').then((r) => r.data.data.user),
   updateProfile: (payload) => api.patch('/auth/me', payload).then((r) => r.data.data.user),
+  uploadAvatar: (file, onProgress) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post('/auth/me/avatar', form, withProgress(onProgress)).then((r) => r.data);
+  },
+  removeAvatar: () => api.delete('/auth/me/avatar').then((r) => r.data),
   changePassword: (payload) => api.post('/auth/change-password', payload).then(message),
 };
 
@@ -88,16 +104,6 @@ export const userApi = {
   toggleStatus: (id) => api.patch(`/users/${id}/status`).then((r) => r.data),
   resetPassword: (id, password) => api.post(`/users/${id}/reset-password`, { password }).then((r) => r.data),
 };
-
-// Axios config that reports upload percentage.
-const withProgress = (onProgress) =>
-  onProgress
-    ? {
-        onUploadProgress: (event) => {
-          if (event.total) onProgress(Math.round((event.loaded * 100) / event.total));
-        },
-      }
-    : undefined;
 
 /* ─────────────────────────────── Branches ─────────────────────────────── */
 export const branchApi = {

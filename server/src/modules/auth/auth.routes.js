@@ -3,6 +3,7 @@ import validate from '../../middlewares/validate.js';
 import authenticate from '../../middlewares/authenticate.js';
 import { authLimiter, refreshLimiter } from '../../middlewares/security.js';
 import { invalidateAccountOnWrite } from '../../middlewares/cache.js';
+import { imageUpload, enforceFileLimits, uploadGate } from '../../middlewares/upload.js';
 import { loginSchema, changePasswordSchema, updateProfileSchema } from './auth.validation.js';
 import {
   loginController,
@@ -10,6 +11,8 @@ import {
   logoutController,
   meController,
   updateProfileController,
+  uploadAvatarController,
+  removeAvatarController,
   changePasswordController,
 } from './auth.controller.js';
 
@@ -31,6 +34,19 @@ router.patch(
   validate({ body: updateProfileSchema }),
   updateProfileController
 );
+// Your own photo — every signed-in role may set one on their own account.
+router.post(
+  '/me/avatar',
+  authenticate,
+  evictSelf,
+  // Ahead of multer so a queued request holds no buffer while it waits.
+  uploadGate,
+  imageUpload.single('file'),
+  enforceFileLimits,
+  uploadAvatarController
+);
+router.delete('/me/avatar', authenticate, evictSelf, removeAvatarController);
+
 router.post(
   '/change-password',
   authenticate,
