@@ -49,7 +49,7 @@ import BillPrintView from './BillPrintView.jsx';
 import CustomerRecallBanner from './CustomerRecallBanner.jsx';
 import DialogCloseButton from '../../components/common/DialogCloseButton.jsx';
 
-import { billSchema, emptyBill, calculateTotals } from './billSchema.js';
+import { buildBillSchema, emptyBill, calculateTotals, staffCeiling, splitGst } from './billSchema.js';
 import { perfumeApi, billApi, branchApi } from '../../api/endpoints.js';
 import useApiResource from '../../hooks/useApiResource.js';
 import useDebounce from '../../hooks/useDebounce.js';
@@ -58,16 +58,33 @@ import { useSettings } from '../../context/SettingsContext.jsx';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { applyServerErrors } from '../../api/client.js';
 import { currencySymbol, formatCurrency, formatPrice, formatGrams, formatNumber, unitsFromGrams } from '../../utils/format.js';
-import { PAYMENT_METHODS, PAYMENT_TERMS, HEAD_OFFICE, locationOf, locationOptions } from '../../utils/constants.js';
+import {
+  PAYMENT_METHODS,
+  PAYMENT_TERMS,
+  HEAD_OFFICE,
+  locationOf,
+  locationOptions,
+  locationFullLabel,
+} from '../../utils/constants.js';
 import { downloadBillPdf } from '../../utils/downloadBill.js';
-import { FONT, CARD_HEAD_PAD, CARD_PAD, GUTTER, INSET_RADIUS, ICON, brand, numericText, statusColors, surface } from '../../theme/index.js';
+import { FONT, CARD_HEAD_PAD, CARD_PAD, GUTTER, INSET_RADIUS, ICON, brand, numericText, statusColors, surface, readOnlyField } from '../../theme/index.js';
 
 const CreateBillPage = () => {
   const navigate = useNavigate();
   const snackbar = useSnackbar();
   // Only the Head Office Super Admin picks where a bill is raised.
-  const { user, isMainSuperAdmin } = useAuth();
-  const { settings, loading: settingsLoading, defaultTaxPercent, branchesEnabled } = useSettings();
+  const { user, isMainSuperAdmin, isAdmin } = useAuth();
+  const {
+    settings,
+    loading: settingsLoading,
+    defaultTaxPercent,
+    branchesEnabled,
+    maxDiscountPercent,
+  } = useSettings();
+
+  // Admins bill without a ceiling; staff get the store's. Same test the server
+  // runs, so the form refuses exactly what the save would have refused.
+  const discountCapPercent = isAdmin ? 100 : maxDiscountPercent;
 
   const [perfumeQuery, setPerfumeQuery] = useState('');
   // Head Office by default: the main business is a location, not a fallback.
@@ -113,6 +130,8 @@ const CreateBillPage = () => {
     [settings, atHeadOffice, billLocation]
   );
 
+  const billSchema = useMemo(() => buildBillSchema({ discountCapPercent }), [discountCapPercent]);
+
   const methods = useForm({
     resolver: zodResolver(billSchema),
     defaultValues: { ...emptyBill, taxPercent: defaultTaxPercent || 0 },
@@ -129,14 +148,14 @@ const CreateBillPage = () => {
     formState: { isSubmitting },
   } = methods;
 
-  const taxDefaultApplied = useRef(false);
+  // Tax is the store's rate, not the biller's: every bill carries exactly what
+  // the admin set under Settings → Billing, and no tax at all until one is set.
+  const taxRate = Number(defaultTaxPercent) || 0;
+  const taxEnabled = taxRate > 0;
   useEffect(() => {
-    if (taxDefaultApplied.current || settingsLoading) return;
-    taxDefaultApplied.current = true;
-    if (defaultTaxPercent && !Number(getValues('taxPercent'))) {
-      setValue('taxPercent', defaultTaxPercent);
-    }
-  }, [settingsLoading, defaultTaxPercent, getValues, setValue]);
+    if (settingsLoading) return;
+    setValue('taxPercent', taxRate);
+  }, [settingsLoading, taxRate, setValue]);
 
   const { fields, append, remove, update } = useFieldArray({ control, name: 'items' });
 
@@ -167,6 +186,17 @@ const CreateBillPage = () => {
         extraDiscount: watched.extraDiscount,
       }),
     [watched.items, watched.taxPercent, watched.extraDiscount]
+  );
+
+  // Nothing beyond the billable amount can be discounted, and staff stop earlier
+  // still — at their share of it. The field ends wherever the save would.
+  const discountable = Math.max(0, Number((totals.subtotal - totals.lineDiscount).toFixed(2)));
+  const maxExtraDiscount = staffCeiling(discountable, discountCapPercent);
+  const discountCapped = discountCapPercent < 100 && discountable > 0;
+
+  const gst = useMemo(
+    () => splitGst(totals.taxPercent, totals.taxAmount),
+    [totals.taxPercent, totals.taxAmount]
   );
 
   const isPartial = watched.paymentTerm === 'partial';
@@ -398,7 +428,7 @@ const CreateBillPage = () => {
                     label="Bill by"
                     value={user?.name || ''}
                     InputProps={{ readOnly: true }}
-                    sx={{ bgcolor: surface.plumFaint }}
+                    sx={readOnlyField}
                   />
                   {branchesEnabled &&
                     (canPickLocation ? (
@@ -412,7 +442,7 @@ const CreateBillPage = () => {
                       >
                         {locations.map((option) => (
                           <MenuItem key={option.id} value={option.id}>
-                            {option.code ? `${option.name} (${option.code})` : option.name}
+                            {locationFullLabel(option)}
                           </MenuItem>
                         ))}
                       </TextField>
@@ -422,7 +452,7 @@ const CreateBillPage = () => {
                         value={billLocation.name}
                         InputProps={{ readOnly: true }}
                         helperText="Taken from your signed-in account"
-                        sx={{ bgcolor: surface.plumFaint }}
+                        sx={readOnlyField}
                       />
                     ))}
                 </Stack>
@@ -641,9 +671,42 @@ const CreateBillPage = () => {
                   />
                 )}
 
-                <Stack direction="row" spacing={1.5} sx={{ my: 2 }}>
-                  <RHFNumberField name="extraDiscount" label="Extra discount" prefix={currencySymbol()} inputProps={{ min: 0 }} />
-                  <RHFNumberField name="taxPercent" label="Tax" suffix="%" inputProps={{ min: 0, max: 100 }} />
+                {/* Top-aligned so an error under one field cannot stretch the other. */}
+                <Stack direction="row" spacing={1.5} alignItems="flex-start" sx={{ my: 2 }}>
+                  <RHFNumberField
+                    name="extraDiscount"
+                    label="Extra discount"
+                    prefix={currencySymbol()}
+                    min={0}
+                    max={maxExtraDiscount}
+                    // Staff are told their ceiling rather than left to find it: the
+                    // server refuses the save past this, and a bill written up to
+                    // the preview is a poor place to learn that.
+                    // Only when there is a ceiling to name: an admin bills without
+                    // one, and a line saying so would be noise in a busy summary.
+                    helperText={
+                      discountCapped
+                        ? `You can give discount up to ${formatCurrency(maxExtraDiscount, {
+                            precise: true,
+                          })} (${formatNumber(
+                            discountCapPercent
+                          )}%) — for more discount, contact a Branch Admin`
+                        : undefined
+                    }
+                  />
+                  {/* Read-only like Bill by and Branch above, and tinted the same
+                      way, because the rate comes from Settings rather than the
+                      biller. Left out entirely when the store charges no tax. */}
+                  {taxEnabled && (
+                    <RHFNumberField
+                      name="taxPercent"
+                      label="Tax"
+                      suffix="%"
+                      InputProps={{ readOnly: true }}
+                      helperText="Taken from your billing settings"
+                      sx={readOnlyField}
+                    />
+                  )}
                 </Stack>
 
                 {totals.extraDiscount > 0 && (
@@ -653,8 +716,18 @@ const CreateBillPage = () => {
                     tone="success.main"
                   />
                 )}
+                {/* GST is charged as two equal halves, and the slip names both. */}
                 {totals.taxAmount > 0 && (
-                  <SummaryRow label={`Tax (${totals.taxPercent}%)`} value={formatCurrency(totals.taxAmount, { precise: true })} />
+                  <>
+                    <SummaryRow
+                      label={`CGST (${formatNumber(gst.half)}%)`}
+                      value={formatCurrency(gst.cgst, { precise: true })}
+                    />
+                    <SummaryRow
+                      label={`SGST (${formatNumber(gst.half)}%)`}
+                      value={formatCurrency(gst.sgst, { precise: true })}
+                    />
+                  </>
                 )}
 
                 <Divider sx={{ my: 1.75, borderColor: brand.gold }} />

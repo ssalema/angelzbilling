@@ -147,6 +147,7 @@ const AddressFields = ({ prefix = 'address', disabled = false }) => {
     if (lookup.status === 'done') return `Matched ${lookup.message}`;
     if (lookup.status === 'error') return lookup.message;
     if (!postal.supportsLookup && country) return `Automatic lookup is not available for ${country}`;
+    if (postal.supportsLookup) return 'Fills state and city automatically';
     return ' ';
   };
 

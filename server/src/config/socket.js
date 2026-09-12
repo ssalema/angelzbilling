@@ -9,6 +9,7 @@ import User from '../models/User.js';
 import { verifyAccessToken, isAccessTokenRevoked } from '../utils/tokens.js';
 import { getCachedUser, setCachedUser } from '../utils/userCache.js';
 import { toLocationId } from '../utils/locations.js';
+import { isBranchInactive, BRANCH_INACTIVE_MESSAGE } from '../utils/branchAccess.js';
 
 // The push half of the API: every write the REST layer makes is announced here,
 // so an open panel does not have to be told to refresh.
@@ -48,6 +49,7 @@ const resolveSocketUser = async (token) => {
 
   if (!user) throw new Error('This account no longer exists');
   if (!user.isActive) throw new Error('Your account has been deactivated. Please contact the super admin.');
+  if (isBranchInactive(user)) throw new Error(BRANCH_INACTIVE_MESSAGE);
   if (user.passwordChangedAt && payload.iat * 1000 < user.passwordChangedAt.getTime()) {
     throw new Error('Your password was changed. Please sign in again.');
   }

@@ -9,15 +9,14 @@ import { getPagination, getSort, escapeRegex } from '../../utils/query.js';
 import { assertBranchAccess, assertBranchWrite, isGlobalSuperAdmin } from '../../middlewares/authorize.js';
 import { uploadBuffer, destroyAsset } from '../../config/cloudinary.js';
 import { refreshFeatures } from '../../utils/featureFlags.js';
+import { signOutBranchUsers } from './branch.sessions.js';
 
 const SORTABLE = ['createdAt', 'name', 'code'];
 
 const syncBranchesFeature = async () => {
-  const [total, active] = await Promise.all([
-    Branch.countDocuments({}),
-    Branch.countDocuments({ isActive: true }),
-  ]);
-  if (total === 0) return;
+  // A store with no branch that can bill is a single-location store, whether its
+  // last branch was closed or deleted outright — either way the switch follows.
+  const active = await Branch.countDocuments({ isActive: true });
 
   const settings = await Settings.getSingleton();
   const current = settings.features?.branches !== false;
@@ -136,11 +135,22 @@ export const updateBranch = asyncHandler(async (req, res) => {
     ]);
   }
 
+  const closing = req.body.isActive === false && branch.isActive;
+
   Object.assign(branch, req.body);
   await branch.save();
   await syncBranchesFeature();
 
-  return sendSuccess(res, { message: `Branch "${branch.name}" updated`, data: branch });
+  // Closing a location from this form ends its sessions exactly as the status
+  // switch does — the same change should not depend on where it was made.
+  const signedOut = closing ? await signOutBranchUsers(branch._id) : 0;
+
+  return sendSuccess(res, {
+    message: signedOut
+      ? `Branch "${branch.name}" updated. ${signedOut} user(s) signed out.`
+      : `Branch "${branch.name}" updated`,
+    data: branch,
+  });
 });
 
 export const deleteBranch = asyncHandler(async (req, res) => {
@@ -186,8 +196,14 @@ export const toggleBranchStatus = asyncHandler(async (req, res) => {
   // switches it back on.
   await syncBranchesFeature();
 
+  // Nobody is left sitting at a counter that just shut: every session held there
+  // ends now, worded the way the sign-in page words a closed location.
+  const signedOut = branch.isActive ? 0 : await signOutBranchUsers(branch._id);
+
   return sendSuccess(res, {
-    message: `Branch "${branch.name}" ${branch.isActive ? 'activated' : 'deactivated'}`,
+    message: branch.isActive
+      ? `Branch "${branch.name}" activated`
+      : `Branch "${branch.name}" deactivated${signedOut ? `. ${signedOut} user(s) signed out.` : ''}`,
     data: branch,
   });
 });

@@ -7,6 +7,7 @@ import {
   hashToken,
   refreshCookieMaxAge,
 } from '../../utils/tokens.js';
+import { isBranchInactive, BRANCH_INACTIVE_MESSAGE } from '../../utils/branchAccess.js';
 
 const MAX_SESSIONS = 5; // one account, at most five signed-in devices
 
@@ -81,9 +82,7 @@ export const login = async ({ email, password, userAgent }) => {
   }
 
   // An out-of-service branch stops the people scoped to it from working.
-  if (user.role !== 'superadmin' && user.branch && user.branch.isActive === false) {
-    throw ApiError.forbidden('Your branch is currently inactive. Please contact the super admin.');
-  }
+  if (isBranchInactive(user)) throw ApiError.forbidden(BRANCH_INACTIVE_MESSAGE);
 
   const tokens = await issueTokens(user, userAgent);
   // A good password clears the brake.
@@ -112,7 +111,12 @@ export const refreshSession = async (token, userAgent = '') => {
     .populate('branch', 'name code address phone phoneCountryCode gstin isActive hasOwnLogo logo favicon');
 
   if (!user) throw ApiError.unauthorized('This account no longer exists');
-  if (!user.isActive) throw ApiError.forbidden('Your account has been deactivated. Please contact the super admin.');
+  if (!user.isActive)
+    throw ApiError.sessionEnded('Your account has been deactivated. Please contact the super admin.');
+  // A closed location cannot be worked from, so it cannot be refreshed into
+  // either — otherwise a tab left open would quietly renew its own session, and
+  // a reload would land back inside the app.
+  if (isBranchInactive(user)) throw ApiError.sessionEnded(BRANCH_INACTIVE_MESSAGE);
 
   // Redeeming the token is a single atomic claim, and that claim IS the one-use guarantee.
   const presented = hashToken(token);

@@ -77,7 +77,9 @@ export const RHFPasswordField = ({ name, helperText, defaultVisible = false, ...
   );
 };
 
-export const RHFNumberField = ({ name, helperText, prefix, suffix, max, min, ...props }) => {
+// InputProps is pulled out of the rest so a caller passing its own — readOnly,
+// say — merges with the prefix and suffix instead of replacing them.
+export const RHFNumberField = ({ name, helperText, prefix, suffix, max, min, InputProps, ...props }) => {
   const { control } = useFormContext();
   return (
     <Controller
@@ -99,7 +101,7 @@ export const RHFNumberField = ({ name, helperText, prefix, suffix, max, min, ...
           InputProps={{
             startAdornment: prefix ? <InputAdornment position="start">{prefix}</InputAdornment> : undefined,
             endAdornment: suffix ? <InputAdornment position="end">{suffix}</InputAdornment> : undefined,
-            ...props.InputProps,
+            ...InputProps,
           }}
           {...props}
         />

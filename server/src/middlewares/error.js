@@ -68,6 +68,8 @@ export const errorHandler = (err, req, res, _next) => {
         ? 'Something went wrong. Please try again.'
         : error.message,
     errors: error.errors?.length ? error.errors : undefined,
+    // Only the handful of tagged failures carry this; everything else is left off.
+    code: error.code || undefined,
   };
 
   if (env.exposeErrorStacks && error.statusCode >= 500) body.stack = err.stack;

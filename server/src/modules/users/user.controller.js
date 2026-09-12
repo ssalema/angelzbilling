@@ -66,6 +66,20 @@ const shape = (user, stats = {}) => ({
   billTotal: round2(stats.total || 0),
 });
 
+// A location worded the way the person themselves reads it — "Testing (TB)", or
+// the Head Office when no branch is assigned.
+const locationLabelOf = (branch) => {
+  if (!branch) return `${HEAD_OFFICE_LABEL} (${HEAD_OFFICE_CODE})`;
+  return branch.code ? `${branch.name} (${branch.code})` : branch.name;
+};
+
+// The same label for a location we hold only by id.
+const locationLabelFor = async (branchId) => {
+  if (!branchId) return locationLabelOf(null);
+  const branch = await Branch.findById(branchId).select('name code').lean();
+  return branch ? locationLabelOf(branch) : 'their previous location';
+};
+
 export const listUsers = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
   const { search, role, status, branch, sort } = req.query;
@@ -202,12 +216,34 @@ export const updateUser = asyncHandler(async (req, res) => {
     await assertAnotherMainSuperAdminRemains(user._id);
   }
 
+  const movedLocation =
+    branchesOn(req) && String(toBranchId(previousBranch) || '') !== String(nextBranch || '');
+  // Read the location they are leaving before the move overwrites it, so the
+  // notice can name both ends rather than just asking them to sign in again.
+  const leaving = movedLocation ? await locationLabelFor(previousBranch) : null;
+
   Object.assign(user, req.body);
   user.branch = branchesOn(req) ? nextBranch || null : previousBranch;
   await user.save();
   await user.populate('branch', 'name code');
 
-  return sendSuccess(res, { message: `${user.name} updated`, data: shape(user) });
+  // The session ends either way — this says which move ended it.
+  if (movedLocation) {
+    req.revokeNotice = {
+      reason: `Your assigned location was changed from ${leaving} to ${locationLabelOf(
+        user.branch
+      )}. Please sign in again.`,
+      severity: 'info',
+    };
+  }
+
+  // Both halves of a move are worded together, the way a password reset is: the
+  // admin is told the session ended, in the same words the person will read.
+  const message = movedLocation
+    ? `${user.name} moved to ${locationLabelOf(user.branch)}. They must sign in again.`
+    : `${user.name} updated`;
+
+  return sendSuccess(res, { message, data: shape(user) });
 });
 
 export const toggleUserStatus = asyncHandler(async (req, res) => {

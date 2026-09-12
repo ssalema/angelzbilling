@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import Bill from '../../models/Bill.js';
 import Perfume from '../../models/Perfume.js';
 import Customer from '../../models/Customer.js';
-import Settings, { DEFAULT_BILL_PREFIX } from '../../models/Settings.js';
+import Settings, { DEFAULT_BILL_PREFIX, DEFAULT_MAX_DISCOUNT_PERCENT } from '../../models/Settings.js';
 import { moneyFormatter } from '../../utils/money.js';
 import Branch from '../../models/Branch.js';
 import ApiError from '../../utils/ApiError.js';
@@ -177,15 +177,20 @@ export const getBill = asyncHandler(async (req, res) => {
   });
 });
 
-// The discount ceiling this caller is billing under.
+// The discount ceiling this caller is billing under. The cached settings read is
+// lean, so no schema default is applied to it — a document written before this
+// field existed reads back undefined, and the fallback here is the only one there
+// is. It has to be the strict figure: "unset" must not quietly mean "unlimited".
 const discountLimits = (req, settings) => ({
-  maxDiscountPercent: settings.billing?.maxDiscountPercent ?? 100,
+  maxDiscountPercent: settings.billing?.maxDiscountPercent ?? DEFAULT_MAX_DISCOUNT_PERCENT,
   canOverride: req.user.role === 'superadmin' || req.user.role === 'admin',
+  // The refusal names the ceiling in money, because the field it is about is money.
+  formatMoney: moneyFormatter(settings),
 });
 
-// The tax this bill is raised under.
-const resolveTaxPercent = (req, settings) =>
-  req.body.taxPercent ?? settings.billing?.defaultTaxPercent ?? 0;
+// The tax this bill is raised under. It is the store's rate alone — the form
+// shows it read-only, so a rate arriving in the request body is ignored.
+const resolveTaxPercent = (_req, settings) => settings.billing?.defaultTaxPercent ?? 0;
 
 /** Prices and totals without persisting anything — powers the preview dialog. */
 export const previewBill = asyncHandler(async (req, res) => {

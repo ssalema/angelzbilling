@@ -1,9 +1,16 @@
 import { z } from 'zod';
 import { DEFAULT_DIAL_CODE, addContactNumberIssue } from '../../utils/countries.js';
-import { formatGrams } from '../../utils/format.js';
+import { formatCurrency, formatGrams } from '../../utils/format.js';
 
-/** Mirrors the server contract; the server re-prices every line regardless. */
-export const billSchema = z.object({
+/**
+ * Mirrors the server contract; the server re-prices every line regardless.
+ *
+ * Built per caller rather than exported ready-made, because the bill discount is
+ * measured against the store's staff ceiling and who is billing decides whether
+ * that ceiling applies. `discountCapPercent` is the share of the billable amount
+ * this user may discount — 100 for an admin, the store setting for staff.
+ */
+export const buildBillSchema = ({ discountCapPercent = 100 } = {}) => z.object({
   customer: z
     .object({
       name: z.string().trim().min(2, 'Customer name is required').max(120),
@@ -72,6 +79,31 @@ export const billSchema = z.object({
   notes: z.string().trim().max(1000).default(''),
   branch: z.string().optional(),
 }).superRefine((values, ctx) => {
+  // The totals cap the bill discount at what is left to discount, so an
+  // over-sized entry would quietly become a free bill instead of telling anyone.
+  const { subtotal, lineDiscount } = calculateTotals(values.items || [], {
+    taxPercent: 0,
+    extraDiscount: 0,
+  });
+  const discountable = round2(subtotal - lineDiscount);
+  if (round2(values.extraDiscount) > discountable) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['extraDiscount'],
+      message: 'Cannot be more than the amount being billed',
+    });
+  } else if (round2(values.extraDiscount) > staffCeiling(discountable, discountCapPercent)) {
+    // Past the staff ceiling the server refuses the save outright, so saying it
+    // here is the difference between a corrected figure and a lost bill.
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['extraDiscount'],
+      message: `Cannot be more than ${formatCurrency(staffCeiling(discountable, discountCapPercent), {
+        precise: true,
+      })} (${discountCapPercent}%) without a Branch Admin`,
+    });
+  }
+
   // A part payment is checked against the bill it is paying, so this has to sit
   // at the object level where the items and the tax are both in hand.
   if (values.paymentTerm !== 'partial') return;
@@ -99,6 +131,14 @@ export const billSchema = z.object({
     });
   }
 });
+
+/**
+ * The most of a bill this user may discount, in money. The server measures its
+ * ceiling the same way — a share of what is left after the line discounts, not
+ * of the MRP subtotal — so the form and the save agree on the figure.
+ */
+export const staffCeiling = (discountable, capPercent = 100) =>
+  round2((round2(discountable) * Math.max(0, Math.min(100, Number(capPercent) || 0))) / 100);
 
 export const emptyBill = {
   customer: {
@@ -151,4 +191,15 @@ export const calculateTotals = (items = [], { taxPercent = 0, extraDiscount = 0 
     grandTotal,
     totalQuantity: lines.reduce((sum, l) => sum + (Number(l.quantity) || 0), 0),
   };
+};
+
+/**
+ * GST is levied in two equal halves — CGST and SGST — so a slip names both
+ * rather than one combined figure. Any odd paise left by the halving stays with
+ * SGST, so the two parts always add back to the tax actually charged.
+ */
+export const splitGst = (taxPercent = 0, taxAmount = 0) => {
+  const half = round2(Number(taxPercent || 0) / 2);
+  const cgst = round2(Number(taxAmount || 0) / 2);
+  return { half, cgst, sgst: round2(Number(taxAmount || 0) - cgst) };
 };

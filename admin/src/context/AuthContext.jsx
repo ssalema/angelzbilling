@@ -1,5 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
-import api, { setAccessToken, setSessionExpiredHandler } from '../api/client.js';
+import api, {
+  setAccessToken,
+  setSessionExpiredHandler,
+  setSessionRevokedHandler,
+} from '../api/client.js';
 import { HEAD_OFFICE, SESSION_NOTICE, locationOf } from '../utils/constants.js';
 import { authApi } from '../api/endpoints.js';
 
@@ -75,6 +79,15 @@ export const AuthProvider = ({ children }) => {
     // would render the signed-in store profile instead of the public one.
     setBootSettings(null);
   }, []);
+
+  // The server refused a request because the session is over, not because that
+  // one action was out of bounds. It words the reason; this ends the session on
+  // it, so a tab with no live connection lands on the sign-in page all the same.
+  useEffect(() => {
+    setSessionRevokedHandler((message) =>
+      logout(message ? { message, severity: 'error' } : SESSION_NOTICE.ended)
+    );
+  }, [logout]);
 
   const refreshUser = useCallback(async () => {
     const fresh = await authApi.me();

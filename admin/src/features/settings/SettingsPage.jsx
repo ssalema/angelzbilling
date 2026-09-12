@@ -475,6 +475,7 @@ const SettingsPage = () => {
                           suffix="%"
                           disabled={!isMainSuperAdmin}
                           inputProps={{ min: 0, max: 100, step: '0.01' }}
+                          helperText="Charged on every bill, half CGST and half SGST — 0 leaves bills untaxed"
                         />
                       </Grid>
                       <Grid item xs={12} sm={4}>
@@ -484,6 +485,7 @@ const SettingsPage = () => {
                           suffix="%"
                           disabled={!isMainSuperAdmin}
                           inputProps={{ min: 0, max: 100, step: '1' }}
+                          helperText="Most of a bill staff can discount — admins bill without a limit"
                         />
                       </Grid>
                       <Grid item xs={12} sm={8}>

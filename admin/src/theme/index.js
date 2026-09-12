@@ -33,6 +33,14 @@ export const surface = {
   inkOverlay: alpha(brand.ink, 0.78),
 };
 
+// A field that reports a value rather than takes one — Bill by, Branch, the tax
+// rate. Tinted on the input itself, since the outlined field paints its own
+// white, so it reads as locked beside the fields that do accept typing.
+export const readOnlyField = {
+  '& .MuiOutlinedInput-root': { backgroundColor: surface.plumFaint },
+  '& .MuiOutlinedInput-input': { cursor: 'default' },
+};
+
 // The corner a Card turns, in px.
 export const CARD_RADIUS = 14;
 

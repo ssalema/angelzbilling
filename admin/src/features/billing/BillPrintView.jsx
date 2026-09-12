@@ -6,6 +6,7 @@ import { formatContactNumber } from '../../utils/countries.js';
 import { brand } from '../../theme/index.js';
 import { IMG } from '../../utils/image.js';
 import { cachedSiteName } from '../../utils/branding.js';
+import { splitGst } from './billSchema.js';
 
 // The printable bill — a thermal receipt slip, not an A4 invoice.
 
@@ -47,6 +48,8 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
 
   const shop = readShop(store, bill);
   const cur = shop.currency;
+  // Tax is printed the way it is charged: half CGST, half SGST.
+  const gst = splitGst(bill.taxPercent, bill.taxAmount);
   const branch = bill.branch || {};
   const isPaid = (bill.status || 'paid') === 'paid';
   // What is still owed. Bills raised before part payments existed carry no
@@ -175,7 +178,10 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
           <TotalRow label="Subtotal" value={`${cur} ${money(bill.subtotal)}`} />
           {bill.totalDiscount > 0 && <TotalRow label="Discount" value={`- ${cur} ${money(bill.totalDiscount)}`} />}
           {bill.taxAmount > 0 && (
-            <TotalRow label={`Tax (${bill.taxPercent}%)`} value={`${cur} ${money(bill.taxAmount)}`} />
+            <>
+              <TotalRow label={`CGST (${gst.half}%)`} value={`${cur} ${money(gst.cgst)}`} />
+              <TotalRow label={`SGST (${gst.half}%)`} value={`${cur} ${money(gst.sgst)}`} />
+            </>
           )}
 
           <Box sx={{ ...RULE, my: 1, opacity: 0.35 }} />

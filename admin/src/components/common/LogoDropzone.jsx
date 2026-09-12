@@ -13,6 +13,8 @@ const LogoDropzone = ({
   value,
   alt = 'Logo',
   busy = false,
+  // What the frame is busy doing — a removal must not read as an upload.
+  busyLabel = 'Uploading…',
   // Upload percentage, 0–100, while `busy`.
   progress = null,
   disabled = false,
@@ -71,7 +73,7 @@ const LogoDropzone = ({
           <Stack alignItems="center" spacing={1} sx={{ width: '100%', px: 2 }}>
             <CircularProgress size={26} />
             <Typography variant="caption" color="text.secondary">
-              {Number.isFinite(progress) ? `Uploading… ${progress}%` : 'Uploading…'}
+              {Number.isFinite(progress) ? `${busyLabel} ${progress}%` : busyLabel}
             </Typography>
             <LinearProgress
               variant={Number.isFinite(progress) ? 'determinate' : 'indeterminate'}

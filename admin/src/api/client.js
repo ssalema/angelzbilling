@@ -10,6 +10,7 @@ const BASE_URL = trimSlash(import.meta.env.VITE_API_URL) || API_PREFIX;
 // The access token lives in module memory, never in localStorage.
 let accessToken = null;
 let onSessionExpired = null;
+let onSessionRevoked = null;
 
 export const setAccessToken = (token) => {
   accessToken = token;
@@ -19,6 +20,16 @@ export const setAccessToken = (token) => {
 export const getAccessToken = () => accessToken;
 export const setSessionExpiredHandler = (handler) => {
   onSessionExpired = handler;
+};
+
+/**
+ * Called once when the server refuses a request because the session itself is
+ * finished — the account or its location was switched off mid-session. The
+ * realtime nudge normally gets there first; this is the same ending for a tab
+ * that has no socket open.
+ */
+export const setSessionRevokedHandler = (handler) => {
+  onSessionRevoked = handler;
 };
 
 export const api = axios.create({
@@ -36,6 +47,8 @@ api.interceptors.request.use((config) => {
 });
 
 let refreshPromise = null;
+// One ending per session: several screens can fail at once on the same cause.
+let revoking = false;
 
 const refreshAccessToken = async () => {
   if (!refreshPromise) {
@@ -58,6 +71,24 @@ const refreshAccessToken = async () => {
  * above. The socket calls this when the server hangs up on an expired token.
  */
 export const refreshSession = () => refreshAccessToken();
+
+/**
+ * Ends the session on a response that says the session itself is finished — an
+ * account or a location switched off while someone was working. Returns whether
+ * this response was one of those, so callers can fall back to their own wording.
+ */
+const endSession = (response) => {
+  if (response?.status !== 403 || response.data?.code !== 'SESSION_ENDED') return false;
+  // Several screens can fail at once on the same cause; the session ends once.
+  if (revoking) return true;
+
+  revoking = true;
+  setAccessToken(null);
+  Promise.resolve(onSessionRevoked?.(response.data?.message)).finally(() => {
+    revoking = false;
+  });
+  return true;
+};
 
 // Which verbs change something the cached reads describe.
 const MUTATING = new Set(['post', 'put', 'patch', 'delete']);
@@ -82,15 +113,21 @@ api.interceptors.response.use(
           config.headers.Authorization = `Bearer ${token}`;
           return api(config);
         }
-      } catch {
+      } catch (refreshError) {
         setAccessToken(null);
-        onSessionExpired?.();
+        // The refresh was refused because the session is finished, not stale:
+        // that reason is the one worth showing on the sign-in page.
+        if (!endSession(refreshError.response)) onSessionExpired?.();
       }
     }
 
     if (response?.status === 401 && isAuthRoute && config?.url?.includes('/auth/refresh')) {
       setAccessToken(null);
     }
+
+    // The session is over rather than this one request being out of bounds. The
+    // sign-out call itself is skipped, or ending the session would restart this.
+    if (!config?.url?.includes('/auth/logout')) endSession(response);
 
     return Promise.reject(normaliseError(error));
   }
@@ -117,6 +154,7 @@ const normaliseError = (error) => {
     message: data?.message || 'Something went wrong. Please try again.',
     errors: data?.errors || [],
     status,
+    code: data?.code,
     isPermission: status === 403,
     isNotFound: status === 404,
   };

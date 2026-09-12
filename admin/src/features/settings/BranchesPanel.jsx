@@ -167,6 +167,10 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
         : await branchApi.create(values);
 
       // Artwork picked while creating could only be uploaded once an id existed.
+      // The branch itself is already saved by now, so a failed mark is reported
+      // on its own and never sends the form back to "Create branch" — retrying
+      // there would try to create the same branch a second time.
+      let artworkError = null;
       if (values.hasOwnLogo) {
         const branchId = formBranch?.id || result.data?.id || result.data?._id;
         for (const kind of BRANDING_SLOTS.map((slot) => slot.kind)) {
@@ -176,6 +180,8 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
               await branchApi.uploadBranding(branchId, kind, pendingAssets[kind], (value) =>
                 setAssetProgress((current) => ({ ...current, [kind]: value }))
               );
+            } catch (error) {
+              artworkError = error;
             } finally {
               setAssetProgress((current) => ({ ...current, [kind]: null }));
             }
@@ -183,7 +189,12 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
         }
       }
 
-      snackbar.success(result.message);
+      if (artworkError) {
+        snackbar.error(
+          `${result.message}, but the branding could not be uploaded: ${artworkError.message}. ` +
+            'Open the branch and add it again.'
+        );
+      } else snackbar.success(result.message);
       branches.reload();
       refreshSettings();
       setFormBranch(undefined);
@@ -216,10 +227,16 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
 
   // Single-location stores switch branches off entirely.
   const branchesEnabled = settings?.features?.branches !== false;
+  // With nothing to switch on, the toggle would flip straight back off — adding a
+  // branch is what turns branch management on again.
+  const noBranches = !branches.loading && !branches.error && !items.length;
+  // The empty state already explains the off switch, so the notice is for stores
+  // that still have branches sitting deactivated.
+  const showOffNotice = !branchesEnabled && !noBranches;
 
   const healedRef = useRef(false);
   useEffect(() => {
-    if (!branches.data || !items.length || healedRef.current) return;
+    if (!branches.data || healedRef.current) return;
     if (items.some((row) => row.isActive) === branchesEnabled) return;
     healedRef.current = true;
     refreshSettings();
@@ -246,7 +263,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
   const statusConfirm = (row) => ({
     title: row.isActive ? `Deactivate ${row.name}?` : `Activate ${row.name}?`,
     message: row.isActive
-      ? 'No new bills can be raised against this branch, and its staff will not be able to sign in. Existing records are untouched.'
+      ? 'Its staff are signed out everywhere immediately and cannot sign back in, and no new bills can be raised against this branch. Existing records are untouched.'
       : 'Staff assigned to this branch will be able to sign in and bill again.',
     confirmLabel: row.isActive ? 'Deactivate' : 'Activate',
     severity: row.isActive ? 'error' : 'warning',
@@ -410,7 +427,9 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
                 ? 'Only the main Super Admin can change this'
                 : branchesEnabled
                   ? 'Turn off if this store runs from a single location'
-                  : 'Turn on to bill and report per location'
+                  : noBranches
+                    ? 'Add a branch to bill and report per location'
+                    : 'Turn on to bill and report per location'
             }
           >
             <Box component="span">
@@ -419,14 +438,14 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
                 control={
                   <Switch
                     checked={branchesEnabled}
-                    disabled={!isMainSuperAdmin || togglingFeature}
+                    disabled={!isMainSuperAdmin || togglingFeature || noBranches}
                     onChange={(event) => {
                       const next = event.target.checked;
                       if (next) return setBranchesEnabled(true);
                       setConfirm({
                         title: 'Turn branch management off?',
                         message:
-                          'Every branch is deactivated — nothing is deleted, and past bills keep their branch. Branch columns, filters and pickers disappear across the app. Switching this back on reactivates them.',
+                          'Every branch is deactivated and its staff are signed out immediately — nothing is deleted, and past bills keep their branch. Branch columns, filters and pickers disappear across the app. Switching this back on reactivates them.',
                         confirmLabel: 'Turn off',
                         severity: 'warning',
                         action: () => setBranchesEnabled(false),
@@ -442,7 +461,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
               />
             </Box>
           </Tooltip>
-          {isMainSuperAdmin && branchesEnabled && (
+          {isMainSuperAdmin && (branchesEnabled || noBranches) && (
             <Button variant="contained" startIcon={<AddRounded />} onClick={() => setFormBranch(null)}>
               Add branch
             </Button>
@@ -451,7 +470,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
       </Stack>
 
       {canEdit && !isMainSuperAdmin && (
-        <Box sx={{ px: 2.5, pb: !branchesEnabled ? 0 : 2.5 }}>
+        <Box sx={{ px: 2.5, pb: showOffNotice ? 0 : 2.5 }}>
           <Alert severity="info">
             You can see every location here, but your account is assigned to {branchName} — so you can edit that
             branch's details only. Adding, activating or removing a location is the main Super Admin's call.
@@ -459,7 +478,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
         </Box>
       )}
 
-      {!branchesEnabled && (
+      {showOffNotice && (
         <Box sx={{ px: 2.5, pb: 2.5 }}>
           <Alert severity="info" icon={<StoreOutlined />}>
             Branch management is off, so every branch below is deactivated and branch columns, filters and pickers
@@ -486,7 +505,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
           <EmptyState
             icon={StoreOutlined}
             title="No branches yet"
-            description="The Head Office is already a location, so billing works without any branches. Add one for each additional shop you run."
+            description="The Head Office is already a location, so billing works without any branches — branch management stays off until you add one. Add a branch for each additional shop you run."
             action={
               isMainSuperAdmin && (
                 <Button variant="contained" startIcon={<AddRounded />} onClick={() => setFormBranch(null)}>

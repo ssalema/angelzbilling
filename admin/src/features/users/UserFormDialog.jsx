@@ -22,7 +22,14 @@ import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { applyServerErrors } from '../../api/client.js';
-import { ROLES, HEAD_OFFICE, locationOf, locationOptions, PASSWORD_HINT } from '../../utils/constants.js';
+import {
+  ROLES,
+  HEAD_OFFICE,
+  locationOf,
+  locationOptions,
+  locationFullLabel,
+  PASSWORD_HINT,
+} from '../../utils/constants.js';
 import { DEFAULT_DIAL_CODE, addContactNumberIssue } from '../../utils/countries.js';
 import { GUTTER } from '../../theme/index.js';
 
@@ -202,7 +209,7 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
                   disabled={!isMainSuperAdmin}
                   options={locations.map((option) => ({
                     value: option.id,
-                    label: option.code ? `${option.name} (${option.code})` : option.name,
+                    label: locationFullLabel(option),
                   }))}
                   helperText={
                     !isMainSuperAdmin

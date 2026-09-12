@@ -7,6 +7,7 @@ import asyncHandler from '../../utils/asyncHandler.js';
 import { sendSuccess } from '../../utils/ApiResponse.js';
 import { uploadBuffer, destroyAsset } from '../../config/cloudinary.js';
 import { refreshFeatures } from '../../utils/featureFlags.js';
+import { signOutBranchUsers } from '../branches/branch.sessions.js';
 
 const urlOrEmpty = (host) =>
   z
@@ -117,7 +118,11 @@ export const updateSettings = asyncHandler(async (req, res) => {
 
   const nextBranches = req.body.features?.branches;
   const currentBranches = settings.features?.branches !== false;
+  let closedBranchIds = [];
   if (nextBranches === false && currentBranches) {
+    // Which locations this switch closes, read before the update so their people
+    // can be signed out of them below.
+    closedBranchIds = (await Branch.find({ isActive: true }).select('_id').lean()).map((b) => b._id);
     await Branch.updateMany({ isActive: true }, { $set: { isActive: false, deactivatedByFeature: true } });
   } else if (nextBranches === true && !currentBranches) {
     const restored = await Branch.updateMany(
@@ -139,6 +144,10 @@ export const updateSettings = asyncHandler(async (req, res) => {
   // The bill print header reads a cached copy of the whole document, so that
   // goes too — otherwise a renamed store keeps printing its old name for a minute.
   Settings.invalidateCache();
+
+  // Switching branch management off closes every location, so it signs out
+  // everyone scoped to one, the same way closing a single branch does.
+  if (closedBranchIds.length) await signOutBranchUsers(closedBranchIds);
 
   return sendSuccess(res, { message: 'Settings saved', data: settings });
 });

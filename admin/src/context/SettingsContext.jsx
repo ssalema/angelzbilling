@@ -3,6 +3,7 @@ import { settingsApi } from '../api/endpoints.js';
 import { useAuth } from './AuthContext.jsx';
 import { configureCurrency, currencySymbol as configuredSymbol } from '../utils/format.js';
 import { cacheSiteName, cachedSiteName, documentTitle } from '../utils/branding.js';
+import { DEFAULT_MAX_DISCOUNT_PERCENT } from '../utils/constants.js';
 
 const SettingsContext = createContext(null);
 
@@ -68,6 +69,12 @@ export const SettingsProvider = ({ children }) => {
       logo: settings?.branding?.logo?.url || settings?.logo || '',
       currencySymbol: configuredSymbol(),
       defaultTaxPercent: settings?.billing?.defaultTaxPercent ?? 0,
+      // How much of a bill staff may discount before a Branch Admin is needed.
+      // The server refuses anything past this regardless; carrying it here is
+      // what lets the billing form say so while the figure is being typed.
+      // Absent — an unsaved settings row, or a failed load — falls back to the
+      // strict figure rather than to none, matching the server.
+      maxDiscountPercent: settings?.billing?.maxDiscountPercent ?? DEFAULT_MAX_DISCOUNT_PERCENT,
       // Off for single-location stores: every branch column, filter and chip hides.
       branchesEnabled: settings?.features?.branches !== false,
     }),

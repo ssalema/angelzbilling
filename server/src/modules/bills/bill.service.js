@@ -4,6 +4,7 @@ import Counter from '../../models/Counter.js';
 import { DEFAULT_BILL_PREFIX } from '../../models/Settings.js';
 import ApiError from '../../utils/ApiError.js';
 import { round2 } from '../../utils/query.js';
+import { moneyFormatter } from '../../utils/money.js';
 import { resolveSizeGrams, gramsForQuantity, unitsFromGrams, formatGrams } from '../../utils/grams.js';
 import { toBranchId, toLocationId, isValidLocationId, HEAD_OFFICE_LABEL } from '../../utils/locations.js';
 
@@ -158,7 +159,13 @@ export const deductStock = async (stockOps, session = null) => {
 /** Single place where money is added up, so preview and save can never disagree. */
 export const calculateTotals = (
   lines,
-  { taxPercent = 0, extraDiscount = 0, maxDiscountPercent = 100, canOverride = true } = {}
+  {
+    taxPercent = 0,
+    extraDiscount = 0,
+    maxDiscountPercent = 100,
+    canOverride = true,
+    formatMoney = moneyFormatter(),
+  } = {}
 ) => {
   const subtotal = round2(lines.reduce((sum, l) => sum + l.mrp * l.quantity, 0));
   const afterLineDiscounts = round2(lines.reduce((sum, l) => sum + l.lineTotal, 0));
@@ -171,9 +178,16 @@ export const calculateTotals = (
     : round2((afterLineDiscounts * Math.max(0, Math.min(100, Number(maxDiscountPercent) || 0))) / 100);
 
   if (round2(extraDiscount) > ceiling) {
+    // Past the billable amount it is not a permission problem, it is arithmetic:
+    // no one, admin included, can discount more than the bill is worth.
+    if (round2(extraDiscount) > afterLineDiscounts) {
+      throw ApiError.badRequest('The bill discount cannot be more than the amount being billed.');
+    }
+    // Named in money as well as percent: the field being refused is a cash
+    // figure, and "20%" alone leaves the cashier to work out 20% of what.
     throw ApiError.forbidden(
-      `A bill discount above ${maxDiscountPercent}% needs a Branch Admin. ` +
-        'Ask an admin to raise this bill, or lower the discount.'
+      `A bill discount above ${formatMoney(ceiling)} (${maxDiscountPercent}% of this bill) ` +
+        'needs a Branch Admin. Ask an admin to raise this bill, or lower the discount.'
     );
   }
 

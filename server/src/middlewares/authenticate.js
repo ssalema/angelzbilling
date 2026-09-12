@@ -3,6 +3,7 @@ import ApiError from '../utils/ApiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { verifyAccessToken, isAccessTokenRevoked } from '../utils/tokens.js';
 import { getCachedUser, setCachedUser } from '../utils/userCache.js';
+import { isBranchInactive, BRANCH_INACTIVE_MESSAGE } from '../utils/branchAccess.js';
 
 /** The branch fields the sidebar and the printed bill header both read. */
 const BRANCH_FIELDS = 'name code address phone phoneCountryCode gstin isActive hasOwnLogo logo favicon';
@@ -44,7 +45,11 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
   }
 
   if (!user) throw ApiError.unauthorized('This account no longer exists');
-  if (!user.isActive) throw ApiError.forbidden('Your account has been deactivated. Please contact the super admin.');
+  if (!user.isActive) throw ApiError.sessionEnded('Your account has been deactivated. Please contact the super admin.');
+
+  // The location behind this session closed while it was open: the same refusal
+  // sign-in would give, so nobody keeps working from a counter that is shut.
+  if (isBranchInactive(user)) throw ApiError.sessionEnded(BRANCH_INACTIVE_MESSAGE);
 
   // A password change invalidates tokens issued before it.
   if (user.passwordChangedAt && payload.iat * 1000 < user.passwordChangedAt.getTime()) {

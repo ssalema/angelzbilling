@@ -102,11 +102,17 @@ const announce = (req, body, { resource, scoped, revokes, also = [] }) => {
 };
 
 // A deactivated account cannot sign back in, so say that rather than asking for
-// a fresh sign-in that would only be refused. A new password needs naming too,
-// or the old one is the first thing the person tries.
+// a fresh sign-in that would only be refused — and say it in the red the sign-in
+// form itself would use, since that refusal is what a retry would earn. A new
+// password needs naming too, or the old one is the first thing the person tries.
 const revokeReasonFor = (req, body) => {
+  // Deactivation outranks anything else the same edit did — there is no signing
+  // back in to the new location.
   if (body?.data?.isActive === false)
-    return { reason: 'Your account has been deactivated. Please contact the super admin.', severity: 'warning' };
+    return { reason: 'Your account has been deactivated. Please contact the super admin.', severity: 'error' };
+  // A handler that knows exactly what it changed words the notice itself —
+  // moving an account between locations names both ends of the move.
+  if (req.revokeNotice?.reason) return { severity: 'info', ...req.revokeNotice };
   if (matches(req, '/:id/reset-password'))
     return {
       reason: 'Your password was changed by an administrator. Please sign in with your new password.',

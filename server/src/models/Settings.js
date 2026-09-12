@@ -12,6 +12,11 @@ const imageSchema = new mongoose.Schema(
 // The bill/SKU prefix a fresh install starts on, and the one fallback every reader defers to.
 export const DEFAULT_BILL_PREFIX = 'AP';
 
+// How much of a bill staff may discount on their own. Every reader falls back to
+// this rather than to "no ceiling": a settings document written before the field
+// existed reads back undefined, and a missing cap has to be read the strict way.
+export const DEFAULT_MAX_DISCOUNT_PERCENT = 20;
+
 /** Singleton document — there is exactly one settings row, keyed 'general'. */
 const settingsSchema = new mongoose.Schema(
   {
@@ -47,7 +52,7 @@ const settingsSchema = new mongoose.Schema(
       currencySymbol: { type: String, default: '₹' },
       billPrefix: { type: String, default: DEFAULT_BILL_PREFIX, uppercase: true, trim: true, maxlength: 6 },
       defaultTaxPercent: { type: Number, default: 0, min: 0, max: 100 },
-      maxDiscountPercent: { type: Number, default: 20, min: 0, max: 100 },
+      maxDiscountPercent: { type: Number, default: DEFAULT_MAX_DISCOUNT_PERCENT, min: 0, max: 100 },
       invoiceFooter: { type: String, default: 'Thank you for shopping with us.', maxlength: 300 },
       termsAndConditions: { type: String, default: '', maxlength: 2000 },
     },

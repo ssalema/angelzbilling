@@ -1,14 +1,32 @@
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Box, Container } from '@mui/material';
 import Sidebar, { SIDEBAR_WIDTH } from './Sidebar.jsx';
 import Topbar from './Topbar.jsx';
 import { RouteSkeleton } from '../components/common/StateViews.jsx';
 import ScrollManager from '../components/common/ScrollManager.jsx';
+import { useAuth } from '../context/AuthContext.jsx';
+import { useRealtime } from '../context/RealtimeContext.jsx';
 
 const DashboardLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+
+  // The sidebar prints the signed-in account's branch logo, which is carried on
+  // the session rather than fetched per screen. A branch write — its branding
+  // replaced or removed — would otherwise leave that mark on screen until the
+  // next sign-in, so the session is re-read whenever branches change.
+  const { user, refreshUser } = useAuth();
+  const { revisions } = useRealtime();
+  const branchRevision = revisions?.branches || 0;
+  const branchId = user?.branch?.id && !user.branch.isHeadOffice ? String(user.branch.id) : null;
+
+  useEffect(() => {
+    if (!branchRevision || !branchId) return;
+    refreshUser().catch(() => {
+      /* the branch change itself already succeeded */
+    });
+  }, [branchRevision, branchId, refreshUser]);
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>

@@ -1,11 +1,14 @@
 // Operational (expected) error.
 export class ApiError extends Error {
-  constructor(statusCode, message, errors = [], isOperational = true) {
+  constructor(statusCode, message, errors = [], isOperational = true, code = null) {
     super(message);
     this.name = 'ApiError';
     this.statusCode = statusCode;
     this.errors = errors;
     this.isOperational = isOperational;
+    // An optional tag for the few failures the client has to act on rather than
+    // merely report. See `sessionEnded`.
+    this.code = code;
     Error.captureStackTrace(this, this.constructor);
   }
 
@@ -19,6 +22,14 @@ export class ApiError extends Error {
 
   static forbidden(message = 'You do not have permission to perform this action') {
     return new ApiError(403, message);
+  }
+
+  // Refused because the session itself is no longer usable — the account, or the
+  // location it sits at, was switched off while the person was working. The
+  // client signs out on this tag and shows `message` on the sign-in page rather
+  // than leaving someone clicking around a screen that can no longer load.
+  static sessionEnded(message = 'Your session has ended. Please sign in again.') {
+    return new ApiError(403, message, [], true, 'SESSION_ENDED');
   }
 
   static notFound(message = 'Resource not found') {

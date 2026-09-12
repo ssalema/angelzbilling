@@ -37,8 +37,9 @@ import useApiResource from '../../hooks/useApiResource.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
-import { formatCurrency, formatDate } from '../../utils/format.js';
-import { PAYMENT_METHOD_LABELS, locationOf } from '../../utils/constants.js';
+import { formatCurrency, formatDate, formatNumber } from '../../utils/format.js';
+import { splitGst } from './billSchema.js';
+import { PAYMENT_METHOD_LABELS, locationFullLabel } from '../../utils/constants.js';
 import { formatContactNumber } from '../../utils/countries.js';
 import { FONT, CARD_HEAD_PAD, CARD_PAD, GUTTER, brand, numericText, statusColors } from '../../theme/index.js';
 
@@ -140,6 +141,8 @@ const BillDetailPage = () => {
   const items = bill.items || [];
   const paymentLabel = PAYMENT_METHOD_LABELS[bill.paymentMethod] || bill.paymentMethod;
   const savings = Number(bill.totalDiscount || 0);
+  // Tax is shown the way it is charged: half CGST, half SGST.
+  const gst = splitGst(bill.taxPercent, bill.taxAmount);
 
   const amountDue = Number(bill.amountDue || 0);
   // Only a bill that is still owed something can take a payment.
@@ -299,12 +302,9 @@ const BillDetailPage = () => {
                   {branchesEnabled && (
                     <SummaryRow
                       label="Branch"
-                      value={(() => {
-                        // No branch on the bill means it was raised at the Head
-                        // Office, which is a location like any other.
-                        const location = locationOf(bill.branch);
-                        return location.code ? `${location.name} (${location.code})` : location.name;
-                      })()}
+                      // No branch on the bill means it was raised at the Head
+                      // Office, which is a location like any other.
+                      value={locationFullLabel(bill.branch)}
                     />
                   )}
                   <SummaryRow label="Billed by" value={bill.billedBy?.name || 'NA'} />
@@ -335,10 +335,16 @@ const BillDetailPage = () => {
                     />
                   )}
                   {bill.taxAmount > 0 && (
-                    <SummaryRow
-                      label={`Tax (${bill.taxPercent}%)`}
-                      value={formatCurrency(bill.taxAmount, { precise: true })}
-                    />
+                    <>
+                      <SummaryRow
+                        label={`CGST (${formatNumber(gst.half)}%)`}
+                        value={formatCurrency(gst.cgst, { precise: true })}
+                      />
+                      <SummaryRow
+                        label={`SGST (${formatNumber(gst.half)}%)`}
+                        value={formatCurrency(gst.sgst, { precise: true })}
+                      />
+                    </>
                   )}
                   <SummaryRow label="Payment mode" value={paymentLabel} />
 

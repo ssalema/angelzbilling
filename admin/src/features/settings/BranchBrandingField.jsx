@@ -23,7 +23,9 @@ const BranchBrandingField = ({
 }) => {
   const inputRef = useRef(null);
   const snackbar = useSnackbar();
-  const [busy, setBusy] = useState(false);
+  // Null when idle, otherwise 'upload' or 'remove' — the frame reads back the
+  // work it is actually doing, so a delete never announces itself as an upload.
+  const [busy, setBusy] = useState(null);
   // Null except while a file is on the wire — a removal is busy with nothing to
   // measure, so it leaves this alone and the frame runs an indeterminate bar.
   const [progress, setProgress] = useState(null);
@@ -53,7 +55,7 @@ const BranchBrandingField = ({
       return;
     }
 
-    setBusy(true);
+    setBusy('upload');
     setProgress(0);
     try {
       const result = await branchApi.uploadBranding(branchId, kind, file, setProgress);
@@ -62,7 +64,7 @@ const BranchBrandingField = ({
     } catch (error) {
       snackbar.error(error.message);
     } finally {
-      setBusy(false);
+      setBusy(null);
       setProgress(null);
     }
   };
@@ -72,7 +74,8 @@ const BranchBrandingField = ({
       onPendingFile?.(null);
       return;
     }
-    setBusy(true);
+    setBusy('remove');
+    setProgress(null);
     try {
       const result = await branchApi.removeBranding(branchId, kind);
       snackbar.success(result.message);
@@ -80,19 +83,28 @@ const BranchBrandingField = ({
     } catch (error) {
       snackbar.error(error.message);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   };
 
   const preview = pendingUrl || current || '';
   const name = label.toLowerCase();
+  const removing = busy === 'remove';
 
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="baseline" spacing={1} sx={{ mb: 0.75 }}>
         <Typography variant="subtitle2">{label}</Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'right' }}>
-          {pendingUrl ? 'Uploads when you create the branch' : hint}
+          {/* State first, then the staged note, then the spec — the order the
+              store's own branding slot reads in. */}
+          {removing
+            ? 'Removing…'
+            : busy || uploading
+              ? 'Uploading…'
+              : pendingUrl
+                ? 'Uploads when you create the branch'
+                : hint}
         </Typography>
       </Stack>
 
@@ -100,8 +112,10 @@ const BranchBrandingField = ({
         openRef={inputRef}
         value={preview}
         alt={label}
-        busy={busy || uploading}
-        progress={busy ? progress : uploadProgress}
+        busy={Boolean(busy) || uploading}
+        // The wording the profile photo shows for the same two states.
+        busyLabel={removing ? 'Removing…' : 'Uploading…'}
+        progress={removing ? null : busy ? progress : uploadProgress}
         disabled={disabled}
         height={frameHeight}
         onFiles={(files) => choose(files?.[0])}

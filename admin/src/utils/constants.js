@@ -1,5 +1,13 @@
 /** Shared option lists. Keeping them here stops labels drifting between screens. */
 
+/**
+ * How much of a bill staff may discount without a Branch Admin, when the store's
+ * own figure is not to hand. It mirrors DEFAULT_MAX_DISCOUNT_PERCENT on the
+ * server, which is the side that actually enforces it — the two have to agree or
+ * the billing form would promise a ceiling the server does not keep.
+ */
+export const DEFAULT_MAX_DISCOUNT_PERCENT = 20;
+
 // The store's locations are the Head Office plus every branch.
 export const HEAD_OFFICE = { id: 'head-office', name: 'Head Office', code: 'HO', isHeadOffice: true };
 
@@ -8,6 +16,16 @@ export const locationOf = (branch) => (branch?.id ? branch : HEAD_OFFICE);
 
 /** How a location is labelled in a table cell or chip. */
 export const locationLabel = (branch) => locationOf(branch).name;
+
+/**
+ * The fuller label a picker or a summary line uses — "Testing (TB)". The server
+ * words location changes the same way, so the notice someone reads on the
+ * sign-in page names the location exactly as the picker that moved them did.
+ */
+export const locationFullLabel = (branch) => {
+  const location = locationOf(branch);
+  return location.code ? `${location.name} (${location.code})` : location.name;
+};
 
 /** Head Office first, then the branches — the order every picker uses. */
 export const locationOptions = (branches = []) => [
@@ -122,8 +140,11 @@ export const PASSWORD_HINT =
 /**
  * Why a session ended, as the sign-in page states it. One family of wording, so
  * a session that ends on its own always explains itself the same way: what
- * happened, then what to do next. `warning` is for the two the person cannot
- * simply sign back in from.
+ * happened, then what to do next. Severity follows what the person can do about
+ * it: `info` when signing back in fixes it, `warning` when the session lapsed on
+ * its own, and `error` for the two that will refuse a fresh sign-in as well — so
+ * being shut out mid-session looks exactly like being shut out at the sign-in
+ * form, which is the same red banner the login attempt itself would raise.
  */
 export const SESSION_NOTICE = {
   expired: { message: 'Your session expired. Please sign in again.', severity: 'warning' },
@@ -131,5 +152,15 @@ export const SESSION_NOTICE = {
   passwordChanged: {
     message: 'Your password was changed. Please sign in with your new password.',
     severity: 'info',
+  },
+  // Both ends of the same sentence the server sends when an account or the
+  // location behind it is switched off mid-session.
+  deactivated: {
+    message: 'Your account has been deactivated. Please contact the super admin.',
+    severity: 'error',
+  },
+  branchInactive: {
+    message: 'Your branch is currently inactive. Please contact the super admin.',
+    severity: 'error',
   },
 };
