@@ -107,7 +107,7 @@ const RevenueChart = ({ data, loading, error, onRetry, range, onRangeChange, gro
         >
           <Box>
             <Stack direction="row" spacing={1.25} alignItems="center">
-              <SectionTitle title="Revenue growth" sx={{ mb: 0 }} />
+              <SectionTitle title={`${metricLabel[metric]} growth`} sx={{ mb: 0 }} />
               {typeof growth === 'number' && Number.isFinite(growth) && (
                 <Chip
                   size="small"
