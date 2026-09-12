@@ -44,7 +44,7 @@ export const authenticate = asyncHandler(async (req, _res, next) => {
   }
 
   if (!user) throw ApiError.unauthorized('This account no longer exists');
-  if (!user.isActive) throw ApiError.forbidden('Your account has been deactivated. Contact the super admin.');
+  if (!user.isActive) throw ApiError.forbidden('Your account has been deactivated. Please contact the super admin.');
 
   // A password change invalidates tokens issued before it.
   if (user.passwordChangedAt && payload.iat * 1000 < user.passwordChangedAt.getTime()) {

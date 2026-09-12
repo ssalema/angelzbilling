@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import api, { setAccessToken, setSessionExpiredHandler } from '../api/client.js';
-import { HEAD_OFFICE, locationOf } from '../utils/constants.js';
+import { HEAD_OFFICE, SESSION_NOTICE, locationOf } from '../utils/constants.js';
 import { authApi } from '../api/endpoints.js';
 
 const AuthContext = createContext(null);
@@ -9,7 +9,9 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [bootSettings, setBootSettings] = useState(null);
   const [booting, setBooting] = useState(true);
-  const [sessionExpired, setSessionExpired] = useState(false);
+  // Why the last session ended, worded for the person reading the sign-in page.
+  // `{ message, severity }`, or null after a sign-out they asked for themselves.
+  const [sessionNotice, setSessionNotice] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,7 +45,9 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     setSessionExpiredHandler(() => {
       setUser(null);
-      setSessionExpired(true);
+      // A revoked session usually fails a refresh moments later. The reason the
+      // server gave is the better one, so it is not replaced by this fallback.
+      setSessionNotice((current) => current || SESSION_NOTICE.expired);
     });
   }, []);
 
@@ -52,11 +56,14 @@ export const AuthProvider = ({ children }) => {
     setAccessToken(accessToken);
     setUser(loggedIn);
     if (settings) setBootSettings(settings);
-    setSessionExpired(false);
+    setSessionNotice(null);
     return loggedIn;
   }, []);
 
-  const logout = useCallback(async () => {
+  // `notice` is carried to the sign-in page when the session ended on its own
+  // rather than because the person asked to sign out.
+  const logout = useCallback(async (notice = null) => {
+    setSessionNotice(notice?.message ? { severity: 'info', ...notice } : null);
     try {
       await authApi.logout();
     } catch {
@@ -96,7 +103,7 @@ export const AuthProvider = ({ children }) => {
       user,
       booting,
       bootSettings,
-      sessionExpired,
+      sessionNotice,
       isAuthenticated: Boolean(user),
       isSuperAdmin,
       isMainSuperAdmin,
@@ -115,7 +122,7 @@ export const AuthProvider = ({ children }) => {
       user,
       booting,
       bootSettings,
-      sessionExpired,
+      sessionNotice,
       isSuperAdmin,
       isMainSuperAdmin,
       myLocationId,

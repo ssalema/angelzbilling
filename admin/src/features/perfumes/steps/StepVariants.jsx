@@ -35,7 +35,7 @@ import { RHFTextField, RHFSelect, RHFChipInput, RHFNumberField } from '../../../
 import { EmptyState } from '../../../components/common/StateViews.jsx';
 import SectionTitle from '../../../components/common/SectionTitle.jsx';
 import { PERFUME_SIZES, SELECTOR_STYLES } from '../../../utils/constants.js';
-import { currencySymbol, formatCurrency, formatGrams, formatNumber, unitsFromGrams } from '../../../utils/format.js';
+import { currencySymbol, formatPrice, formatGrams, formatNumber, unitsFromGrams } from '../../../utils/format.js';
 import { computeFinalPrice, sizeGramsFor } from '../perfumeSchema.js';
 import { FONT, CARD_HEAD_PAD, CARD_PAD, CARD_RADIUS, GUTTER, INSET_RADIUS, ICON, brand, numericText, surface } from '../../../theme/index.js';
 
@@ -170,7 +170,7 @@ const VariantRow = ({ index, attributeNames, onRemove, onOpenDetail, expanded, p
         {/* Selling price is derived, never typed — one source of truth for money */}
         <TableCell align="right" sx={{ width: 106 }}>
           <Typography variant="body2" sx={{ fontWeight: 700, color: 'primary.main' }}>
-            {formatCurrency(sellingPrice)}
+            {formatPrice(sellingPrice)}
           </Typography>
         </TableCell>
 
@@ -277,11 +277,11 @@ const BasePricing = () => {
               Final price (auto-calculated)
             </Typography>
             <Typography variant="h5" sx={{ ...numericText, color: 'primary.main', fontSize: FONT.figureMd, mt: 0.25 }}>
-              {formatCurrency(finalPrice, { precise: true })}
+              {formatPrice(finalPrice)}
             </Typography>
             {saving > 0 && (
               <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 700 }}>
-                Customer saves {formatCurrency(saving, { precise: true })}
+                Customer saves {formatPrice(saving)}
               </Typography>
             )}
           </Box>
@@ -568,8 +568,8 @@ const StepVariants = () => {
                       variant="outlined"
                       label={
                         totals.minPrice === totals.maxPrice
-                          ? formatCurrency(totals.minPrice)
-                          : `${formatCurrency(totals.minPrice)} – ${formatCurrency(totals.maxPrice)}`
+                          ? formatPrice(totals.minPrice)
+                          : `${formatPrice(totals.minPrice)} – ${formatPrice(totals.maxPrice)}`
                       }
                     />
                   </Stack>

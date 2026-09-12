@@ -98,9 +98,19 @@ export const IMAGE_TYPES = 'image/jpeg,image/jpg,image/pjpeg,.jfif,image/png,ima
 /** Cloudinary and the server both cap a single upload here. */
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
+const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'jpe', 'jfif', 'png', 'gif', 'webp'];
+
+// Windows often hands the browser a blank type for .jfif and other less common
+// extensions, so the name is the fallback. The server reads the actual bytes.
+const looksLikeImage = (file) => {
+  if (file?.type?.startsWith('image/')) return true;
+  const name = file?.name || '';
+  return IMAGE_EXTENSIONS.includes(name.split('.').pop()?.toLowerCase());
+};
+
 // Why an image was turned away, or null if it is fine.
 export const rejectImageReason = (file) => {
-  if (!file?.type?.startsWith('image/')) return 'That is not an image — pick a JPEG, PNG, WEBP or GIF.';
+  if (!looksLikeImage(file)) return 'That is not an image — pick a JPEG, PNG, WEBP or GIF.';
   if (file.size > MAX_UPLOAD_BYTES) return 'That image is over 5MB. Save a smaller copy and try again.';
   return null;
 };
@@ -108,3 +118,18 @@ export const rejectImageReason = (file) => {
 // The password rule, worded once.
 export const PASSWORD_HINT =
   'At least 8 characters with an uppercase letter, a lowercase letter and a number';
+
+/**
+ * Why a session ended, as the sign-in page states it. One family of wording, so
+ * a session that ends on its own always explains itself the same way: what
+ * happened, then what to do next. `warning` is for the two the person cannot
+ * simply sign back in from.
+ */
+export const SESSION_NOTICE = {
+  expired: { message: 'Your session expired. Please sign in again.', severity: 'warning' },
+  ended: { message: 'Your session has ended. Please sign in again.', severity: 'info' },
+  passwordChanged: {
+    message: 'Your password was changed. Please sign in with your new password.',
+    severity: 'info',
+  },
+};

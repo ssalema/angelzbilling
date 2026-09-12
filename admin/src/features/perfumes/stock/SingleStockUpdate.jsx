@@ -44,9 +44,12 @@ const SingleStockUpdate = ({ onUpdated }) => {
 
   const debouncedQuery = useDebounce(query, 300);
 
+  // The dropdown shows stock on hand, and a bill raised elsewhere moves it while
+  // this panel is open — a stale figure here becomes a wrong write.
   const options = useApiResource(
     () => perfumeApi.stockSearch({ q: debouncedQuery, limit: 20 }),
-    [debouncedQuery]
+    [debouncedQuery],
+    { watch: 'perfumes' }
   );
 
   const chosen = useMemo(() => new Set(rows.map((row) => row.id)), [rows]);

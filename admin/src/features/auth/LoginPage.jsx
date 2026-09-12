@@ -32,7 +32,7 @@ const schema = z.object({
 });
 
 const LoginPage = () => {
-  const { login, sessionExpired } = useAuth();
+  const { login, sessionNotice } = useAuth();
   const { siteName, logo } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
@@ -158,14 +158,14 @@ const LoginPage = () => {
             Enter your credentials to access the admin panel.
           </Typography>
 
-          {sessionExpired && !formError && (
-            <Alert severity="warning" sx={{ mb: 2.5 }}>
-              Your session expired. Please sign in again.
+          {sessionNotice && !formError && (
+            <Alert severity={sessionNotice.severity || 'info'} sx={{ mb: 2.5 }}>
+              {sessionNotice.message}
             </Alert>
           )}
 
           {formError && (
-            <Alert severity="error" sx={{ mb: 2.5 }} onClose={() => setFormError(null)}>
+            <Alert severity="error" sx={{ mb: 2.5 }}>
               {formError}
             </Alert>
           )}

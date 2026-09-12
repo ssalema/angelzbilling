@@ -16,6 +16,7 @@ import {
 } from '@mui/material';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import { clampNumericInput } from '../../utils/numberInput.js';
 
 // Thin react-hook-form bindings for MUI inputs.
 
@@ -76,7 +77,7 @@ export const RHFPasswordField = ({ name, helperText, defaultVisible = false, ...
   );
 };
 
-export const RHFNumberField = ({ name, helperText, prefix, suffix, ...props }) => {
+export const RHFNumberField = ({ name, helperText, prefix, suffix, max, min, ...props }) => {
   const { control } = useFormContext();
   return (
     <Controller
@@ -87,9 +88,9 @@ export const RHFNumberField = ({ name, helperText, prefix, suffix, ...props }) =
           {...field}
           value={field.value ?? ''}
           onChange={(event) => {
-            const raw = event.target.value.replace(/[^\d.]/g, '');
+            const next = clampNumericInput(event.target.value, { min, max });
             // Keep the field empty-able while typing; commit a number otherwise.
-            field.onChange(raw === '' ? '' : Number(raw));
+            field.onChange(next === '' || next === '.' ? '' : Number(next));
           }}
           type="text"
           inputMode="decimal"

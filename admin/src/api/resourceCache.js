@@ -28,10 +28,15 @@ export const writeResource = (key, value) => {
   while (store.size > MAX_ENTRIES) store.delete(store.keys().next().value);
 };
 
-// Drops cached reads.
+// Drops cached reads. A screen names a slice of a resource ('perfumes:list'),
+// and a write to 'perfumes' drops every slice of it as well as the whole.
 export const clearResourceCache = (name) => {
   if (!name) return store.clear();
-  for (const key of [...store.keys()]) if (key.startsWith(`${name} :: `)) store.delete(key);
+  for (const key of [...store.keys()]) {
+    const end = key.indexOf(' :: ');
+    const owner = end === -1 ? key : key.slice(0, end);
+    if (owner === name || owner.startsWith(`${name}:`)) store.delete(key);
+  }
 };
 
 export default store;

@@ -47,9 +47,12 @@ const SinglePriceUpdate = ({ onUpdated }) => {
 
   const debouncedQuery = useDebounce(query, 300);
 
+  // The dropdown shows the prices in force right now, and those move while this
+  // panel is open — a stale figure here becomes a wrong write.
   const options = useApiResource(
     () => perfumeApi.priceSearch({ q: debouncedQuery, limit: 20 }),
-    [debouncedQuery]
+    [debouncedQuery],
+    { watch: 'perfumes' }
   );
 
   const chosen = useMemo(() => new Set(rows.map((row) => row.id)), [rows]);

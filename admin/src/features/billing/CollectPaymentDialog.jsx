@@ -23,6 +23,7 @@ import { billApi } from '../../api/endpoints.js';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { currencySymbol, formatCurrency } from '../../utils/format.js';
 import { PAYMENT_METHODS } from '../../utils/constants.js';
+import { clampNumericInput } from '../../utils/numberInput.js';
 import { FONT, INSET_RADIUS, numericText, statusColors, surface } from '../../theme/index.js';
 
 const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
@@ -107,7 +108,9 @@ const CollectPaymentDialog = ({ open, bill, onClose, onCollected }) => {
           type="text"
           inputMode="decimal"
           value={amount}
-          onChange={(event) => setAmount(event.target.value.replace(/[^\d.]/g, ''))}
+          // The pending balance is the ceiling here, exactly as the bill total
+          // is on the create-bill form — the same typing rule on both.
+          onChange={(event) => setAmount(clampNumericInput(event.target.value, { min: 0, max: due }))}
           autoFocus
           fullWidth
           error={Boolean(error)}

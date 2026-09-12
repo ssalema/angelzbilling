@@ -27,7 +27,7 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import Inventory2Outlined from '@mui/icons-material/Inventory2Outlined';
 import ErrorOutline from '@mui/icons-material/ErrorOutline';
 import CheckRounded from '@mui/icons-material/CheckRounded';
-import { formatCurrency, formatGrams, formatNumber, unitsFromGrams } from '../../../utils/format.js';
+import { formatPrice, formatGrams, formatNumber, unitsFromGrams } from '../../../utils/format.js';
 import { basePricingFor, computeFinalPrice, sizeGramsFor } from '../perfumeSchema.js';
 import SectionTitle from '../../../components/common/SectionTitle.jsx';
 import { CARD_PAD, CARD_RADIUS, GUTTER, INSET_RADIUS, DISCOUNT_COLOR, ICON, brand, numericText, surface } from '../../../theme/index.js';
@@ -148,13 +148,13 @@ const StepPreview = () => {
               <Stack direction="row" spacing={1.25} alignItems="baseline" sx={{ mt: 1.75 }}>
                 <Typography variant="h5" sx={{ ...numericText, color: 'primary.main' }}>
                   {priceFrom === priceTo
-                    ? formatCurrency(priceFrom)
-                    : `${formatCurrency(priceFrom)} – ${formatCurrency(priceTo)}`}
+                    ? formatPrice(priceFrom)
+                    : `${formatPrice(priceFrom)} – ${formatPrice(priceTo)}`}
                 </Typography>
                 {Number(pricing.discountPercent) > 0 && (
                   <>
                     <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.secondary' }}>
-                      {formatCurrency(pricing.mrp)}
+                      {formatPrice(pricing.mrp)}
                     </Typography>
                     <Chip
                       size="small"
@@ -264,11 +264,11 @@ const StepPreview = () => {
             <Row label="Fragrance family" value={data.fragranceFamily} />
             <Row label="Concentration" value={data.concentration} />
             <Divider sx={{ my: 1 }} />
-            <Row label={data.hasVariants ? 'MRP (from)' : 'MRP'} value={formatCurrency(pricing.mrp, { precise: true })} />
+            <Row label={data.hasVariants ? 'MRP (from)' : 'MRP'} value={formatPrice(pricing.mrp)} />
             <Row label="Discount" value={pricing.discountPercent ? `${pricing.discountPercent}%` : 'None'} />
             <Row
               label={data.hasVariants ? 'Final price (from)' : 'Final price'}
-              value={formatCurrency(finalPrice, { precise: true })}
+              value={formatPrice(finalPrice)}
             />
             <Divider sx={{ my: 1 }} />
             <Row label="Total stock" value={formatGrams(totalStock)} />
@@ -304,7 +304,7 @@ const StepPreview = () => {
                           </Box>
                           <Stack alignItems="flex-end">
                             <Typography variant="body2" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                              {formatCurrency(computeFinalPrice(variant.mrp, variant.discountPercent))}
+                              {formatPrice(computeFinalPrice(variant.mrp, variant.discountPercent))}
                             </Typography>
                             <Typography
                               variant="caption"

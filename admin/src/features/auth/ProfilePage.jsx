@@ -31,7 +31,7 @@ import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { authApi } from '../../api/endpoints.js';
 import { applyServerErrors } from '../../api/client.js';
 import { formatDate } from '../../utils/format.js';
-import { ROLE_LABELS, locationLabel, PASSWORD_HINT } from '../../utils/constants.js';
+import { ROLE_LABELS, SESSION_NOTICE, locationLabel, PASSWORD_HINT } from '../../utils/constants.js';
 import { DEFAULT_DIAL_CODE, addContactNumberIssue } from '../../utils/countries.js';
 import { CARD_PAD, GUTTER, ICON, brand } from '../../theme/index.js';
 
@@ -118,10 +118,10 @@ const ProfilePage = () => {
 
   const changePassword = async (values) => {
     try {
-      const message = await authApi.changePassword(values);
-      snackbar.success(message);
-      // The server invalidated every session — send them back to sign in.
-      await logout();
+      await authApi.changePassword(values);
+      // The server invalidated every session — send them back to sign in, with
+      // the same notice a reset by an administrator leaves there.
+      await logout(SESSION_NOTICE.passwordChanged);
       navigate('/login', { replace: true });
     } catch (error) {
       applyServerErrors(error, passwordForm.setError);

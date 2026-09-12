@@ -77,7 +77,10 @@ const PerfumeFormPage = () => {
     formState: { isSubmitting, isDirty },
   } = methods;
 
-  const facets = useApiResource(() => perfumeApi.facets(), []);
+  // Brands and categories another admin adds show up in the pickers here. The
+  // perfume being edited is deliberately not watched, so a half-filled form is
+  // never overwritten underneath the person typing into it.
+  const facets = useApiResource(() => perfumeApi.facets(), [], { watch: 'perfumes' });
 
   const existing = useApiResource(() => (isEdit ? perfumeApi.get(id) : Promise.resolve(null)), [id], {
     immediate: isEdit,

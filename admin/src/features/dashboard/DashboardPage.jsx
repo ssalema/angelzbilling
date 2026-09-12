@@ -27,7 +27,13 @@ import { locationLabel } from '../../utils/constants.js';
 import { currentPeriod, isCurrentPeriod } from '../../utils/period.js';
 
 const useSharedWidget = (overview, key, shared, fetcher, deps) => {
-  const own = useApiResource(fetcher, [...deps, shared], { immediate: !shared });
+  // A widget on its own range fetches separately, so it has to follow the same
+  // writes the shared overview does — otherwise it keeps showing old figures
+  // while the cards above it refresh.
+  const own = useApiResource(fetcher, [...deps, shared], {
+    immediate: !shared,
+    watch: ['bills', 'perfumes'],
+  });
 
   if (!shared) return own;
   return {

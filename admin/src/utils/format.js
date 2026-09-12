@@ -36,10 +36,30 @@ export const configureCurrency = ({ currency, currencySymbol: nextSymbolRaw } = 
 
 export const currencySymbol = () => symbol;
 
-export const formatCurrency = (value, { precise = false } = {}) => {
+/**
+ * Three ways to show money, one per job:
+ *
+ * `precise` keeps both paise always — bill lines and totals, where a column of
+ * figures has to line up and add up.
+ * `trim` keeps paise only when they carry something: ₹50, but ₹50.50. This is
+ * formatPrice below, for what one product costs.
+ * Neither rounds to whole rupees — revenue, spend and chart axes, where paise
+ * are noise and would crowd a tick label.
+ *
+ * Paise are all-or-nothing, never the ₹50.5 that a plain 0-to-2 digit range
+ * would give: half a rupee is written ₹50.50 everywhere money is read.
+ */
+export const formatCurrency = (value, { precise = false, trim = false } = {}) => {
   const number = Number(value || 0);
+  if (trim) return `${symbol}${(Number.isInteger(number) ? whole : precise2).format(number)}`;
   return `${symbol}${(precise ? precise2 : whole).format(number)}`;
 };
+
+/**
+ * A single product's price — an MRP, a selling price, one end of a range.
+ * Exact to the paise when there are any, and no trailing .00 when there are not.
+ */
+export const formatPrice = (value) => formatCurrency(value, { trim: true });
 
 /** A grouped amount with no symbol, for a layout whose heading already carries one. */
 export const formatAmount = (value) => precise2.format(Number(value || 0));

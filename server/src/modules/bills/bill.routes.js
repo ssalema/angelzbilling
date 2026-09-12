@@ -31,7 +31,9 @@ router.use(authenticate);
 router.use(invalidateDashboardOnWrite({ except: ['/preview'], scoped: true }));
 // And the open panels at that location are told, so a bill raised at one counter
 // lands on the other screens without anyone reloading. See middlewares/realtime.js.
-router.use(announceOnWrite({ resource: 'bills', scoped: true, except: ['/preview'] }));
+// Raising a bill takes weight off the shelf and refunding puts it back, so the
+// catalogue screens are told too — they watch perfumes, not bills.
+router.use(announceOnWrite({ resource: 'bills', scoped: true, except: ['/preview'], also: ['perfumes'] }));
 
 const statsQuery = z.object({
   range: z.enum(['today', 'week', 'month', 'year', 'all', 'custom']).optional().default('month'),

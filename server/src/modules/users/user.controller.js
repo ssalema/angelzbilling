@@ -247,7 +247,11 @@ export const resetUserPassword = asyncHandler(async (req, res) => {
   user.refreshTokens = [];
   await user.save();
 
-  return sendSuccess(res, { message: `Password reset for ${user.name}. They must sign in again.` });
+  // Worded the way the person themselves is told, so the two halves of this
+  // agree: see SESSION_NOTICE on the admin side.
+  return sendSuccess(res, {
+    message: `Password reset for ${user.name}. They must sign in with the new password.`,
+  });
 });
 
 export const deleteUser = asyncHandler(async (req, res) => {

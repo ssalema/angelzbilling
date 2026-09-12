@@ -1,6 +1,6 @@
 // Per-size pricing, browser side.
 
-import { currencySymbol, formatCurrency } from '../../../utils/format.js';
+import { currencySymbol, formatPrice } from '../../../utils/format.js';
 import { sizeGramsFor } from '../perfumeSchema.js';
 
 /** The fills the catalogue sells, smallest first, in grams. */
@@ -26,7 +26,7 @@ export const parsePrice = (raw) => {
 export const priceIssue = (value) => {
   if (Number.isNaN(value)) return 'Enter the price as a number';
   if (value <= 0) return 'Price must be more than zero';
-  if (value < MIN_PRICE) return `Price must be at least ${formatCurrency(MIN_PRICE)}`;
+  if (value < MIN_PRICE) return `Price must be at least ${formatPrice(MIN_PRICE)}`;
   if (value > MAX_PRICE) return 'That price is far higher than any perfume in the catalogue';
   return '';
 };
@@ -69,8 +69,8 @@ const rangeOf = (values = []) => {
 /** "185 – 7,000" under the store's symbol, or one figure when every size matches. */
 export const formatRange = (range) => {
   if (!range) return 'NA';
-  if (range.min === range.max) return formatCurrency(range.min);
-  return `${formatCurrency(range.min)} – ${formatCurrency(range.max)}`;
+  if (range.min === range.max) return formatPrice(range.min);
+  return `${formatPrice(range.min)} – ${formatPrice(range.max)}`;
 };
 
 /** The range a perfume sells at today. */

@@ -29,7 +29,7 @@ import Pagination from '../../../components/common/Pagination.jsx';
 import StatusChip from '../../../components/common/StatusChip.jsx';
 import { perfumeApi, uploadApi } from '../../../api/endpoints.js';
 import { useSnackbar } from '../../../context/SnackbarContext.jsx';
-import { formatCurrency, formatGrams, formatNumber, truncate } from '../../../utils/format.js';
+import { formatPrice, formatGrams, formatNumber, truncate } from '../../../utils/format.js';
 import { readSheet, SheetError, SHEET_TYPES } from '../../../utils/spreadsheet.js';
 import { IMAGE_TYPES, rejectImageReason } from '../../../utils/constants.js';
 import { IMG } from '../../../utils/image.js';
@@ -382,7 +382,7 @@ const BulkPerfumeUpload = ({ onCreated }) => {
                                 </Tooltip>
                               ) : (
                                 <Typography sx={{ ...numericText, fontSize: FONT.body }}>
-                                  {formatCurrency(mrp)}
+                                  {formatPrice(mrp)}
                                 </Typography>
                               )}
                             </TableCell>

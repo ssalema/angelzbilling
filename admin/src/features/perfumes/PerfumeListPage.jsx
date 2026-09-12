@@ -41,7 +41,7 @@ import useDebounce from '../../hooks/useDebounce.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import {
-  formatCurrency,
+  formatPrice,
   formatDate,
   formatGrams,
   formatNumber,
@@ -203,7 +203,7 @@ const PerfumeListPage = () => {
           variant="body2"
           sx={{ textDecoration: row.discountPercent > 0 ? 'line-through' : 'none', color: 'text.secondary' }}
         >
-          {formatCurrency(row.mrp)}
+          {formatPrice(row.mrp)}
         </Typography>
       ),
     },
@@ -235,8 +235,8 @@ const PerfumeListPage = () => {
       render: (row) => (
         <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
           {row.variantCount > 1 && row.priceFrom !== row.priceTo
-            ? `${formatCurrency(row.priceFrom)} – ${formatCurrency(row.priceTo)}`
-            : formatCurrency(row.finalPrice)}
+            ? `${formatPrice(row.priceFrom)} – ${formatPrice(row.priceTo)}`
+            : formatPrice(row.finalPrice)}
         </Typography>
       ),
     },

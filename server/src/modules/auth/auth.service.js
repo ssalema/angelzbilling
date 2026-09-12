@@ -112,7 +112,7 @@ export const refreshSession = async (token, userAgent = '') => {
     .populate('branch', 'name code address phone phoneCountryCode gstin isActive hasOwnLogo logo favicon');
 
   if (!user) throw ApiError.unauthorized('This account no longer exists');
-  if (!user.isActive) throw ApiError.forbidden('Your account has been deactivated.');
+  if (!user.isActive) throw ApiError.forbidden('Your account has been deactivated. Please contact the super admin.');
 
   // Redeeming the token is a single atomic claim, and that claim IS the one-use guarantee.
   const presented = hashToken(token);

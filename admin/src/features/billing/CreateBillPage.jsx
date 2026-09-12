@@ -57,7 +57,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import { applyServerErrors } from '../../api/client.js';
-import { currencySymbol, formatCurrency, formatGrams, formatNumber, unitsFromGrams } from '../../utils/format.js';
+import { currencySymbol, formatCurrency, formatPrice, formatGrams, formatNumber, unitsFromGrams } from '../../utils/format.js';
 import { PAYMENT_METHODS, PAYMENT_TERMS, HEAD_OFFICE, locationOf, locationOptions } from '../../utils/constants.js';
 import { downloadBillPdf } from '../../utils/downloadBill.js';
 import { FONT, CARD_HEAD_PAD, CARD_PAD, GUTTER, INSET_RADIUS, ICON, brand, numericText, statusColors, surface } from '../../theme/index.js';
@@ -471,7 +471,7 @@ const CreateBillPage = () => {
                           </Typography>
                         </Box>
                         <Typography variant="body2" sx={{ fontWeight: 700, color: 'primary.main', ml: 1 }}>
-                          {formatCurrency(option.unitPrice)}
+                          {formatPrice(option.unitPrice)}
                         </Typography>
                       </Box>
                     )}
@@ -568,7 +568,7 @@ const CreateBillPage = () => {
                               </TableCell>
 
                               <TableCell align="right">
-                                <Typography variant="body2">{formatCurrency(field.mrp)}</Typography>
+                                <Typography variant="body2">{formatPrice(field.mrp)}</Typography>
                               </TableCell>
 
                               <TableCell align="center">
@@ -734,7 +734,8 @@ const CreateBillPage = () => {
                       label="Amount received *"
                       prefix={currencySymbol()}
                       fullWidth
-                      inputProps={{ min: 0, max: totals.grandTotal }}
+                      min={0}
+                      max={totals.grandTotal}
                       helperText="The balance stays on this bill and can be collected later"
                     />
                     <Box sx={{ mt: 1, p: 1.5, borderRadius: `${INSET_RADIUS}px`, bgcolor: surface.plumFaint }}>

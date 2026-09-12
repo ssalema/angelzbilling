@@ -46,6 +46,7 @@ import useApiResource from '../../hooks/useApiResource.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import {
   formatCurrency,
+  formatPrice,
   formatDate,
   formatGrams,
   formatNumber,
@@ -279,13 +280,13 @@ const PerfumeViewPage = () => {
             <Stack direction="row" spacing={1.5} alignItems="baseline" sx={{ mt: 2 }}>
               <Typography variant="h4" sx={{ ...numericText, color: 'primary.main', fontSize: FONT.figureLg }}>
                 {perfume.priceFrom !== perfume.priceTo
-                  ? `${formatCurrency(perfume.priceFrom)} – ${formatCurrency(perfume.priceTo)}`
-                  : formatCurrency(perfume.finalPrice)}
+                  ? `${formatPrice(perfume.priceFrom)} – ${formatPrice(perfume.priceTo)}`
+                  : formatPrice(perfume.finalPrice)}
               </Typography>
               {perfume.discountPercent > 0 && (
                 <>
                   <Typography variant="body1" sx={{ textDecoration: 'line-through', color: 'text.secondary' }}>
-                    {formatCurrency(perfume.mrp)}
+                    {formatPrice(perfume.mrp)}
                   </Typography>
                   <Chip
                     size="small"
@@ -455,12 +456,12 @@ const PerfumeViewPage = () => {
                               color: 'text.secondary',
                             }}
                           >
-                            {formatCurrency(variant.mrp)}
+                            {formatPrice(variant.mrp)}
                           </Typography>
                         </TableCell>
                         <TableCell align="right">
                           <Typography variant="body2" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                            {formatCurrency(variant.sellingPrice)}
+                            {formatPrice(variant.sellingPrice)}
                           </Typography>
                         </TableCell>
                         <TableCell align="right">

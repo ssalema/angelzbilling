@@ -9,14 +9,50 @@ const MAX_VIDEO_BYTES = 30 * 1024 * 1024; // 30 MB
 
 const storage = multer.memoryStorage();
 
-const fileFilter = (_req, file, cb) => {
-  if ([...IMAGE_TYPES, ...VIDEO_TYPES].includes(file.mimetype)) return cb(null, true);
-  return cb(
-    ApiError.badRequest(
-      `Unsupported file type "${file.mimetype}". Allowed: JPG, PNG, GIF, WEBP images and MP4, MOV, WEBM videos.`
-    )
-  );
+// A browser derives a file's type from its extension, and that mapping is often
+// missing or wrong — a .jfif with no entry in the Windows registry, or a JPEG
+// that was saved as .png. The real bytes are checked in enforceFileLimits, so a
+// vague or absent type is settled there rather than refused on the label alone.
+const VAGUE_TYPES = ['', 'application/octet-stream', 'binary/octet-stream'];
+
+const EXTENSION_TYPES = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  jpe: 'image/jpeg',
+  jfif: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  mp4: 'video/mp4',
+  m4v: 'video/mp4',
+  mov: 'video/quicktime',
+  qt: 'video/quicktime',
+  webm: 'video/webm',
 };
+
+const typeFromName = (name = '') => {
+  const extension = name.includes('.') ? name.split('.').pop().toLowerCase() : '';
+  return EXTENSION_TYPES[extension] || '';
+};
+
+/** The declared type, or the one the extension implies when the browser gave us nothing useful. */
+const declaredType = (file) =>
+  VAGUE_TYPES.includes(file.mimetype) ? typeFromName(file.originalname) : file.mimetype;
+
+const makeFilter = (allowed, message) => (_req, file, cb) => {
+  const type = declaredType(file);
+  if (allowed.includes(type)) {
+    file.mimetype = type;
+    return cb(null, true);
+  }
+  return cb(ApiError.badRequest(message(file.mimetype || 'unknown')));
+};
+
+const fileFilter = makeFilter(
+  [...IMAGE_TYPES, ...VIDEO_TYPES],
+  (type) =>
+    `Unsupported file type "${type}". Allowed: JPG, PNG, GIF, WEBP images and MP4, MOV, WEBM videos.`
+);
 
 export const upload = multer({
   storage,
@@ -27,10 +63,10 @@ export const upload = multer({
 /** Single-image routes (branding, branch logos) never need the video ceiling. */
 export const imageUpload = multer({
   storage,
-  fileFilter: (_req, file, cb) =>
-    IMAGE_TYPES.includes(file.mimetype)
-      ? cb(null, true)
-      : cb(ApiError.badRequest(`"${file.mimetype}" is not an image. Use JPG, PNG, GIF or WEBP.`)),
+  fileFilter: makeFilter(
+    IMAGE_TYPES,
+    (type) => `"${type}" is not an image. Use JPG, PNG, GIF or WEBP.`
+  ),
   limits: { fileSize: MAX_IMAGE_BYTES, files: 1, fields: 20 },
 });
 
@@ -117,18 +153,34 @@ const SIGNATURES = {
 
 SIGNATURES['image/jpg'] = SIGNATURES['image/jpeg'];
 
-/** True when the buffer's own header agrees with the declared type. */
-const contentMatchesType = (buffer, mimetype) => {
-  const check = SIGNATURES[mimetype];
-  if (!check) return false;
-  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return false;
-  return check(buffer);
+const TYPE_LABELS = {
+  'image/jpeg': 'JPEG',
+  'image/png': 'PNG',
+  'image/gif': 'GIF',
+  'image/webp': 'WEBP',
+  'video/mp4': 'MP4',
+  'video/quicktime': 'MOV',
+  'video/webm': 'WEBM',
+};
+
+/**
+ * What the buffer really holds, or '' when it is nothing we recognise.
+ *
+ * The declared type is only a hint. A perfectly good photo saved as .png may hold
+ * JPEG or WEBP bytes, so the header decides the answer and the declared type is
+ * merely tried first because it is usually right.
+ */
+const sniffType = (buffer, mimetype) => {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 12) return '';
+  if (SIGNATURES[mimetype]?.(buffer)) return mimetype === 'image/jpg' ? 'image/jpeg' : mimetype;
+  return Object.keys(TYPE_LABELS).find((type) => SIGNATURES[type](buffer)) || '';
 };
 
 export const enforceFileLimits = (req, _res, next) => {
   const files = req.files || (req.file ? [req.file] : []);
   for (const file of files) {
     const isImage = IMAGE_TYPES.includes(file.mimetype);
+    const allowed = isImage ? IMAGE_TYPES : VIDEO_TYPES;
     const cap = isImage ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
     if (file.size > cap) {
       return next(
@@ -139,14 +191,27 @@ export const enforceFileLimits = (req, _res, next) => {
       );
     }
 
-    if (!contentMatchesType(file.buffer, file.mimetype)) {
+    const actualType = sniffType(file.buffer, file.mimetype);
+    if (!actualType) {
       return next(
         ApiError.badRequest(
           `"${file.originalname}" is not a valid ${isImage ? 'image' : 'video'} file. ` +
-            'Its contents do not match its file type.'
+            'Its contents are damaged or in a format we do not support.'
         )
       );
     }
+
+    if (!allowed.includes(actualType)) {
+      return next(
+        ApiError.badRequest(
+          `"${file.originalname}" is really a ${TYPE_LABELS[actualType]} file, which is not allowed here.`
+        )
+      );
+    }
+
+    // Trust the bytes from here on, so storage and Cloudinary see the true type
+    // even when the file name says otherwise.
+    file.mimetype = actualType;
   }
   return next();
 };

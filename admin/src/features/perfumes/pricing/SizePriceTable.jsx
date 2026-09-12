@@ -12,7 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 
-import { currencySymbol, formatCurrency } from '../../../utils/format.js';
+import { currencySymbol, formatPrice } from '../../../utils/format.js';
 import { CARD_RADIUS, FONT, numericText, surface } from '../../../theme/index.js';
 
 // One perfume's sizes, with what each costs now beside what it would cost.
@@ -81,7 +81,7 @@ const SizePriceTable = ({ rows, dense = false, editable = false, onEdit, disable
                   color="text.secondary"
                   sx={row.changed ? { textDecoration: 'line-through' } : undefined}
                 >
-                  {row.currentMrp > 0 ? formatCurrency(row.currentMrp) : 'NA'}
+                  {row.currentMrp > 0 ? formatPrice(row.currentMrp) : 'NA'}
                 </Typography>
               </TableCell>
 
@@ -111,7 +111,7 @@ const SizePriceTable = ({ rows, dense = false, editable = false, onEdit, disable
                       color: row.changed ? 'text.primary' : 'text.secondary',
                     }}
                   >
-                    {row.newMrp > 0 ? formatCurrency(row.newMrp) : 'NA'}
+                    {row.newMrp > 0 ? formatPrice(row.newMrp) : 'NA'}
                   </Typography>
                 )}
               </TableCell>

@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, useCal
 import { connectSocket, disconnectSocket } from '../api/socket.js';
 import { clearResourceCache } from '../api/resourceCache.js';
 import { useAuth } from './AuthContext.jsx';
-import { useSnackbar } from './SnackbarContext.jsx';
+import { SESSION_NOTICE } from '../utils/constants.js';
 
 // One connection and one set of listeners for the whole app. Nothing below this
 // provider touches socket.io directly.
@@ -14,7 +14,6 @@ export const RESOURCES = ['bills', 'perfumes', 'users', 'branches', 'settings'];
 
 export const RealtimeProvider = ({ children }) => {
   const { isAuthenticated, user, logout, setUser } = useAuth();
-  const snackbar = useSnackbar();
 
   const [connected, setConnected] = useState(false);
   /** Bumped for a resource every time the server says it changed. */
@@ -64,10 +63,15 @@ export const RealtimeProvider = ({ children }) => {
     };
 
     // An administrator ended this session, or the password behind it changed.
+    // The sign-in page states the reason, so a toast here would only say it
+    // twice — in red, over a screen that is already being replaced.
     const onRevoked = (payload) => {
       disconnectSocket();
-      logout();
-      snackbar.error(payload?.reason || 'Your session has ended. Please sign in again.');
+      logout(
+        payload?.reason
+          ? { message: payload.reason, severity: payload.severity || SESSION_NOTICE.ended.severity }
+          : SESSION_NOTICE.ended
+      );
     };
 
     const onProfile = (payload) => {
@@ -98,7 +102,7 @@ export const RealtimeProvider = ({ children }) => {
       socket.off('session:revoked', onRevoked);
       socket.off('user:profile', onProfile);
     };
-  }, [isAuthenticated, logout, setUser, snackbar, emitToHandlers]);
+  }, [isAuthenticated, logout, setUser, emitToHandlers]);
 
   useEffect(() => () => disconnectSocket(), []);
 

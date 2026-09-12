@@ -47,7 +47,7 @@ const resolveSocketUser = async (token) => {
   }
 
   if (!user) throw new Error('This account no longer exists');
-  if (!user.isActive) throw new Error('Your account has been deactivated.');
+  if (!user.isActive) throw new Error('Your account has been deactivated. Please contact the super admin.');
   if (user.passwordChangedAt && payload.iat * 1000 < user.passwordChangedAt.getTime()) {
     throw new Error('Your password was changed. Please sign in again.');
   }
@@ -109,9 +109,9 @@ export const roomsForScope = (scope) =>
 export const emitToScope = (event, payload, scope) => emit(event, payload, { rooms: roomsForScope(scope) });
 
 /** Tells one account's open tabs that its session is no longer usable. */
-export const revokeSession = (userId, reason = 'Your session has ended. Please sign in again.') => {
+export const revokeSession = (userId, reason = 'Your session has ended. Please sign in again.', severity = 'info') => {
   if (!userId) return;
-  emit('session:revoked', { reason }, { rooms: [userRoom(userId)] });
+  emit('session:revoked', { reason, severity }, { rooms: [userRoom(userId)] });
 };
 
 // ─── Lifecycle ──────────────────────────────────────────────────────────────
