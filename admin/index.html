@@ -52,8 +52,9 @@
     </style>
   </head>
   <body>
-    <!-- Static store name for a cold first paint; the cached name below wins. -->
-    <div id="root"><div id="boot">Angelz Desire</div></div>
+    <!-- Static store name for a cold first paint; the cached name below wins.
+         data-site-name is the app's fallback name too (src/utils/branding.js). -->
+    <div id="root"><div id="boot" data-site-name="Angelz Desire">Angelz Desire</div></div>
     <script>
       try {
         var cached = localStorage.getItem('ab:siteName');

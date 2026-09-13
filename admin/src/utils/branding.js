@@ -1,10 +1,20 @@
 const SITE_NAME_KEY = 'ab:siteName';
 
-/** Deliberately generic — a store that has never loaded settings has no name yet. */
-const FALLBACK_SITE_NAME = 'Admin';
+/**
+ * The static name index.html paints before React mounts, so a cold load hands
+ * off to the React splash without the name changing. Read at module evaluation,
+ * which runs before the first render replaces #boot.
+ */
+const FALLBACK_SITE_NAME = (() => {
+  try {
+    return document.getElementById('boot')?.dataset.siteName || 'Admin';
+  } catch {
+    return 'Admin';
+  }
+})();
 
 /** The browser tab, one format everywhere. Mirrored inline in index.html. */
-export const documentTitle = (name) => (name ? `${name} — Admin` : FALLBACK_SITE_NAME);
+export const documentTitle = (name) => `${name || FALLBACK_SITE_NAME} — Admin`;
 
 export const cachedSiteName = () => {
   try {

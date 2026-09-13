@@ -13,7 +13,6 @@ import {
   InputAdornment,
   IconButton,
   CircularProgress,
-  Divider,
 } from '@mui/material';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
@@ -227,17 +226,6 @@ const LoginPage = () => {
               </Stack>
             </form>
           </FormProvider>
-
-          <Divider sx={{ my: 3 }}>
-            <Typography variant="caption" color="text.secondary">
-              Need access?
-            </Typography>
-          </Divider>
-
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center' }}>
-            Accounts are created by a Super Admin. Contact your administrator if you
-            cannot sign in.
-          </Typography>
         </Card>
       </Box>
     </Box>
