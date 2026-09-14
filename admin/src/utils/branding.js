@@ -5,11 +5,13 @@ const SITE_NAME_KEY = 'ab:siteName';
  * off to the React splash without the name changing. Read at module evaluation,
  * which runs before the first render replaces #boot.
  */
+const DEFAULT_SITE_NAME = 'Angelz Desire';
+
 const FALLBACK_SITE_NAME = (() => {
   try {
-    return document.getElementById('boot')?.dataset.siteName || 'Admin';
+    return document.getElementById('boot')?.dataset.siteName || DEFAULT_SITE_NAME;
   } catch {
-    return 'Admin';
+    return DEFAULT_SITE_NAME;
   }
 })();
 
