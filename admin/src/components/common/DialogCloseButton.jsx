@@ -1,7 +1,6 @@
 import { IconButton, Tooltip } from '@mui/material';
 import Close from '@mui/icons-material/Close';
 
-// The single way out of a dialog: a cross in the top right corner.
 // Dialog `onClose` that ignores a click on the backdrop.
 export const dismiss = (onClose) => (_event, reason) => {
   if (reason !== 'backdropClick') onClose?.();

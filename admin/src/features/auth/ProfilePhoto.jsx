@@ -14,17 +14,15 @@ import { IMG } from '../../utils/image.js';
 
 const SIZE = 84;
 
-// The account's own photo — upload, replace, remove — on the identity card.
-// The single-image slots elsewhere (store logo, branch marks) are a Dropzone
-// wearing the same hover pill; a circle cannot take a dashed frame, so the
-// camera badge stands in as the affordance while the slot is empty.
+// Profile photo upload/replace/remove. A camera badge shows when empty,
+// since a circle can't use the dashed Dropzone frame.
 const ProfilePhoto = () => {
   const { user, setUser } = useAuth();
   const snackbar = useSnackbar();
   const inputRef = useRef(null);
 
   const [busy, setBusy] = useState(false);
-  // Null except while bytes are on the wire; a removal has nothing to measure.
+  // Upload percentage; null when not uploading.
   const [progress, setProgress] = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
 
@@ -94,8 +92,7 @@ const ProfilePhoto = () => {
         </Avatar>
       </Tooltip>
 
-      {/* Only once the slot holds a photo — the rule the logo slots follow. No
-          replace button here: the photo itself is the picker. */}
+      {/* No replace button: clicking the photo picks a new one. */}
       {current && !busy && (
         <ImageActions onRemove={() => setConfirmRemove(true)} removeLabel="Remove your photo" bottom={4} />
       )}
@@ -111,7 +108,7 @@ const ProfilePhoto = () => {
         hidden
         onChange={(event) => {
           choose(event.target.files?.[0]);
-          // Cleared so picking the same file twice still fires a change.
+          // Reset so picking the same file again still fires onChange.
           event.target.value = '';
         }}
       />
@@ -147,7 +144,6 @@ const ProfilePhoto = () => {
         </Badge>
       )}
 
-      {/* The readout every other upload in the app shows, sized for this card. */}
       {busy && (
         <Stack alignItems="center" spacing={0.75} sx={{ width: SIZE + 40 }}>
           <Typography variant="caption" color="text.secondary">

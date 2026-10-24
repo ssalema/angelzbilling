@@ -29,14 +29,15 @@ import { perfumeApi } from '../../../api/endpoints.js';
 import useApiResource from '../../../hooks/useApiResource.js';
 import useDebounce from '../../../hooks/useDebounce.js';
 import { useSnackbar } from '../../../context/SnackbarContext.jsx';
+import useRequestKey from '../../../hooks/useRequestKey.js';
 import { formatGrams, formatNumber, stockStatus } from '../../../utils/format.js';
 import { brand, CARD_RADIUS, FONT, ICON, numericText, surface } from '../../../theme/index.js';
 import { IMG } from '../../../utils/image.js';
 import { parseTypedGrams } from './stockSheet.js';
 
-// Topping up perfumes by hand.
 const SingleStockUpdate = ({ onUpdated }) => {
   const snackbar = useSnackbar();
+  const requestKey = useRequestKey();
 
   const [query, setQuery] = useState('');
   const [rows, setRows] = useState([]);
@@ -44,8 +45,7 @@ const SingleStockUpdate = ({ onUpdated }) => {
 
   const debouncedQuery = useDebounce(query, 300);
 
-  // The dropdown shows stock on hand, and a bill raised elsewhere moves it while
-  // this panel is open — a stale figure here becomes a wrong write.
+  // Watch perfumes so the dropdown never shows stale stock.
   const options = useApiResource(
     () => perfumeApi.stockSearch({ q: debouncedQuery, limit: 20 }),
     [debouncedQuery],
@@ -54,8 +54,7 @@ const SingleStockUpdate = ({ onUpdated }) => {
 
   const chosen = useMemo(() => new Set(rows.map((row) => row.id)), [rows]);
 
-  // A perfume already on the list is dropped from the dropdown rather than
-  // added twice — two rows for one bottle is two chances to get the total wrong.
+  // Hide perfumes already added so none is listed twice.
   const available = (options.data?.items || []).filter((option) => !chosen.has(option.id));
 
   const addRow = (option) => {
@@ -71,7 +70,7 @@ const SingleStockUpdate = ({ onUpdated }) => {
 
   const removeRow = (id) => setRows((current) => current.filter((row) => row.id !== id));
 
-  /** What a row's typed grams are worth, and why they might not count. */
+  /** Parses a row's typed grams and returns an error if invalid. */
   const gramsFor = (row) => {
     const grams = parseTypedGrams(row.newStock);
     if (row.newStock === '') return { grams: NaN, error: '' };
@@ -92,9 +91,9 @@ const SingleStockUpdate = ({ onUpdated }) => {
   const submit = async () => {
     setSaving(true);
     try {
-      // The same endpoint the bulk tab uses: one round trip, and each row an
-      // atomic increment, whether there is one of them or sixty.
-      const result = await perfumeApi.bulkAddStock(payload, 'single');
+      // Same endpoint as the bulk tab: one request, each row an atomic increment.
+      const result = await perfumeApi.bulkAddStock(payload, 'single', requestKey.get());
+      requestKey.renew();
       const { updated, failed = [] } = result.data || {};
 
       if (failed.length) {
@@ -106,7 +105,6 @@ const SingleStockUpdate = ({ onUpdated }) => {
       setRows([]);
       setQuery('');
       onUpdated?.();
-      // The perfumes just fixed should drop out of the "needs restocking" list.
       options.reload();
     } catch (error) {
       snackbar.error(error.message);
@@ -218,7 +216,7 @@ const SingleStockUpdate = ({ onUpdated }) => {
             </Button>
           </Stack>
 
-          {/* The bulk tab's review table, column for column. */}
+          {/* Same columns as the bulk tab's review table. */}
           <Box sx={{ border: 1, borderColor: 'divider', borderRadius: `${CARD_RADIUS}px`, overflow: 'hidden' }}>
             <Box sx={{ overflowX: 'auto' }}>
               <Table size="small" sx={{ minWidth: 640 }}>

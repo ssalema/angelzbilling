@@ -1,4 +1,4 @@
-// Country dialling codes for every contact-number field in the app.
+// [name, iso2, dial code, min digits, max digits, primary?]
 
 const ROWS = [
   ['Afghanistan', 'AF', '+93', 9, 9],
@@ -239,7 +239,7 @@ const ROWS = [
   ['Zimbabwe', 'ZW', '+263', 9, 9],
 ];
 
-/** ISO 3166-1 alpha-2 to the regional-indicator pair browsers render as a flag. */
+/** Turns an ISO2 code into a flag emoji. */
 const flagOf = (iso2) => iso2.replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
 
 export const COUNTRIES = ROWS.map(([name, iso2, dial, min, max, primary = false]) => ({
@@ -248,20 +248,18 @@ export const COUNTRIES = ROWS.map(([name, iso2, dial, min, max, primary = false]
   dial,
   min,
   max,
-  /** Several countries share one dial code (+1, +44, +7…); one of them leads. */
+  /** Several countries share a dial code (+1, +44, +7); the primary one is preferred. */
   primary,
   flag: flagOf(iso2),
 })).sort((a, b) => a.name.localeCompare(b.name));
 
 export const DEFAULT_DIAL_CODE = '+91';
 
-/** The country a stored dial code should highlight in a picker. */
 export const countryByDial = (dial) => {
   const matches = COUNTRIES.filter((country) => country.dial === dial);
   return matches.find((country) => country.primary) || matches[0] || null;
 };
 
-// Allowed digit count for a dial code.
 export const digitsFor = (dial) => {
   const matches = COUNTRIES.filter((country) => country.dial === dial);
   if (!matches.length) return { min: 4, max: 15 };
@@ -273,7 +271,7 @@ export const digitsFor = (dial) => {
 
 const isDialCode = (dial) => Boolean(dial) && COUNTRIES.some((country) => country.dial === dial);
 
-/** "10 digits" / "9–11 digits" — used for helper text and error messages. */
+/** "10 digits" or "9–11 digits". */
 export const digitsLabel = (dial) => {
   const { min, max } = digitsFor(dial);
   return min === max ? `${min} digits` : `${min}–${max} digits`;
@@ -281,7 +279,6 @@ export const digitsLabel = (dial) => {
 
 export const onlyDigits = (value) => String(value ?? '').replace(/\D/g, '');
 
-// Validates one contact number against its dial code.
 const contactNumberIssue = (dial, number) => {
   if (!isDialCode(dial)) return 'Choose a country code';
   const raw = String(number ?? '').trim();
@@ -295,36 +292,33 @@ const contactNumberIssue = (dial, number) => {
   return null;
 };
 
-// Zod glue: report a bad contact number on the *number* field, since that is where the user is looking.
+// Zod helper: reports the error on the number field.
 export const addContactNumberIssue = (ctx, { dial, number, path, required = true }) => {
   const digits = onlyDigits(number);
   if (!digits) {
     if (required) ctx.addIssue({ code: 'custom', path, message: 'Contact number is required' });
     return;
   }
-  // A partial update may omit the code; it then means "whatever is stored",
-  // which for every record in this system defaults to +91.
+  // A partial update may omit the code; it defaults to +91.
   const message = contactNumberIssue(dial || DEFAULT_DIAL_CODE, number);
   if (message) ctx.addIssue({ code: 'custom', path, message });
 };
 
-/** "+91 9812521138" — the one way a contact number is rendered anywhere. */
+/** Formats as "+91 9812521138". */
 export const formatContactNumber = (dial, number, fallback = 'NA') => {
   const digits = onlyDigits(number);
   if (!digits) return fallback;
   return `${isDialCode(dial) ? dial : DEFAULT_DIAL_CODE} ${digits}`;
 };
 
-/* ───────────────────────────── Postal codes ───────────────────────────── */
-
-// Countries whose postal code the address form can resolve to a place.
+// Countries whose postal code can be looked up to fill the address.
 const POSTAL_LOOKUP_COUNTRIES = new Set(
   'IN US CA GB AU NZ MY ZA JP PH TH RU HU PL PT NL AT BE CH CZ DE DK ES FI FR IT NO SE TR MX PK BD'.split(
     ' '
   )
 );
 
-// What a postal code is called locally, plus a sample.
+// Local name and example for each country's postal code.
 const POSTAL_META = {
   IN: { label: 'Pincode', example: '400001', digits: 6 },
   US: { label: 'ZIP code', example: '90210', digits: 5 },
@@ -378,14 +372,13 @@ export const DEFAULT_COUNTRY = 'India';
 const BY_ISO = new Map(COUNTRIES.map((country) => [country.iso2, country]));
 const BY_NAME = new Map(COUNTRIES.map((country) => [country.name.toLowerCase(), country]));
 
-/** Accepts an ISO2 code or a country name — address fields store the name. */
+/** Accepts an ISO2 code or a country name (address fields store the name). */
 export const findCountry = (value) => {
   const key = String(value ?? '').trim();
   if (!key) return null;
   return BY_ISO.get(key.toUpperCase()) || BY_NAME.get(key.toLowerCase()) || null;
 };
 
-/** Label, example and lookup support for whatever the country field holds. */
 export const postalMetaFor = (country) => {
   const match = findCountry(country);
   const meta = (match && POSTAL_META[match.iso2]) || DEFAULT_POSTAL_META;
@@ -398,7 +391,6 @@ export const postalMetaFor = (country) => {
   };
 };
 
-// Validates a postal code against its country.
 const postalCodeIssue = (country, value) => {
   const code = String(value ?? '').trim();
   if (!code) return null;
@@ -411,7 +403,7 @@ const postalCodeIssue = (country, value) => {
   return POSTAL_PATTERN.test(code) ? null : `Enter a valid ${label.toLowerCase()}`;
 };
 
-/** Zod glue, mirroring addContactNumberIssue above. */
+/** Zod helper, like addContactNumberIssue. */
 export const addPostalCodeIssue = (ctx, { country, value, path }) => {
   const message = postalCodeIssue(country, value);
   if (message) ctx.addIssue({ code: 'custom', path, message });

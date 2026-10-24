@@ -1,5 +1,3 @@
-// Money as the store writes it.
-
 const CURRENCY_LOCALES = { INR: 'en-IN' };
 const DEFAULT_LOCALE = 'en-IN';
 const FOREIGN_LOCALE = 'en-US';
@@ -11,7 +9,7 @@ const localeFor = (currency) => {
   return CURRENCY_LOCALES[code] || FOREIGN_LOCALE;
 };
 
-// A formatter bound to the store's currency.
+// Formats amounts in the store's currency.
 export const moneyFormatter = (settings) => {
   const symbol = settings?.billing?.currencySymbol || DEFAULT_SYMBOL;
   const locale = localeFor(settings?.billing?.currency);

@@ -10,7 +10,6 @@ import { geoApi } from '../../api/endpoints.js';
 import useDebounce from '../../hooks/useDebounce.js';
 import { ICON } from '../../theme/index.js';
 
-// One address block, wired to react-hook-form.
 const AddressFields = ({ prefix = 'address', disabled = false }) => {
   const { control, setValue } = useFormContext();
 
@@ -66,9 +65,9 @@ const AddressFields = ({ prefix = 'address', disabled = false }) => {
 
   /* ── Postal code → the rest of the address ── */
   const debouncedPincode = useDebounce(pincode.trim(), 600);
-  // Remembers what was last looked up so re-renders don't re-fetch the same code.
+  // Avoids re-fetching the same code on re-render.
   const lastLookup = useRef('');
-  // A code the form was loaded with is already matched; only a typed one is new.
+  // Only look up codes the user typed, not ones loaded with the form.
   const typed = useRef(false);
 
   useEffect(() => {
@@ -87,8 +86,7 @@ const AddressFields = ({ prefix = 'address', disabled = false }) => {
       setLookup({ status: 'idle', message: '', areas: [] });
       return undefined;
     }
-    // Editing a saved address: the state and city that came with the code are
-    // already in the form, so opening the dialog must not fire a lookup.
+    // A saved address already has its state and city, so don't look it up on open.
     if (!typed.current) {
       lastLookup.current = key;
       setLookup({ status: 'idle', message: '', areas: [] });
@@ -105,7 +103,7 @@ const AddressFields = ({ prefix = 'address', disabled = false }) => {
       .then((found) => {
         settled = true;
         if (!live) return;
-        // A 200 with nothing in it must not leave the field spinning forever.
+        // An empty 200 response must not leave the spinner running.
         if (!found) {
           lastLookup.current = '';
           setLookup({ status: 'error', message: `No address found for ${code}`, areas: [] });
@@ -123,7 +121,7 @@ const AddressFields = ({ prefix = 'address', disabled = false }) => {
       .catch((error) => {
         settled = true;
         if (!live) return;
-        // Let the admin retype the same code once the directory recovers.
+        // Allow retrying the same code.
         lastLookup.current = '';
         setLookup({
           status: 'error',
@@ -135,8 +133,7 @@ const AddressFields = ({ prefix = 'address', disabled = false }) => {
       });
     return () => {
       live = false;
-      // A run cut short before it answered leaves no result to show, so forget
-      // the code and let the next run ask again.
+      // Cancelled before it answered, so allow the next run to ask again.
       if (!settled) lastLookup.current = '';
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -158,7 +155,7 @@ const AddressFields = ({ prefix = 'address', disabled = false }) => {
     return null;
   };
 
-  /** Free-text picker shared by the street address, country, state and city. */
+  /** Free-text picker used for street, country, state and city. */
   const renderPicker = ({ name, label, options, loading, placeholder, onPicked, startIcon, extraHelper }) => (
     <Controller
       name={field(name)}
@@ -212,8 +209,7 @@ const AddressFields = ({ prefix = 'address', disabled = false }) => {
   return (
     <>
       <Grid item xs={12}>
-        {/* The localities a postal code covers are exactly what goes here, so a
-            successful lookup quietly offers them as suggestions. */}
+        {/* Localities from the postal lookup are offered as suggestions. */}
         {renderPicker({
           name: 'line1',
           label: 'Street address',
@@ -231,7 +227,7 @@ const AddressFields = ({ prefix = 'address', disabled = false }) => {
           loading: false,
           placeholder: DEFAULT_COUNTRY,
           startIcon: <PublicRounded sx={{ fontSize: ICON.action, opacity: 0.6 }} />,
-          // A new country invalidates whatever state and city were chosen.
+          // Changing country clears state and city.
           onPicked: () => {
             setValue(field('state'), '', { shouldDirty: true });
             setValue(field('city'), '', { shouldDirty: true });

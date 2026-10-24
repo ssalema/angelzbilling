@@ -7,7 +7,7 @@ const SnackbarContext = createContext(null);
 
 const SlideUp = (props) => <Slide {...props} direction="up" />;
 
-/** One toast surface for the whole app, so feedback always looks the same. */
+/** One toast surface for the whole app. */
 export const SnackbarProvider = ({ children }) => {
   const [toast, setToast] = useState({ open: false, message: '', severity: 'success' });
 
@@ -18,9 +18,7 @@ export const SnackbarProvider = ({ children }) => {
 
   const { isAuthenticated } = useAuth();
 
-  // A session that ends mid-request leaves the refusal behind as a toast, and it
-  // would float over the sign-in page repeating the banner there word for word.
-  // The screen it belonged to is gone, so the toast goes with it.
+  // Clear toasts when the session ends, so they don't repeat the sign-in page's message.
   useEffect(() => {
     if (!isAuthenticated) setToast((current) => (current.open ? { ...current, open: false } : current));
   }, [isAuthenticated]);

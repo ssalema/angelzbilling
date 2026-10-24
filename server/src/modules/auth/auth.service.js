@@ -9,15 +9,14 @@ import {
 } from '../../utils/tokens.js';
 import { isBranchInactive, BRANCH_INACTIVE_MESSAGE } from '../../utils/branchAccess.js';
 
-const MAX_SESSIONS = 5; // one account, at most five signed-in devices
+const MAX_SESSIONS = 5; // max signed-in devices per account
 
-// Issues a fresh pair and records the (hashed) refresh token on the user.
+// Issues a token pair and stores the hashed refresh token on the user.
 const issueTokens = async (user, userAgent = '') => {
   const accessToken = signAccessToken(user);
   const refreshToken = signRefreshToken(user);
 
-  // Expired entries are dropped by their own condition rather than by being
-  // filtered out of a snapshot, so this cannot take a live session with it.
+  // Pull expired tokens by condition (not from a snapshot) so live sessions are never lost.
   await User.updateOne(
     { _id: user._id },
     { $pull: { refreshTokens: { expiresAt: { $lte: new Date() } } } }
@@ -53,8 +52,8 @@ export const login = async ({ email, password, userAgent }) => {
     .select('+password +refreshTokens +failedLoginAttempts +lockedUntil')
     .populate('branch', 'name code address phone phoneCountryCode gstin isActive hasOwnLogo logo favicon');
 
-  // The account brake is checked before the password so a locked account cannot
-  // be probed at all, and it follows the account rather than the caller's IP.
+  // Check the lockout before the password so a locked account cannot be probed.
+  // The lockout is per account, not per IP.
   if (user?.lockedUntil && user.lockedUntil > new Date()) {
     const minutes = Math.ceil((user.lockedUntil - Date.now()) / 60000);
     throw ApiError.forbidden(
@@ -62,8 +61,7 @@ export const login = async ({ email, password, userAgent }) => {
     );
   }
 
-  // Same message for "no such user" and "wrong password" — do not confirm which
-  // emails exist to someone probing the login form.
+  // Same message for unknown user and wrong password, so emails cannot be probed.
   if (!user || !(await user.comparePassword(password))) {
     if (user) {
       const attempts = (user.failedLoginAttempts || 0) + 1;
@@ -81,11 +79,10 @@ export const login = async ({ email, password, userAgent }) => {
     throw ApiError.forbidden('Your account has been deactivated. Please contact the super admin.');
   }
 
-  // An out-of-service branch stops the people scoped to it from working.
   if (isBranchInactive(user)) throw ApiError.forbidden(BRANCH_INACTIVE_MESSAGE);
 
   const tokens = await issueTokens(user, userAgent);
-  // A good password clears the brake.
+  // A successful login clears the lockout.
   await User.updateOne(
     { _id: user._id },
     { $set: { lastLoginAt: new Date(), failedLoginAttempts: 0, lockedUntil: null } }
@@ -95,7 +92,7 @@ export const login = async ({ email, password, userAgent }) => {
   return { user, ...tokens };
 };
 
-/** Rotates the refresh token: the presented one is retired as it is redeemed. */
+/** Rotates the refresh token; the used one is retired. */
 export const refreshSession = async (token, userAgent = '') => {
   if (!token) throw ApiError.unauthorized('Your session has expired. Please sign in again.');
 
@@ -113,12 +110,10 @@ export const refreshSession = async (token, userAgent = '') => {
   if (!user) throw ApiError.unauthorized('This account no longer exists');
   if (!user.isActive)
     throw ApiError.sessionEnded('Your account has been deactivated. Please contact the super admin.');
-  // A closed location cannot be worked from, so it cannot be refreshed into
-  // either — otherwise a tab left open would quietly renew its own session, and
-  // a reload would land back inside the app.
+  // Block refresh for inactive branches, or an open tab would keep renewing its session.
   if (isBranchInactive(user)) throw ApiError.sessionEnded(BRANCH_INACTIVE_MESSAGE);
 
-  // Redeeming the token is a single atomic claim, and that claim IS the one-use guarantee.
+  // A single atomic claim guarantees the token is used only once.
   const presented = hashToken(token);
   const claim = await User.updateOne(
     {

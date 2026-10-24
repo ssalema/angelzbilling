@@ -15,7 +15,7 @@ const lazyPage = (factory) =>
 const importLogin = () => import('../features/auth/LoginPage.jsx');
 const importDashboard = () => import('../features/dashboard/DashboardPage.jsx');
 
-// Starts downloading the first screen while the session is still being restored.
+// Preloads the first screen while the session is still being restored.
 export const warmFirstScreens = () => {
   importLogin().catch(() => {});
   importDashboard().catch(() => {});
@@ -33,7 +33,6 @@ const BillDetailPage = lazyPage(() => import('../features/billing/BillDetailPage
 const UserListPage = lazyPage(() => import('../features/users/UserListPage.jsx'));
 const SettingsPage = lazyPage(() => import('../features/settings/SettingsPage.jsx'));
 
-// Every page carries its own `errorElement`.
 const page = (element) => ({ element, errorElement: <RouteError /> });
 
 export const router = createBrowserRouter([
@@ -44,7 +43,7 @@ export const router = createBrowserRouter([
         <LoginPage />
       </PublicOnlyRoute>
     ),
-    // Nothing is mounted around /login, so this one takes the whole screen.
+    // Nothing wraps /login, so the error page takes the whole screen.
     errorElement: <RouteError fullHeight />,
   },
   {
@@ -60,8 +59,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: 'dashboard', ...page(<DashboardPage />) },
 
-      // Catalogue — reading is open to every signed-in account; the write
-      // routes are gated here and again on the API.
+      // Catalogue: everyone can read; write routes are guarded here and on the API.
       { path: 'perfumes', ...page(<PerfumeListPage />) },
       {
         path: 'perfumes/new',
@@ -81,12 +79,11 @@ export const router = createBrowserRouter([
         ),
       },
 
-      // Billing — available to every role, branch-scoped on the server.
+      // Billing: every role; the server scopes it by branch.
       { path: 'billing', ...page(<BillListPage />) },
       { path: 'billing/new', ...page(<CreateBillPage />) },
       { path: 'billing/:id', ...page(<BillDetailPage />) },
 
-      // Administration
       {
         path: 'users',
         ...page(

@@ -27,9 +27,7 @@ import { locationLabel } from '../../utils/constants.js';
 import { currentPeriod, isCurrentPeriod } from '../../utils/period.js';
 
 const useSharedWidget = (overview, key, shared, fetcher, deps) => {
-  // A widget on its own range fetches separately, so it has to follow the same
-  // writes the shared overview does — otherwise it keeps showing old figures
-  // while the cards above it refresh.
+  // A widget with its own range fetches separately, so it must also refresh on writes.
   const own = useApiResource(fetcher, [...deps, shared], {
     immediate: !shared,
     watch: ['bills', 'perfumes'],
@@ -51,14 +49,13 @@ const DashboardPage = () => {
 
   const [bulkOpen, setBulkOpen] = useState(false);
 
-  // The main range drives the summary cards and the revenue chart together.
+  // Main range drives the summary cards and the revenue chart.
   const [mainRange, setMainRange] = useState(currentPeriod);
   const [statusRange, setStatusRange] = useState(currentPeriod);
   const [paymentRange, setPaymentRange] = useState(currentPeriod);
   const [topRange, setTopRange] = useState(currentPeriod);
   const [topBy, setTopBy] = useState('units');
 
-  // Each card resets only its own filters — that is the point of owning them.
   const resetTop = () => {
     setTopRange(currentPeriod());
     setTopBy('units');
@@ -66,13 +63,12 @@ const DashboardPage = () => {
 
   const params = useCallback((range) => ({ range: range.range, from: range.from, to: range.to }), []);
 
-  // One request brings the whole page back at the main range.
+  // One request loads the whole page at the main range.
   const overview = useApiResource(
     (signal) => dashboardApi.overview(params(mainRange), signal),
     [mainRange.range, mainRange.from, mainRange.to],
-    // Coming back to the dashboard paints the last figures at once and refreshes
-    // behind them, rather than showing eight skeletons for a second.
-    // Bills and catalogue writes both move these figures, so the page follows both.
+    // Shows cached figures at once and refreshes in the background.
+    // Refreshes on both bill and catalogue writes.
     { cacheKey: 'dashboard:overview', watch: ['bills', 'perfumes'] }
   );
 
@@ -98,8 +94,7 @@ const DashboardPage = () => {
     [paymentRange.range, paymentRange.from, paymentRange.to]
   );
 
-  // `by` is part of what makes this widget's request distinct, so a change of
-  // metric takes it off the shared payload just as a range change does.
+  // Changing `by` (like changing the range) makes this widget fetch on its own.
   const topPerfumes = useWidget(
     'topPerfumes',
     sameAsMain(topRange) && topBy === 'units',
@@ -107,7 +102,7 @@ const DashboardPage = () => {
     [topRange.range, topRange.from, topRange.to, topBy]
   );
 
-  // Neither of these carries a range control, so they are always shared.
+  // No range control on these, so they always use the shared payload.
   const recentBills = useWidget('recentBills', true, () => dashboardApi.recentBills({ limit: 5 }), []);
   const lowStock = useWidget('lowStock', true, () => dashboardApi.lowStock({ limit: 6 }), []);
 
@@ -125,8 +120,6 @@ const DashboardPage = () => {
         action={
           isAdmin && (
             <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1.25, justifyContent: { sm: 'flex-end' } }}>
-              {/* Filling the catalogue starts here as often as it does on the
-                  perfumes list, so the same door is offered on both. */}
               <Button variant="outlined" startIcon={<UploadFileOutlined />} onClick={() => setBulkOpen(true)}>
                 Bulk upload
               </Button>
@@ -140,12 +133,10 @@ const DashboardPage = () => {
 
       <InlineError error={summary.error} onRetry={summary.reload} />
 
-      {/* ── Summary cards ── */}
       <Grid container spacing={GUTTER.cards} sx={{ mb: 2.5 }}>
         <Grid item xs={12} sm={6} lg={3}>
           <StatCard
-            // Money actually taken. A part-paid bill counts for what came in,
-            // and the rest shows up in the caption as still owed.
+            // Money actually received. Part-paid balances show in the caption.
             label="Revenue collected"
             value={formatCurrency(stats?.revenue?.value)}
             growth={stats?.revenue?.growth}
@@ -186,8 +177,7 @@ const DashboardPage = () => {
             caption={
               [
                 `${formatNumber(stats?.perfumes?.published || 0)} published`,
-                // Named apart: "6 low stock" reads as sellable when all six are
-                // in fact empty shelves.
+                // Out of stock is shown separately from low stock.
                 stats?.perfumes?.lowStock ? `${formatNumber(stats.perfumes.lowStock)} low stock` : '',
                 stats?.perfumes?.outOfStock ? `${formatNumber(stats.perfumes.outOfStock)} out of stock` : '',
               ]
@@ -205,8 +195,7 @@ const DashboardPage = () => {
             label="Customers"
             value={formatNumber(stats?.customers?.value)}
             growth={stats?.customers?.growth}
-            // The value is everyone ever billed; the caption is the ones this
-            // period brought in, which is what the growth chip measures.
+            // Value = all customers ever; caption = new this period (what the growth chip measures).
             caption={`${formatNumber(stats?.customers?.newInPeriod || 0)} new in this period`}
             icon={PeopleAltOutlined}
             color={brand.plumLight}
@@ -215,7 +204,6 @@ const DashboardPage = () => {
         </Grid>
       </Grid>
 
-      {/* ── Revenue analytics ── */}
       <Box sx={{ mb: 2.5 }}>
         <RevenueChart
           data={series.data}
@@ -231,9 +219,7 @@ const DashboardPage = () => {
         />
       </Box>
 
-      {/* ── How bills settled, and how customers paid ──
-          Two questions about the same bills, so they sit side by side: the donut
-          is how many were settled in full, the pie is what they paid with. */}
+      {/* Donut: bills settled in full vs pending. Pie: payment methods. */}
       <Grid container spacing={GUTTER.cards} sx={{ mb: 2.5 }}>
         <Grid item xs={12} md={5}>
           <BreakdownChart
@@ -251,8 +237,7 @@ const DashboardPage = () => {
               const settled = billStatus.data?.settledPercentage;
               if (settled === undefined) return null;
               const owed = billStatus.data?.outstanding || 0;
-              // The number a shop owner actually wants off this chart is how much
-              // of the period is still walking around unpaid.
+              // Highlight how much is still unpaid for the period.
               return owed > 0
                 ? `${formatNumber(settled)}% settled in full · ${formatCurrency(owed)} still pending.`
                 : `${formatNumber(settled)}% of bills in this period were settled in full.`;
@@ -281,7 +266,6 @@ const DashboardPage = () => {
         </Grid>
       </Grid>
 
-      {/* ── Top sellers ── */}
       <Box sx={{ mb: 2.5 }}>
         <TopPerfumes
           data={topPerfumes.data}
@@ -297,7 +281,6 @@ const DashboardPage = () => {
         />
       </Box>
 
-      {/* ── Recent bills + low stock ── */}
       <Grid container spacing={GUTTER.cards}>
         <Grid item xs={12} md={7}>
           <RecentBills
@@ -320,8 +303,7 @@ const DashboardPage = () => {
       <BulkUploadDialog
         open={bulkOpen}
         onClose={() => setBulkOpen(false)}
-        // New perfumes change the catalogue counts and can clear or add low
-        // stock warnings, so both widgets are refreshed behind the dialog.
+        // New perfumes change catalogue counts and low-stock warnings, so refresh both widgets.
         onCreated={() => {
           summary.reload();
           lowStock.reload();

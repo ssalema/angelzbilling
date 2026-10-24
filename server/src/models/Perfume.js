@@ -4,10 +4,9 @@ import { resolveSizeGrams, unitsFromGrams, smallestFillGrams } from '../utils/gr
 
 const PERFUME_STATUSES = ['draft', 'published', 'archived'];
 
-/** How a perfume got into the catalogue — typed into the wizard, or uploaded in a sheet. */
 const PERFUME_SOURCES = ['manual', 'bulk-upload'];
 
-// What the last write actually changed, so "Updated by Lucifer" can say *what* Lucifer touched.
+// What the last update changed, shown next to "Updated by".
 const PERFUME_UPDATE_ACTIONS = [
   'created',
   'bulk-upload',
@@ -57,15 +56,15 @@ const attributeSchema = new mongoose.Schema(
 
 const variantSchema = new mongoose.Schema(
   {
-    /** Human label built from the options, e.g. "100gm" or "100gm / Gold". */
+    // e.g. "100gm" or "100gm / Gold".
     label: { type: String, required: true, trim: true },
-    /** { Size: '100gm', Finish: 'Gold' } — flexible so any attribute set works. */
+    // e.g. { Size: '100gm', Finish: 'Gold' }.
     options: { type: Map, of: String, default: {} },
     sku: { type: String, required: true, trim: true, uppercase: true },
     mrp: { type: Number, required: true, min: [0, 'Price cannot be negative'] },
     discountPercent: { type: Number, default: 0, min: 0, max: 100 },
     sellingPrice: { type: Number, default: 0, min: 0 },
-    // Grams this fill removes from the perfume's single stock per unit sold — derived from the Size option on save.
+    // Grams deducted from stock per unit sold; derived from the Size option on save.
     sizeGrams: { type: Number, default: 0, min: [0, 'Fill size cannot be negative'] },
     isActive: { type: Boolean, default: true },
     image: {
@@ -105,18 +104,19 @@ const perfumeSchema = new mongoose.Schema(
     features: { type: [String], default: [] },
     faqs: { type: [faqSchema], default: [] },
 
-    // ── Base pricing (used when the perfume has no variants) ──
+    // Base pricing, used when the perfume has no variants.
     mrp: { type: Number, required: [true, 'Price is required'], min: [0, 'Price cannot be negative'] },
     discountPercent: { type: Number, default: 0, min: 0, max: 100 },
     finalPrice: { type: Number, default: 0, min: 0, index: true },
 
-    /** Grams sold per unit when the perfume has no variants (its pack size). */
+    // Grams per unit when there are no variants.
     sizeGrams: { type: Number, default: 0, min: [0, 'Pack size cannot be negative'] },
+    // In grams; shared by all variants.
     stock: { type: Number, default: 0, min: [0, 'Stock cannot be negative'] },
-    /** Also grams — the weight at which the low stock alert fires, measured on `stock`. */
+    // In grams.
     lowStockThreshold: { type: Number, default: 100, min: 0 },
 
-    // `stock - lowStockThreshold`, stored rather than computed.
+    // `stock - lowStockThreshold`, stored so low-stock filters can use an index.
     stockMargin: { type: Number, default: 0 },
 
     images: {
@@ -148,7 +148,7 @@ const perfumeSchema = new mongoose.Schema(
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
-    // Pinned: the model is Perfume but the data still lives in the original collection.
+    // Legacy collection name.
     collection: 'products',
   }
 );
@@ -157,16 +157,16 @@ perfumeSchema.index({ status: 1, createdAt: -1 });
 perfumeSchema.index({ category: 1, subCategory: 1 });
 perfumeSchema.index({ 'variants.sku': 1 });
 perfumeSchema.index({ status: 1, name: 1 });
-// The remaining sortable columns on the catalogue list.
+// Sortable catalogue columns.
 perfumeSchema.index({ name: 1 });
 perfumeSchema.index({ mrp: -1 });
 perfumeSchema.index({ stock: 1 });
-// The stock filters, which were `$expr` and therefore unindexable.
+// Low-stock filters.
 perfumeSchema.index({ stockMargin: 1 });
 perfumeSchema.index({ status: 1, stockMargin: 1 });
 perfumeSchema.index({ name: 'text', brand: 'text', sku: 'text', tags: 'text' });
 
-/** Grams on hand. Variants share this one pool, so it is simply `stock`. */
+// Variants share one stock pool, so this is just `stock`.
 perfumeSchema.virtual('totalStock').get(function totalStock() {
   return this.stock || 0;
 });
@@ -179,26 +179,24 @@ perfumeSchema.virtual('primaryImage').get(function primaryImage() {
   return this.images?.[0]?.url || this.variants?.find((v) => v.image?.url)?.image?.url || '';
 });
 
-// Keep every derived field in sync on write, so reads never have to compute.
+// Keep derived fields in sync on save.
 perfumeSchema.pre('save', function syncDerived(next) {
   if (this.isModified('name') && this.name) {
     this.slug = slugify(this.name, { lower: true, strict: true, trim: true });
   }
 
   this.finalPrice = computeFinalPrice(this.mrp, this.discountPercent);
-  // Kept in step with both of its inputs, so a threshold change is as covered as
-  // a stock change. Every other write path maintains it too — see the field.
+  // Other write paths (bulk updates) must maintain stockMargin too.
   this.stockMargin = round2((this.stock || 0) - (this.lowStockThreshold ?? 100));
 
   if (this.hasVariants && this.variants?.length) {
     this.variants.forEach((variant) => {
       variant.sellingPrice = computeFinalPrice(variant.mrp, variant.discountPercent);
-      // "100gm" in the Size option is the source of truth unless someone typed an
-      // explicit fill size, so stock maths never depends on a hidden field.
+      // The Size option (e.g. "100gm") decides grams unless a fill size was typed.
       variant.sizeGrams = resolveSizeGrams(variant);
     });
   } else {
-    // A perfume toggled back to "no variants" must not keep stale variant rows.
+    // Clear stale variant data when variants are turned off.
     this.hasVariants = false;
     this.variants = [];
     this.variantAttributes = [];
@@ -208,7 +206,7 @@ perfumeSchema.pre('save', function syncDerived(next) {
   next();
 });
 
-// Whole bottles sellable right now out of the shared weight.
+// Whole units sellable from the shared grams.
 perfumeSchema.virtual('unitsInStock').get(function unitsInStock() {
   return unitsFromGrams(this.stock, smallestFillGrams(this));
 });

@@ -28,15 +28,13 @@ const SizePriceTable = ({ rows, dense = false, editable = false, onEdit, disable
     }}
   >
     <Box sx={{ overflowX: 'auto' }}>
-      {/* `width: auto` overrides MUI's 100%, which is what forced the stretch;
-          `minWidth` then buys the columns a little air. */}
+      {/* `width: auto` overrides MUI's 100% so the table doesn't stretch. */}
       <Table
         size="small"
         sx={{
           width: 'auto',
           minWidth: dense ? 560 : 720,
-          // A row holding an input does not also need the theme's 12px above
-          // and below it — the field brings its own height.
+          // Inputs bring their own height, so trim the row padding.
           ...(editable && { '& tbody td': { py: 0.75 } }),
         }}
       >
@@ -94,7 +92,6 @@ const SizePriceTable = ({ rows, dense = false, editable = false, onEdit, disable
                     onChange={(event) => onEdit?.(row.sizeGrams, event.target.value.replace(/[^\d.]/g, ''))}
                     disabled={disabled}
                     error={Boolean(row.issue)}
-                    // Only when there is something to say.
                     helperText={row.issue || undefined}
                     placeholder={row.currentMrp > 0 ? String(row.currentMrp) : ''}
                     fullWidth={false}

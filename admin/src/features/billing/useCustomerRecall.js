@@ -5,10 +5,9 @@ import { billApi } from '../../api/endpoints.js';
 import useDebounce from '../../hooks/useDebounce.js';
 import { DEFAULT_DIAL_CODE, digitsFor, onlyDigits } from '../../utils/countries.js';
 
-/** Everything a past bill can tell us about the person standing at the counter. */
 const RECALLED_FIELDS = ['name', 'email', 'address', 'gstin'];
 
-// Customer recall for the billing form.
+// Looks up a returning customer by mobile number and fills in their details.
 export const useCustomerRecall = () => {
   const { control, getValues, setValue } = useFormContext();
 
@@ -18,12 +17,11 @@ export const useCustomerRecall = () => {
 
   const [customer, setCustomer] = useState(null);
   const [loading, setLoading] = useState(false);
-  /** True once a complete number has been looked up, so "new customer" can be said. */
+  // True once a full number was looked up, so we can show "new customer".
   const [searched, setSearched] = useState(false);
 
-  // One lookup per number: re-filling on every keystroke would fight the biller.
+  // Look up each number only once, so we don't overwrite what the user types.
   const lastLookup = useRef('');
-  /** Bumped to force that one lookup to run again — see `refresh` below. */
   const [reloadKey, setReloadKey] = useState(0);
 
   const fill = useCallback(
@@ -42,7 +40,7 @@ export const useCustomerRecall = () => {
     const { min } = digitsFor(dial);
     const key = `${dial}-${debouncedMobile}`;
 
-    // A half-typed number matches half the town; wait for a complete one.
+    // Wait for a complete number.
     if (debouncedMobile.length < min) {
       lastLookup.current = '';
       setCustomer(null);
@@ -64,7 +62,7 @@ export const useCustomerRecall = () => {
         setSearched(true);
         if (found) fill(found);
       })
-      // A failed lookup must never block billing — the biller just types it out.
+      // A failed lookup must never block billing.
       .catch(() => active && setCustomer(null))
       .finally(() => active && setLoading(false));
 
@@ -73,13 +71,12 @@ export const useCustomerRecall = () => {
     };
   }, [debouncedMobile, dial, fill, reloadKey]);
 
-  // Re-reads the customer from the server.
   const refresh = useCallback(() => {
     lastLookup.current = '';
     setReloadKey((key) => key + 1);
   }, []);
 
-  /** "That's not them" — drop the recalled details, keep the number typed so far. */
+  // Clears the recalled details but keeps the typed number.
   const forget = useCallback(() => {
     RECALLED_FIELDS.forEach((key) =>
       setValue(`customer.${key}`, '', { shouldDirty: true, shouldValidate: false })
@@ -92,7 +89,7 @@ export const useCustomerRecall = () => {
     customer,
     loading,
     searched,
-    /** Overwrites even hand-typed fields with what the last bill had. */
+    // Overwrites even hand-typed fields.
     applySaved: useCallback(() => customer && fill(customer, { overwrite: true }), [customer, fill]),
     forget,
     refresh,

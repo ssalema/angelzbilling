@@ -4,12 +4,11 @@ import { clearResourceCache } from '../api/resourceCache.js';
 import { useAuth } from './AuthContext.jsx';
 import { SESSION_NOTICE } from '../utils/constants.js';
 
-// One connection and one set of listeners for the whole app. Nothing below this
-// provider touches socket.io directly.
+// One socket connection for the whole app; nothing else touches socket.io directly.
 
 const RealtimeContext = createContext(null);
 
-/** What the server calls each resource, and what a screen asks to watch. */
+/** Resource names used by the server and by screens that watch them. */
 export const RESOURCES = ['bills', 'perfumes', 'users', 'branches', 'settings'];
 
 export const RealtimeProvider = ({ children }) => {
@@ -20,8 +19,7 @@ export const RealtimeProvider = ({ children }) => {
   const [revisions, setRevisions] = useState({});
   const [lastEvent, setLastEvent] = useState(null);
 
-  // Subscribers live outside React state: adding one must not re-render every
-  // screen that is already listening.
+  // Kept in a ref so adding a subscriber doesn't re-render listening screens.
   const handlers = useRef(new Map());
 
   const emitToHandlers = useCallback((event, payload) => {
@@ -29,7 +27,7 @@ export const RealtimeProvider = ({ children }) => {
       try {
         handler(payload);
       } catch {
-        // One bad listener must not stop the rest from hearing the event.
+        // One bad listener must not stop the others.
       }
     });
   }, []);
@@ -44,14 +42,31 @@ export const RealtimeProvider = ({ children }) => {
     const socket = connectSocket();
     if (!socket) return undefined;
 
-    const onConnect = () => setConnected(true);
-    const onDisconnect = () => setConnected(false);
+    // Events sent while disconnected were missed, so refresh every screen on reconnect.
+    let droppedSinceLastConnect = false;
+    const catchUp = () => {
+      clearResourceCache();
+      setRevisions((current) =>
+        Object.fromEntries(RESOURCES.map((name) => [name, (current[name] || 0) + 1]))
+      );
+    };
+
+    const onConnect = () => {
+      setConnected(true);
+      if (droppedSinceLastConnect) catchUp();
+      droppedSinceLastConnect = false;
+    };
+    const onDisconnect = () => {
+      setConnected(false);
+      droppedSinceLastConnect = true;
+    };
+    // The browser can come back online before the socket reconnects.
+    window.addEventListener('online', catchUp);
 
     const onChange = (payload) => {
       if (!payload?.resource) return;
 
-      // What the screens are holding was true before this write. See
-      // api/resourceCache.js — they refetch on their own from here.
+      // Cached data is now stale; screens refetch on their own (see api/resourceCache.js).
       clearResourceCache(payload.resource);
       clearResourceCache('dashboard');
 
@@ -62,9 +77,7 @@ export const RealtimeProvider = ({ children }) => {
       setLastEvent(payload);
     };
 
-    // An administrator ended this session, or the password behind it changed.
-    // The sign-in page states the reason, so a toast here would only say it
-    // twice — in red, over a screen that is already being replaced.
+    // Session ended by an admin or a password change. No toast: the sign-in page shows the reason.
     const onRevoked = (payload) => {
       disconnectSocket();
       logout(
@@ -78,8 +91,7 @@ export const RealtimeProvider = ({ children }) => {
       if (payload?.user) setUser((current) => ({ ...current, ...payload.user }));
     };
 
-    // Subscribers are fed through one listener rather than one per subscription,
-    // because a screen mounts before this effect runs.
+    // One catch-all listener, because screens subscribe before this effect runs.
     const onAny = (event, payload) => {
       emitToHandlers(event, payload);
       if (payload?.resource) emitToHandlers(payload.resource, payload);
@@ -95,6 +107,7 @@ export const RealtimeProvider = ({ children }) => {
     setConnected(socket.connected);
 
     return () => {
+      window.removeEventListener('online', catchUp);
       socket.offAny(onAny);
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);

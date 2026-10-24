@@ -6,7 +6,7 @@ import { useSnackbar } from '../../context/SnackbarContext.jsx';
 import LogoDropzone from '../../components/common/LogoDropzone.jsx';
 import { rejectImageReason } from '../../utils/constants.js';
 
-// One branding slot — logo or favicon — for a single branch.
+// Logo or favicon slot for one branch.
 const BranchBrandingField = ({
   kind,
   label,
@@ -23,11 +23,9 @@ const BranchBrandingField = ({
 }) => {
   const inputRef = useRef(null);
   const snackbar = useSnackbar();
-  // Null when idle, otherwise 'upload' or 'remove' — the frame reads back the
-  // work it is actually doing, so a delete never announces itself as an upload.
+  // null, 'upload' or 'remove'.
   const [busy, setBusy] = useState(null);
-  // Null except while a file is on the wire — a removal is busy with nothing to
-  // measure, so it leaves this alone and the frame runs an indeterminate bar.
+  // Upload percent; stays null during a removal (indeterminate bar).
   const [progress, setProgress] = useState(null);
   const [pendingUrl, setPendingUrl] = useState('');
 
@@ -96,8 +94,6 @@ const BranchBrandingField = ({
       <Stack direction="row" justifyContent="space-between" alignItems="baseline" spacing={1} sx={{ mb: 0.75 }}>
         <Typography variant="subtitle2">{label}</Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'right' }}>
-          {/* State first, then the staged note, then the spec — the order the
-              store's own branding slot reads in. */}
           {removing
             ? 'Removing…'
             : busy || uploading
@@ -113,7 +109,6 @@ const BranchBrandingField = ({
         value={preview}
         alt={label}
         busy={Boolean(busy) || uploading}
-        // The wording the profile photo shows for the same two states.
         busyLabel={removing ? 'Removing…' : 'Uploading…'}
         progress={removing ? null : busy ? progress : uploadProgress}
         disabled={disabled}

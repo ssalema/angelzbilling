@@ -19,14 +19,14 @@ import SummaryRow from '../../components/common/SummaryRow.jsx';
 import { formatCurrency, formatDate } from '../../utils/format.js';
 import { FONT, ICON, INSET_RADIUS, numericText, statusColors, surface } from '../../theme/index.js';
 
-// Raised over the billing form when the number just typed belongs to a customer who still owes money.
+// Shown over the billing form when the typed mobile number has unpaid bills.
 const PendingBillsDialog = ({ open, customer, onClose, onCollect }) => {
   const bills = customer?.pendingBills || [];
   if (!bills.length) return null;
 
   const totalDue = bills.reduce((sum, bill) => sum + Number(bill.amountDue || 0), 0);
 
-  // MUI reports why a close was asked for; only the deliberate ones get through.
+  // Ignore backdrop clicks and Escape; only explicit actions close it.
   const handleClose = (_event, reason) => {
     if (reason === 'backdropClick' || reason === 'escapeKeyDown') return;
     onClose?.();
@@ -81,10 +81,8 @@ const PendingBillsDialog = ({ open, customer, onClose, onCollect }) => {
               strong
               tone={statusColors.pending.color}
             />
-            {/* Its own pair per bill: with more than one open, a single shared
-                action could only ever guess which balance the biller meant.
-                Collecting happens right here — walking away to the bill record
-                would abandon the sale being rung up behind this dialog. */}
+            {/* Actions per bill, so it is clear which balance is collected.
+                Collecting here avoids leaving the sale in progress. */}
             <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
               <Button
                 component={RouterLink}
@@ -119,7 +117,6 @@ const PendingBillsDialog = ({ open, customer, onClose, onCollect }) => {
         </Typography>
       </DialogContent>
 
-      {/* Each bill above carries its own way out; this just gets on with the sale. */}
       <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
         <Button variant="contained" onClick={onClose}>
           Continue billing

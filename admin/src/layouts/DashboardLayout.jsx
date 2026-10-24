@@ -5,6 +5,7 @@ import Sidebar, { SIDEBAR_WIDTH } from './Sidebar.jsx';
 import Topbar from './Topbar.jsx';
 import { RouteSkeleton } from '../components/common/StateViews.jsx';
 import ScrollManager from '../components/common/ScrollManager.jsx';
+import NetworkBanner from '../components/common/NetworkBanner.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useRealtime } from '../context/RealtimeContext.jsx';
 
@@ -45,6 +46,7 @@ const DashboardLayout = () => {
         <Topbar onMenuClick={() => setMobileOpen((open) => !open)} />
 
         <Container maxWidth="xl" sx={{ py: { xs: 2.5, md: 3.5 }, px: { xs: 2, md: 3 } }}>
+          <NetworkBanner />
           {/*
             Route-level code splitting: each feature loads on first visit. The
             fallback is the skeleton of the page being fetched — a bare

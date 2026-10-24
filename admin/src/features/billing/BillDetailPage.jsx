@@ -37,18 +37,19 @@ import useApiResource from '../../hooks/useApiResource.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
+import useRequestKey from '../../hooks/useRequestKey.js';
 import { formatCurrency, formatDate, formatNumber } from '../../utils/format.js';
 import { splitGst } from './billSchema.js';
 import { PAYMENT_METHOD_LABELS, locationFullLabel } from '../../utils/constants.js';
 import { formatContactNumber } from '../../utils/countries.js';
 import { FONT, CARD_HEAD_PAD, CARD_PAD, GUTTER, brand, numericText, statusColors } from '../../theme/index.js';
 
-// Long bills scroll inside the items card instead of pushing the summary
-// column far off screen. One row is an avatar plus two lines of text.
+// Long bills scroll inside the items card. Row height is in px.
 const ITEMS_BEFORE_SCROLL = 8;
 const ITEM_ROW_HEIGHT = 97;
 
 const BillDetailPage = () => {
+  const statusKey = useRequestKey();
   const { id } = useParams();
   const snackbar = useSnackbar();
   const { isAdmin } = useAuth();
@@ -59,13 +60,13 @@ const BillDetailPage = () => {
   const [confirmAction, setConfirmAction] = useState(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
 
-  // The slip stays mounted off-screen, so the PDF is rasterised straight from it.
+  // The PDF is rendered from the off-screen slip.
   const slipRef = useRef(null);
   const [downloading, setDownloading] = useState(false);
 
   const { data: bill, loading, error, reload } = useApiResource(() => billApi.get(id), [id], { watch: 'bills' });
 
-  // ?print=1 opens the browser print dialog as soon as the bill has rendered.
+  // ?print=1 opens the print dialog once the bill has rendered.
   useEffect(() => {
     if (bill && searchParams.get('print') === '1') {
       const timer = setTimeout(() => window.print(), 350);
@@ -87,7 +88,8 @@ const BillDetailPage = () => {
 
   const changeStatus = async (status, reason) => {
     try {
-      const result = await billApi.setStatus(id, { status, reason });
+      const result = await billApi.setStatus(id, { status, reason }, statusKey.get());
+      statusKey.renew();
       snackbar.success(result.message);
       reload();
     } catch (err) {
@@ -95,7 +97,7 @@ const BillDetailPage = () => {
     }
   };
 
-  // Every state renders the same header, so the page does not jump when the bill lands.
+  // Same header in every state so the page doesn't jump.
   const crumbs = [
     { label: 'Dashboard', to: '/dashboard' },
     { label: 'Bill records', to: '/billing' },
@@ -141,13 +143,12 @@ const BillDetailPage = () => {
   const items = bill.items || [];
   const paymentLabel = PAYMENT_METHOD_LABELS[bill.paymentMethod] || bill.paymentMethod;
   const savings = Number(bill.totalDiscount || 0);
-  // Tax is shown the way it is charged: half CGST, half SGST.
+  // Tax is split half CGST, half SGST.
   const gst = splitGst(bill.taxPercent, bill.taxAmount);
 
   const amountDue = Number(bill.amountDue || 0);
-  // Only a bill that is still owed something can take a payment.
   const canCollectPayment = bill.status === 'pending' && amountDue > 0;
-  // Newest first: "what happened last to this bill" is the question being asked.
+  // Newest first.
   const history = [...(bill.payments || [])].sort((a, b) => new Date(b.at) - new Date(a.at));
   const refund = (bill.statusHistory || []).find((event) => event.to === 'refunded');
 
@@ -161,7 +162,6 @@ const BillDetailPage = () => {
           breadcrumbs={crumbs}
           action={
             <Stack direction="row" spacing={1.5} alignItems="center">
-              {/* Pending bills only — this is the whole point of the status. */}
               {canCollectPayment && (
                 <Button
                   variant="contained"
@@ -302,15 +302,12 @@ const BillDetailPage = () => {
                   {branchesEnabled && (
                     <SummaryRow
                       label="Branch"
-                      // No branch on the bill means it was raised at the Head
-                      // Office, which is a location like any other.
+                      // No branch means the bill was raised at Head Office.
                       value={locationFullLabel(bill.branch)}
                     />
                   )}
                   <SummaryRow label="Billed by" value={bill.billedBy?.name || 'NA'} />
                   <SummaryRow label="Date" value={formatDate(bill.createdAt, 'time')} />
-                  {/* A status change is an action someone took, so it names them
-                      the same way the bill names who raised it. */}
                   {refund && (
                     <>
                       <SummaryRow label="Refunded by" value={refund.by?.name || 'NA'} />
@@ -357,9 +354,7 @@ const BillDetailPage = () => {
                     </Typography>
                   </Stack>
 
-                  {/* A bill still carrying a balance has to show both halves, and
-                      say plainly that the balance is collected here rather than
-                      on a new bill. A settled one keeps the panel it always had. */}
+                  {/* Show paid and due amounts only when a balance remains. */}
                   {amountDue > 0 && (
                     <>
                       <Divider sx={{ my: 1 }} />
@@ -383,10 +378,7 @@ const BillDetailPage = () => {
                 </Box>
               </Card>
 
-              {/* ── Payment history ──
-                  Who took money against this bill, how much, and when. Written
-                  from the signed-in account on every payment, so a part-paid
-                  bill settled by a second person still says exactly that. */}
+              {/* ── Payment history ── */}
               {history.length > 0 && (
                 <Card>
                   <Box sx={CARD_HEAD_PAD}>
@@ -424,8 +416,7 @@ const BillDetailPage = () => {
         </Grid>
       </Box>
 
-      {/* The thermal slip stays mounted but parked off-screen: Print still produces the
-          receipt, and Download can rasterise a node that actually has layout. */}
+      {/* Slip is kept off-screen (not hidden) so Print and PDF download both work. */}
       <Box
         aria-hidden
         sx={{
@@ -449,8 +440,7 @@ const BillDetailPage = () => {
               title: 'Refund this bill?',
               message:
                 'The bill will be marked refunded and its items returned to stock. Revenue reports will exclude it' +
-                // A pending bill is being written off as well as refunded, and
-                // that is worth saying before it is done.
+                // Warn that any amount still due is written off too.
                 (amountDue > 0
                   ? `, and the ${formatCurrency(amountDue)} still owed on it will no longer be collectable.`
                   : '.'),
@@ -467,9 +457,7 @@ const BillDetailPage = () => {
         </MenuItem>
       </Menu>
 
-      {/* Collecting the balance reloads the bill rather than patching it in
-          place: the server is what decided the new status, and the slip below
-          has to reprint from that same answer. */}
+      {/* Reload instead of patching, since the server decides the new status. */}
       <CollectPaymentDialog
         open={paymentOpen}
         bill={bill}

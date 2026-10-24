@@ -13,29 +13,38 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [bootSettings, setBootSettings] = useState(null);
   const [booting, setBooting] = useState(true);
-  // Why the last session ended, worded for the person reading the sign-in page.
-  // `{ message, severity }`, or null after a sign-out they asked for themselves.
+  // Why the last session ended, shown on the sign-in page: `{ message, severity }`.
+  // Null after a normal sign-out.
   const [sessionNotice, setSessionNotice] = useState(null);
+  // Why the session check failed on load (offline, slow, server down). This is not
+  // "signed out", so the boot screen shows the reason and a retry instead.
+  const [bootError, setBootError] = useState(null);
+  const [bootAttempt, setBootAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setBootError(null);
 
     const restore = async () => {
       try {
-        const response = await api.post('/auth/refresh');
+        const response = await api.post('/auth/refresh', {}, { timeout: 15_000 });
         const { accessToken, user: restored, settings } = response.data.data;
         setAccessToken(accessToken);
         if (!cancelled) {
           setUser(restored);
-          // Arrives with the session, so the settings request that used to
-          // follow this one is no longer needed on boot.
+          // Settings come with the session, so no extra request is needed on boot.
           if (settings) setBootSettings(settings);
+          setBooting(false);
         }
-      } catch {
+      } catch (error) {
+        if (cancelled) return;
+        if (error?.isNetwork || error?.status >= 500) {
+          setBootError(error);
+          return;
+        }
         setAccessToken(null);
-        if (!cancelled) setUser(null);
-      } finally {
-        if (!cancelled) setBooting(false);
+        setUser(null);
+        setBooting(false);
       }
     };
 
@@ -43,14 +52,22 @@ export const AuthProvider = ({ children }) => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [bootAttempt]);
+
+  const retryBoot = useCallback(() => setBootAttempt((attempt) => attempt + 1), []);
+
+  // Retry automatically when back online.
+  useEffect(() => {
+    if (!bootError) return undefined;
+    window.addEventListener('online', retryBoot);
+    return () => window.removeEventListener('online', retryBoot);
+  }, [bootError, retryBoot]);
 
   // The axios interceptor calls this when a refresh finally fails.
   useEffect(() => {
     setSessionExpiredHandler(() => {
       setUser(null);
-      // A revoked session usually fails a refresh moments later. The reason the
-      // server gave is the better one, so it is not replaced by this fallback.
+      // Keep the server's revoke reason if one was already set.
       setSessionNotice((current) => current || SESSION_NOTICE.expired);
     });
   }, []);
@@ -64,25 +81,22 @@ export const AuthProvider = ({ children }) => {
     return loggedIn;
   }, []);
 
-  // `notice` is carried to the sign-in page when the session ended on its own
-  // rather than because the person asked to sign out.
+  // `notice` is shown on the sign-in page when the session ended on its own.
   const logout = useCallback(async (notice = null) => {
     setSessionNotice(notice?.message ? { severity: 'info', ...notice } : null);
     try {
       await authApi.logout();
     } catch {
-      // Signing out locally matters more than the server acknowledging it.
+      // Sign out locally even if the server call fails.
     }
     setAccessToken(null);
     setUser(null);
-    // Belongs to the session that just ended. Left in place, the login screen
-    // would render the signed-in store profile instead of the public one.
+    // Clear so the login screen shows the public store profile.
     setBootSettings(null);
   }, []);
 
-  // The server refused a request because the session is over, not because that
-  // one action was out of bounds. It words the reason; this ends the session on
-  // it, so a tab with no live connection lands on the sign-in page all the same.
+  // The server says the session is over (not just a forbidden action), so sign out
+  // with its reason.
   useEffect(() => {
     setSessionRevokedHandler((message) =>
       logout(message ? { message, severity: 'error' } : SESSION_NOTICE.ended)
@@ -95,10 +109,8 @@ export const AuthProvider = ({ children }) => {
     return fresh;
   }, []);
 
-  // Seeing and changing are two different questions.
   const isSuperAdmin = user?.role === 'superadmin';
-  // Every account sits at a location; no branch means the Head Office, and the
-  // Head Office Super Admin is the one with authority over the whole business.
+  // No branch means Head Office. The Head Office Super Admin controls the whole business.
   const myLocationId = user ? locationOf(user.branch).id : null;
   const isMainSuperAdmin = isSuperAdmin && myLocationId === HEAD_OFFICE.id;
 
@@ -115,6 +127,8 @@ export const AuthProvider = ({ children }) => {
     () => ({
       user,
       booting,
+      bootError,
+      retryBoot,
       bootSettings,
       sessionNotice,
       isAuthenticated: Boolean(user),
@@ -134,6 +148,8 @@ export const AuthProvider = ({ children }) => {
     [
       user,
       booting,
+      bootError,
+      retryBoot,
       bootSettings,
       sessionNotice,
       isSuperAdmin,

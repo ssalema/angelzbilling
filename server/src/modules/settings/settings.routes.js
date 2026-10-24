@@ -20,10 +20,10 @@ router.get('/public', getPublicSettings);
 
 router.use(authenticate);
 
-// Reading settings is fine for anyone — the bill print header uses them.
+// Anyone signed in can read settings; the bill print header uses them.
 router.get('/', getSettings);
 
-// Branding and the feature switches are read by every open screen.
+// Every open screen reads branding and feature switches, so announce changes.
 router.use(announceOnWrite({ resource: 'settings' }));
 
 const mainBusinessOnly = requireGlobalSuperAdmin(

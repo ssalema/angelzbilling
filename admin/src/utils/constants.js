@@ -1,33 +1,20 @@
-/** Shared option lists. Keeping them here stops labels drifting between screens. */
-
-/**
- * How much of a bill staff may discount without a Branch Admin, when the store's
- * own figure is not to hand. It mirrors DEFAULT_MAX_DISCOUNT_PERCENT on the
- * server, which is the side that actually enforces it — the two have to agree or
- * the billing form would promise a ceiling the server does not keep.
- */
+// Fallback staff discount cap. Must match DEFAULT_MAX_DISCOUNT_PERCENT on the server.
 export const DEFAULT_MAX_DISCOUNT_PERCENT = 20;
 
-// The store's locations are the Head Office plus every branch.
 export const HEAD_OFFICE = { id: 'head-office', name: 'Head Office', code: 'HO', isHeadOffice: true };
 
-/** The location a record belongs to, with the Head Office standing in for null. */
+// A null branch means Head Office.
 export const locationOf = (branch) => (branch?.id ? branch : HEAD_OFFICE);
 
-/** How a location is labelled in a table cell or chip. */
 export const locationLabel = (branch) => locationOf(branch).name;
 
-/**
- * The fuller label a picker or a summary line uses — "Testing (TB)". The server
- * words location changes the same way, so the notice someone reads on the
- * sign-in page names the location exactly as the picker that moved them did.
- */
+// e.g. "Testing (TB)". The server words location changes the same way.
 export const locationFullLabel = (branch) => {
   const location = locationOf(branch);
   return location.code ? `${location.name} (${location.code})` : location.name;
 };
 
-/** Head Office first, then the branches — the order every picker uses. */
+// Head Office first, then the branches.
 export const locationOptions = (branches = []) => [
   HEAD_OFFICE,
   ...branches.map((branch) => ({ ...branch, isHeadOffice: false })),
@@ -56,7 +43,6 @@ export const BILL_STATUSES = [
   { value: 'refunded', label: 'Refunded' },
 ];
 
-// How much of a bill the customer settles at the counter.
 export const PAYMENT_TERMS = [
   { value: 'full', label: 'Full Paid', description: 'The customer settles the whole bill now' },
   { value: 'partial', label: 'Partial Paid', description: 'Part now, the balance collected later' },
@@ -68,7 +54,7 @@ export const PERFUME_STATUSES = [
   { value: 'archived', label: 'Archived' },
 ];
 
-/** Standard perfume fill sizes, offered as one-click presets in the wizard. */
+// One-click size presets in the wizard.
 export const PERFUME_SIZES = ['25gm', '50gm', '100gm', '250gm', '500gm', '1000gm'];
 
 export const FRAGRANCE_FAMILIES = [
@@ -110,42 +96,33 @@ export const SELECTOR_STYLES = [
 
 export const ROWS_PER_PAGE = [10, 25, 50, 100];
 
-// What every uploader accepts.
 export const IMAGE_TYPES = 'image/jpeg,image/jpg,image/pjpeg,.jfif,image/png,image/gif,image/webp';
 
-/** Cloudinary and the server both cap a single upload here. */
+// Same per-file cap as the server and Cloudinary.
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'jpe', 'jfif', 'png', 'gif', 'webp'];
 
-// Windows often hands the browser a blank type for .jfif and other less common
-// extensions, so the name is the fallback. The server reads the actual bytes.
+// Windows often gives .jfif and similar files a blank type, so fall back to the
+// extension. The server checks the real bytes.
 const looksLikeImage = (file) => {
   if (file?.type?.startsWith('image/')) return true;
   const name = file?.name || '';
   return IMAGE_EXTENSIONS.includes(name.split('.').pop()?.toLowerCase());
 };
 
-// Why an image was turned away, or null if it is fine.
+// Returns why an image is rejected, or null if it's fine.
 export const rejectImageReason = (file) => {
   if (!looksLikeImage(file)) return 'That is not an image — pick a JPEG, PNG, WEBP or GIF.';
   if (file.size > MAX_UPLOAD_BYTES) return 'That image is over 5MB. Save a smaller copy and try again.';
   return null;
 };
 
-// The password rule, worded once.
 export const PASSWORD_HINT =
   'At least 8 characters with an uppercase letter, a lowercase letter and a number';
 
-/**
- * Why a session ended, as the sign-in page states it. One family of wording, so
- * a session that ends on its own always explains itself the same way: what
- * happened, then what to do next. Severity follows what the person can do about
- * it: `info` when signing back in fixes it, `warning` when the session lapsed on
- * its own, and `error` for the two that will refuse a fresh sign-in as well — so
- * being shut out mid-session looks exactly like being shut out at the sign-in
- * form, which is the same red banner the login attempt itself would raise.
- */
+// Sign-in page notices for why a session ended. `error` is for cases where
+// signing in again will also be refused.
 export const SESSION_NOTICE = {
   expired: { message: 'Your session expired. Please sign in again.', severity: 'warning' },
   ended: { message: 'Your session has ended. Please sign in again.', severity: 'info' },
@@ -153,8 +130,7 @@ export const SESSION_NOTICE = {
     message: 'Your password was changed. Please sign in with your new password.',
     severity: 'info',
   },
-  // Both ends of the same sentence the server sends when an account or the
-  // location behind it is switched off mid-session.
+  // Same wording the server sends when an account or branch is deactivated.
   deactivated: {
     message: 'Your account has been deactivated. Please contact the super admin.',
     severity: 'error',

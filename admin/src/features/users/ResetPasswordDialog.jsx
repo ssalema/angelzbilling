@@ -90,9 +90,7 @@ const ResetPasswordDialog = ({ open, user, onClose }) => {
               <RHFPasswordField
                 name="password"
                 label="New password *"
-                /* An admin is setting this *for someone else* and has to read it
-                   back to pass on, so it starts legible — but unlike before it
-                   can be hidden again on a screen other people can see. */
+                /* Visible by default so the admin can pass it on; can still be hidden. */
                 defaultVisible
                 autoFocus
                 helperText={PASSWORD_HINT}

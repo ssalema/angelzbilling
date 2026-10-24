@@ -18,21 +18,19 @@ import { lifetimeCache } from '../../middlewares/cache.js';
 import { locationFilter, HEAD_OFFICE_ID } from '../../utils/locations.js';
 import { branchesOn } from '../../utils/featureFlags.js';
 
-/** Every figure on this page is computed here — nothing is hardcoded. */
-
-// Which bills count towards the shop's figures, and what they are worth.
+// Refunded bills don't count towards the shop's figures.
 const EARNING = { status: { $ne: 'refunded' } };
 const COLLECTED = '$amountPaid';
 const BILLED = '$grandTotal';
-/** Only a pending bill is owed anything; a refund zeroes its balance on the way out. */
+// Only a pending bill is owed anything; a refund zeroes its balance.
 const OUTSTANDING = { $cond: [{ $eq: ['$status', 'pending'] }, '$amountDue', 0] };
 
-// A customer is identified by country code + number together, so +65 91234567 and +91 91234567 are two people.
+// Country code + number together identify a customer.
 const CUSTOMER_KEY = {
   $concat: [{ $ifNull: ['$customer.mobileCountryCode', '+91'] }, '$customer.mobile'],
 };
 
-/** Head Office figures are the bills with no branch, so this cannot be a truthy test. */
+// Head Office bills have no branch, so this can't be a truthy test.
 const branchMatch = (req) => locationFilter(resolveBranchScope(req), 'branch.id');
 
 const windowFromQuery = (req) =>
@@ -43,10 +41,9 @@ const growth = (current, previous) => {
   return round2(((current - previous) / previous) * 100);
 };
 
-// Distinct customers ever billed, and how many of them first appeared inside the current window.
 const CUSTOMER_COUNT_TTL_MS = 60_000;
 
-/** A resolved scope as the branch value stored on a customer's location entry. */
+// Maps a branch scope to the value stored on a customer's location entry.
 const customerBranchValue = (scope) => {
   if (scope === null || scope === undefined) return undefined; // every location
   if (String(scope) === HEAD_OFFICE_ID) return null; // the main business itself
@@ -77,13 +74,11 @@ const countCustomers = async (scope, window) => {
     newFilter ? Customer.countDocuments(newFilter) : Customer.countDocuments(totalFilter),
   ]);
 
-  // Kept in the shape the aggregation returned, so the caller is unchanged.
+  // Same shape the old aggregation returned.
   const rows = [{ total, newInPeriod }];
   lifetimeCache.set(key, rows, CUSTOMER_COUNT_TTL_MS);
   return rows;
 };
-
-/* ─────────────────────────── Summary cards ─────────────────────────── */
 
 const computeSummary = async (req) => {
   const scope = branchMatch(req);
@@ -99,7 +94,6 @@ const computeSummary = async (req) => {
       $group: {
         _id: null,
         revenue: { $sum: COLLECTED },
-        // The face value of what was sold.
         billed: { $sum: BILLED },
         outstanding: { $sum: OUTSTANDING },
         bills: { $sum: 1 },
@@ -127,14 +121,13 @@ const computeSummary = async (req) => {
           total: { $sum: 1 },
           published: { $sum: { $cond: [{ $eq: ['$status', 'published'] }, 1, 0] } },
           draft: { $sum: { $cond: [{ $eq: ['$status', 'draft'] }, 1, 0] } },
-          // Running dry but still sellable — counted apart from the shelves
-          // that are already empty, because the card names the two separately.
+          // Low but not empty; out-of-stock is counted separately.
           lowStock: {
             $sum: {
               $cond: [
                 {
                   $and: [
-                    // One bulk weight per perfume — variants share it.
+                    // One bulk weight per perfume; variants share it.
                     { $gt: [{ $ifNull: ['$stock', 0] }, 0] },
                     { $lte: [{ $ifNull: ['$stock', 0] }, { $ifNull: ['$lowStockThreshold', 100] }] },
                   ],
@@ -150,11 +143,8 @@ const computeSummary = async (req) => {
         },
       },
     ]),
-    // "Customers" = distinct contact numbers that have ever been billed.
     countCustomers(resolveBranchScope(req), window),
-    // The same question asked of the window before, so the two figures the card
-    // compares are the same measurement. Comparing a lifetime total against one
-    // period's customers, as this once did, reads as growth on every load.
+    // Same measure for the previous window, so growth compares like with like.
     prior.start ? countCustomers(resolveBranchScope(req), prior) : Promise.resolve([]),
     User.countDocuments({ isActive: true }),
   ]);
@@ -175,8 +165,7 @@ const computeSummary = async (req) => {
         value: round2(cur.revenue),
         previous: round2(prev.revenue),
         growth: growth(cur.revenue, prev.revenue),
-        // What was raised, and the part of it still to come in. billed =
-        // revenue + outstanding, so the card can show both without a second call.
+        // billed = revenue + outstanding.
         billed: round2(cur.billed),
         outstanding: round2(cur.outstanding),
       },
@@ -196,14 +185,12 @@ const computeSummary = async (req) => {
         outOfStock: perfumes.outOfStock,
       },
       customers: {
-        // Everyone ever billed, with the period's new faces beside it.
         value: customers.total,
         newInPeriod: customers.newInPeriod,
         growth: growth(customers.newInPeriod, previousCustomerRows[0]?.newInPeriod || 0),
       },
       averageOrderValue: {
-        // Measured on what was billed: the size of a basket does not change
-        // because the customer is paying for it in two visits.
+        // Based on billed total, not cash collected.
         value: cur.bills ? round2(cur.billed / cur.bills) : 0,
         previous: prev.bills ? round2(prev.billed / prev.bills) : 0,
         growth: growth(
@@ -217,15 +204,8 @@ const computeSummary = async (req) => {
   });
 };
 
-/* ────────────────── Revenue / Bills / Customers / AOV chart ────────────────── */
-
-/**
- * The server's current UTC offset, as `+05:30`.
- *
- * A fixed offset rather than an Olson name on purpose: Mongo raises on a zone it
- * does not recognise, and an empty chart is a worse failure than an hour's drift
- * in the two weeks a DST region is out of step.
- */
+// Server's UTC offset as `+05:30`. A fixed offset, not a zone name, because
+// Mongo throws on zone names it doesn't recognise.
 const utcOffset = () => {
   const minutes = -new Date().getTimezoneOffset();
   const sign = minutes < 0 ? '-' : '+';
@@ -235,7 +215,7 @@ const utcOffset = () => {
 
 const TIMEZONE = utcOffset();
 
-/** A runaway custom range must not be able to ask for a million points. */
+// Caps chart points for very long custom ranges.
 const MAX_POINTS = 2000;
 
 const computeSeries = async (req) => {
@@ -243,9 +223,7 @@ const computeSeries = async (req) => {
   const window = windowFromQuery(req);
   const metric = req.query.metric || 'revenue';
 
-  // "All time" has no bounds of its own, so the trading history supplies them.
-  // Without this the range is bucketed by month whatever it holds, and a shop
-  // three weeks old draws its whole history as one dot.
+  // "All time" has no bounds, so use the first and last bill dates.
   let span = window;
   if (!window.start || !window.end) {
     const [extent] = await Bill.aggregate([
@@ -255,8 +233,7 @@ const computeSeries = async (req) => {
     if (extent?.start) span = { start: extent.start, end: extent.end };
   }
 
-  // `range` is left off deliberately: the span decides the bucket size here, and
-  // naming the range would send 'all' back down the fixed-month path.
+  // `range` is left out on purpose so the span decides the bucket size.
   const granularity = pickGranularity({ start: span.start, end: span.end });
 
   const formats = { day: '%Y-%m-%d', month: '%Y-%m', year: '%Y' };
@@ -265,10 +242,7 @@ const computeSeries = async (req) => {
     { $match: { ...scope, ...buildDateMatch(window), ...EARNING } },
     {
       $group: {
-        // Bucketed on the same clock the window and the fill loop below use.
-        // Left in UTC, an evening bill east of Greenwich lands in the previous
-        // day's bucket, whose key the fill loop never produces — so its revenue
-        // disappears from the chart while still counting on the summary card.
+        // Use local time, or late bills land in the wrong day's bucket.
         _id: { $dateToString: { format: formats[granularity], date: '$createdAt', timezone: TIMEZONE } },
         revenue: { $sum: COLLECTED },
         billed: { $sum: BILLED },
@@ -282,14 +256,14 @@ const computeSeries = async (req) => {
         revenue: { $round: ['$revenue', 2] },
         bills: 1,
         customers: { $size: '$customers' },
-        // Same definition as the summary card: order value, not cash collected.
+        // Order value, not cash collected (same as the summary card).
         aov: { $round: [{ $cond: [{ $gt: ['$bills', 0] }, { $divide: ['$billed', '$bills'] }, 0] }, 2] },
       },
     },
     { $sort: { _id: 1 } },
   ]);
 
-  // Fill the gaps so the chart draws a continuous line instead of jumping days.
+  // Fill empty buckets so the chart line is continuous.
   const filled = [];
   const byKey = Object.fromEntries(rows.map((r) => [r._id, r]));
 
@@ -300,9 +274,7 @@ const computeSeries = async (req) => {
     return granularity === 'day' ? `${y}-${m}-${day}` : granularity === 'month' ? `${y}-${m}` : `${y}`;
   };
 
-  // The cursor has to sit on the first instant of its bucket before it is
-  // stepped: adding a month to the 31st skips the month that has no 31st, which
-  // dropped whole buckets out of the middle of the line.
+  // Start at the bucket's first day; adding a month to the 31st can skip a month.
   const startOfBucket = (d) => {
     const at = new Date(d);
     at.setHours(0, 0, 0, 0);
@@ -317,14 +289,13 @@ const computeSeries = async (req) => {
     else d.setFullYear(d.getFullYear() + 1);
   };
 
-  // A key is zero-padded, so comparing two of them as text is comparing dates.
+  // Keys are zero-padded, so comparing them as text compares dates.
   const keyToDate = (key) => {
     const [y, m = '1', d = '1'] = String(key).split('-');
     return new Date(Number(y), Number(m) - 1, Number(d));
   };
 
-  // The span resolved above, falling back to what the rows themselves cover for
-  // an all-time range on a shop that has not billed anything yet.
+  // Falls back to the rows' own range when the span has no bounds.
   const bounds = (() => {
     if (span.start && span.end) return { start: span.start, end: span.end };
     if (!rows.length) return null;
@@ -351,9 +322,7 @@ const computeSeries = async (req) => {
     }
   }
 
-  // Nothing above should be able to drop a bucket that holds bills, but a point
-  // silently missing from the line is the kind of wrong that looks right — so
-  // anything the walk did not emit is put back rather than lost.
+  // Safety net: add back any bucket with bills that the walk above missed.
   const emitted = new Set(filled.map((point) => point.key));
   rows
     .filter((r) => !emitted.has(r._id))
@@ -382,8 +351,6 @@ const computeSeries = async (req) => {
     },
   });
 };
-
-/* ─────────────────────────── Donut / pie charts ─────────────────────────── */
 
 const computePaymentBreakdown = async (req) => {
   const window = windowFromQuery(req);
@@ -417,8 +384,6 @@ const computePaymentBreakdown = async (req) => {
   });
 };
 
-/* ─────────────────────────── Top selling perfumes ─────────────────────────── */
-
 const computeTopPerfumes = async (req) => {
   const window = windowFromQuery(req);
   const limit = Math.min(20, Number.parseInt(req.query.limit, 10) || 5);
@@ -451,8 +416,6 @@ const computeTopPerfumes = async (req) => {
   });
 };
 
-/* ─────────────────────────── Recent bills & low stock ─────────────────────────── */
-
 const computeRecentBills = async (req) => {
   const limit = Math.min(20, Number.parseInt(req.query.limit, 10) || 5);
 
@@ -480,7 +443,7 @@ const computeLowStock = async (req) => {
         name: 1,
         sku: 1,
         brand: 1,
-        // The perfume's single bulk weight; variants hold no stock of their own.
+        // Variants hold no stock of their own.
         totalStock: { $ifNull: ['$stock', 0] },
         lowStockThreshold: 1,
         status: 1,
@@ -495,11 +458,8 @@ const computeLowStock = async (req) => {
   });
 };
 
-/* ─────────────────────────── Branch comparison ─────────────────────────── */
-
 const computeBranchPerformance = async (req) => {
-  // Nothing to compare in a single-location store — every bill would land in
-  // one "Unassigned" row.
+  // Nothing to compare in a single-location store.
   if (!branchesOn(req)) return ({ message: 'Branch performance loaded', data: [] });
 
   const window = windowFromQuery(req);
@@ -531,9 +491,6 @@ const computeBranchPerformance = async (req) => {
   });
 };
 
-/* ─────────────────────────── Bill status donut ─────────────────────────── */
-
-// How the period's bills settled: fully paid, still owed, or handed back.
 const BILL_STATUS_SEGMENTS = [
   { key: 'paid', label: 'Paid' },
   { key: 'pending', label: 'Pending' },
@@ -549,8 +506,7 @@ const computeBillStatusBreakdown = async (req) => {
       $group: {
         _id: '$status',
         count: { $sum: 1 },
-        // The slice's worth is what the shop holds against it: cash taken on a
-        // paid bill, the balance owed on a pending one, money returned on a refund.
+        // Pending: balance owed. Paid/refunded: amount paid.
         amount: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, '$amountDue', '$amountPaid'] } },
       },
     },
@@ -578,8 +534,6 @@ const computeBillStatusBreakdown = async (req) => {
   });
 };
 
-/* ─────────────────────────── Route handlers ─────────────────────────── */
-
 const handlerFor = (compute) => asyncHandler(async (req, res) => sendSuccess(res, await compute(req)));
 
 export const getSummary = handlerFor(computeSummary);
@@ -591,11 +545,9 @@ export const getLowStock = handlerFor(computeLowStock);
 export const getBranchPerformance = handlerFor(computeBranchPerformance);
 export const getBillStatusBreakdown = handlerFor(computeBillStatusBreakdown);
 
-/* ─────────────────────────── Combined first load ─────────────────────────── */
-
-// Every widget on the dashboard, for one range, in a single response.
+// All dashboard widgets for one range in a single response.
 export const getOverview = asyncHandler(async (req, res) => {
-  // The list widgets each want a different row count, but the shared query schema carries only one `limit`.
+  // Each list widget needs its own `limit`.
   const withLimit = (limit) => ({
     user: req.user,
     body: req.body,

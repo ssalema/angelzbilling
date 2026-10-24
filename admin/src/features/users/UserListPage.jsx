@@ -47,7 +47,7 @@ const UserListPage = () => {
   const { user: me, isMainSuperAdmin, canEditBranch, branchName } = useAuth();
   const { branchesEnabled } = useSettings();
 
-  // Every Super Admin sees every account — the list is never filtered by branch.
+  // The list is never filtered by branch; this only decides who can edit a row.
   const canManage = (row) =>
     isMainSuperAdmin || (row.role !== 'superadmin' && canEditBranch(locationOf(row.branch).id));
 
@@ -107,18 +107,16 @@ const UserListPage = () => {
     }
   };
 
-  // Inline role change straight from the table, as in the reference UI.
   const changeRole = async (row, role) => {
     if (role === row.role) return;
-    // The location rides along unchanged; `null` keeps a Head Office account
-    // at the Head Office rather than reading as "no location".
+    // Keep the location; `null` keeps a Head Office account at the Head Office.
     const branch = locationOf(row.branch);
     await run(() =>
       userApi.update(row.id, { role, branch: branch.id === HEAD_OFFICE.id ? null : branch.id })
     );
   };
 
-  /** The status pill is the toggle: tapping it activates or deactivates the account. */
+  /** Tapping the status pill activates or deactivates the account. */
   const confirmToggleStatus = (row) => {
     setConfirm({
       title: row.isActive ? `Deactivate ${row.name}?` : `Activate ${row.name}?`,
@@ -194,8 +192,7 @@ const UserListPage = () => {
       key: 'branch',
       label: 'Branch',
       hideBelow: 'lg',
-      // Nobody is assigned to "all branches" — an account with no branch belongs
-      // to the Head Office, which is a location alongside the rest.
+      // An account with no branch belongs to the Head Office.
       render: (row) => {
         const location = locationOf(row.branch);
         return location.isHeadOffice || location.id === HEAD_OFFICE.id ? (
@@ -224,7 +221,7 @@ const UserListPage = () => {
       label: 'Role',
       align: 'center',
       width: 160,
-      // The dropdown changes the role in place; it must not also open the row.
+      // Changing the role must not also open the row.
       stopRowClick: true,
       render: (row) => (
         <Select

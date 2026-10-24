@@ -1,10 +1,6 @@
 const SITE_NAME_KEY = 'ab:siteName';
 
-/**
- * The static name index.html paints before React mounts, so a cold load hands
- * off to the React splash without the name changing. Read at module evaluation,
- * which runs before the first render replaces #boot.
- */
+// The fallback name is read from index.html's #boot, so it doesn't change when React mounts.
 const DEFAULT_SITE_NAME = 'Angelz Desire';
 
 const FALLBACK_SITE_NAME = (() => {
@@ -15,7 +11,7 @@ const FALLBACK_SITE_NAME = (() => {
   }
 })();
 
-/** The browser tab, one format everywhere. Mirrored inline in index.html. */
+/** Browser tab title. Mirrored inline in index.html. */
 export const documentTitle = (name) => `${name || FALLBACK_SITE_NAME} — Admin`;
 
 export const cachedSiteName = () => {

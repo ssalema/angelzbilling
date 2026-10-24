@@ -2,18 +2,14 @@ import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { keyFor, readResource, writeResource, clearResourceCache } from '../api/resourceCache.js';
 import RealtimeContext from '../context/RealtimeContext.jsx';
 
-// The one data-fetching primitive every screen uses.
-
 export const useApiResource = (
   fetcher,
   deps = [],
-  // `watch` names the server-side resources this data is derived from — pass
-  // 'bills' and the screen brings itself up to date the moment anyone, anywhere,
-  // writes a bill. See context/RealtimeContext.jsx.
+  // `watch` lists server resources (e.g. 'bills') that trigger a refetch when
+  // anyone writes them. See context/RealtimeContext.jsx.
   { immediate = true, initialData = null, cacheKey = null, watch = null } = {}
 ) => {
-  // A cached payload is the initial state, not something applied afterwards —
-  // so the first render already has it and no skeleton is ever shown for it.
+  // Cached data is the initial state, so the first render skips the skeleton.
   const cached = cacheKey ? readResource(keyFor(cacheKey, deps)) : undefined;
 
   const [data, setData] = useState(cached ?? initialData);
@@ -23,23 +19,26 @@ export const useApiResource = (
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 
-  // The cache key, held in a ref rather than closed over.
   const keyRef = useRef(null);
   keyRef.current = cacheKey ? keyFor(cacheKey, deps) : null;
   const cacheKeyRef = useRef(cacheKey);
   cacheKeyRef.current = cacheKey;
 
-  // Guards against a slow response from an abandoned filter overwriting a fast one.
+  // Stops a slow, stale response from overwriting a newer one.
   const requestId = useRef(0);
   const mounted = useRef(true);
-  /** The in-flight request, so the next one — or unmounting — can cancel it. */
   const controller = useRef(null);
+
+  const dataRef = useRef(data);
+  dataRef.current = data;
+  const inFlight = useRef(false);
+  const pendingRevalidate = useRef(false);
+  const revalidateRef = useRef(null);
 
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      // Nothing will read this response, so stop paying for it on both ends.
       controller.current?.abort();
     };
   }, []);
@@ -51,27 +50,47 @@ export const useApiResource = (
     const abort = new AbortController();
     controller.current = abort;
 
-    // A revalidation behind cached data must not flip the screen back to a
-    // skeleton — that would undo the whole point of having shown it.
+    // A silent refresh must not show the skeleton over cached data.
     if (!silent) setLoading(true);
-    setError(null);
+    if (!silent) setError(null);
+    inFlight.current = true;
 
     try {
       const result = await fetcherRef.current(abort.signal);
-      if (mounted.current && id === requestId.current) setData(result);
+      if (mounted.current && id === requestId.current) {
+        setData(result);
+        setError(null);
+      }
       return result;
     } catch (err) {
-      // An abort is this hook's own doing, not a failure to report: the caller
-      // moved on, and showing them an error for it would be a lie.
+      // We aborted it ourselves, so it's not an error.
       if (abort.signal.aborted || err?.aborted) return null;
-      if (mounted.current && id === requestId.current) setError(err);
+      // A failed silent refresh keeps the current data instead of showing an error.
+      const keepShowing = silent && dataRef.current !== null && dataRef.current !== undefined;
+      if (mounted.current && id === requestId.current && !keepShowing) setError(err);
       return null;
     } finally {
-      if (mounted.current && id === requestId.current) setLoading(false);
+      if (mounted.current && id === requestId.current) {
+        setLoading(false);
+        inFlight.current = false;
+        // A change announced mid-request may be missing from this response.
+        if (pendingRevalidate.current) {
+          pendingRevalidate.current = false;
+          revalidateRef.current?.();
+        }
+      }
     }
   }, []);
 
-  // Spread exactly as before, so which changes trigger a refetch is unchanged.
+  const revalidate = useCallback(
+    () =>
+      run({ silent: true }).then((fresh) => {
+        if (fresh !== null && keyRef.current) writeResource(keyRef.current, fresh);
+      }),
+    [run]
+  );
+  revalidateRef.current = revalidate;
+
   useEffect(() => {
     if (!immediate) return;
 
@@ -79,7 +98,7 @@ export const useApiResource = (
     const hit = key ? readResource(key) : undefined;
 
     if (hit !== undefined) {
-      // Show what we have, then quietly bring it up to date.
+      // Show cached data, then refresh quietly.
       setData(hit);
       setLoading(false);
       run({ silent: true }).then((fresh) => {
@@ -94,12 +113,11 @@ export const useApiResource = (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, immediate, cacheKey]);
 
-  // Read straight off the context rather than through the guard hook: a screen
-  // outside the provider simply has nothing to watch, which is not an error.
+  // Read the context directly: outside the provider there is just nothing to watch.
   const realtime = useContext(RealtimeContext);
   const watched = Array.isArray(watch) ? watch : watch ? [watch] : [];
 
-  // One number that moves whenever any watched resource does.
+  // Changes whenever any watched resource changes.
   const revision = watched.reduce((total, name) => total + (realtime?.revisions?.[name] || 0), 0);
   const seenRevision = useRef(revision);
 
@@ -108,14 +126,18 @@ export const useApiResource = (
     if (revision === seenRevision.current) return;
     seenRevision.current = revision;
 
-    // Silent: someone else's write must not blank out the page being read here.
-    run({ silent: true }).then((fresh) => {
-      if (fresh !== null && keyRef.current) writeResource(keyRef.current, fresh);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revision, immediate, run]);
+    // On a slow link, let the current fetch finish and queue one more,
+    // instead of restarting on every change (which might never finish).
+    if (inFlight.current) {
+      pendingRevalidate.current = true;
+      return;
+    }
 
-  // A manual reload is always a real reload.
+    revalidate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revision, immediate, revalidate]);
+
+  // Manual reload clears the cache and shows the loading state.
   const reload = useCallback(async () => {
     if (cacheKeyRef.current) clearResourceCache(cacheKeyRef.current);
     const fresh = await run();

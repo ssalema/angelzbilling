@@ -7,7 +7,7 @@ import { ResetIconButton } from '../../components/common/FilterBar.jsx';
 import { rejectImageReason } from '../../utils/constants.js';
 import { CARD_PAD, LOGO_FRAME } from '../../theme/index.js';
 
-// Logo and favicon for the store.
+// Logo or favicon slot for the store.
 const BrandingSlot = ({
   kind,
   label,
@@ -18,7 +18,7 @@ const BrandingSlot = ({
   disabled,
   frameHeight,
   grow,
-  /** Percentage while the page's save is uploading this slot; null otherwise. */
+  // Upload percent while saving; null otherwise.
   progress = null,
 }) => {
   const inputRef = useRef(null);
@@ -47,14 +47,11 @@ const BrandingSlot = ({
     onPending(kind, chosen);
   };
 
-  // A staged removal blanks the slot; otherwise the pending file wins over
-  // whatever is saved.
+  // pending: null = staged removal, File = staged upload, undefined = unchanged.
   const preview = pending === null ? '' : pendingUrl || current?.url || '';
 
   return (
     <Box sx={grow ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 } : null}>
-      {/* Name left, spec right — the label/hint row of the General information
-          card, so both columns of the settings grid read as one form. */}
       <Stack direction="row" justifyContent="space-between" alignItems="baseline" spacing={1} sx={{ mb: 0.75 }}>
         <Typography variant="subtitle2">{label}</Typography>
         <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'right' }}>
@@ -87,7 +84,7 @@ const BrandingPanel = ({
   onResetPending,
   canEdit,
   disabled,
-  /** `{ logo, favicon }` percentages the page's save reports while uploading. */
+  // Upload percent per slot: `{ logo, favicon }`.
   progress = {},
 }) => {
   const logo = settings?.branding?.logo;
@@ -96,7 +93,7 @@ const BrandingPanel = ({
   const edited = Object.keys(pending || {}).length > 0;
 
   return (
-    // Full column height, so the card squares off with the form beside it.
+    // Full height to line up with the form beside it.
     <Card sx={{ p: CARD_PAD, height: '100%', display: 'flex', flexDirection: 'column', gap: 2.25 }}>
       <SectionTitle
         title="Branding"

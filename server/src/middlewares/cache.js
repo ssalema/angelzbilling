@@ -3,32 +3,30 @@ import { resolveBranchScope } from './authorize.js';
 import { invalidateUser, clearUserCache } from '../utils/userCache.js';
 import { broadcast, onBroadcast } from '../config/broadcast.js';
 
-// Response caching for the read-only analytics endpoints.
+// Cache for the read-only analytics endpoints.
 const dashboardCache = new TtlCache({ ttlMs: 30_000, maxEntries: 300 });
 
-// A second cache for figures that are all-time rather than period-scoped.
+// All-time figures (not period-scoped).
 export const lifetimeCache = new TtlCache({ ttlMs: 60 * 60_000, maxEntries: 50 });
 
-// A third cache, for catalogue reads that are not analytics.
+// Catalogue reads that are not analytics.
 export const catalogueCache = new TtlCache({ ttlMs: 10 * 60_000, maxEntries: 60 });
 
-// The billing screen's type-ahead set, which is a different shape again.
+// The billing screen's type-ahead set.
 export const lookupCache = new TtlCache({ ttlMs: 10 * 60_000, maxEntries: 4 });
 
-/** Both catalogue-shaped caches, dropped together — they go stale on the same writes. */
+/** Both go stale on the same writes, so they're cleared together. */
 const bustCatalogueCaches = () => {
   catalogueCache.clear();
   lookupCache.clear();
   broadcast('catalogue');
 };
 
-// The analytics cache's own hit rate, for the metrics endpoint.
 export const dashboardCacheStats = () => dashboardCache.stats;
 
-/** Every entry for one scope starts with this, which is what makes eviction surgical. */
+/** Every key for a scope starts with this, so eviction can target one scope. */
 const scopePrefix = (scope) => `${scope || 'all'} :: `;
 
-// Evicts the cached analytics for the scopes a write actually affected.
 const bustLocally = (scope) => {
   if (scope === undefined) return dashboardCache.clear();
   return dashboardCache.deleteByPrefix([scopePrefix(scope), scopePrefix('all')]);
@@ -36,14 +34,12 @@ const bustLocally = (scope) => {
 
 const bustDashboardCache = (scope) => {
   const removed = bustLocally(scope);
-  // The other workers hold their own copies of these figures and have no way to
-  // know a bill was raised over here. See config/broadcast.js.
+  // Tell other workers to evict their copies too. See config/broadcast.js.
   broadcast('dashboard', { scope: scope === undefined ? '__all__' : scope });
   return removed;
 };
 
-// Applied locally only — re-broadcasting a relayed eviction is how two workers
-// spend an afternoon evicting each other.
+// Apply locally only; re-broadcasting would make workers evict each other forever.
 onBroadcast('dashboard', (payload) =>
   bustLocally(payload?.scope === '__all__' ? undefined : payload?.scope)
 );
@@ -71,8 +67,7 @@ export const cacheResponse =
     try {
       key = keyFor(req);
     } catch {
-      // resolveBranchScope throws for an account with no branch. That is the
-      // controller's error to raise, not the cache's — pass it straight through.
+      // resolveBranchScope throws for an account with no branch; let the controller handle it.
       return next();
     }
 
@@ -87,14 +82,14 @@ export const cacheResponse =
     res.set('X-Cache', 'MISS');
     const json = res.json.bind(res);
     res.json = (body) => {
-      // Only successful payloads are worth keeping; an error must be recomputed.
+      // Only cache successful responses.
       if (res.statusCode === 200 && body?.success) cache.set(key, body, ttlMs);
       return json(body);
     };
     return next();
   };
 
-// Clears the dashboard cache after any successful write on the router it is mounted on.
+// Clears the dashboard cache after any successful write on this router.
 export const invalidateDashboardOnWrite =
   ({ except = [], scoped = false, catalogue = false } = {}) =>
   (req, res, next) => {
@@ -107,8 +102,7 @@ export const invalidateDashboardOnWrite =
 
         let scope;
         if (scoped) {
-          // Resolved here rather than at request time: an admin's own scope is
-          // the branch their write landed in.
+          // Resolved after the write: an admin's scope is the branch the write landed in.
           try {
             scope = resolveBranchScope(req) || 'all';
           } catch {
@@ -122,7 +116,7 @@ export const invalidateDashboardOnWrite =
     return next();
   };
 
-// Evicts the cached ACCOUNT after any successful write on the router it is mounted on.
+// Evicts the cached account after any successful write on this router.
 export const invalidateAccountOnWrite =
   ({ target = 'param' } = {}) =>
   (req, res, next) => {

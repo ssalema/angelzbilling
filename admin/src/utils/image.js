@@ -3,25 +3,23 @@
 /** Cloudinary delivery URLs always contain this segment before the transforms. */
 const UPLOAD_SEGMENT = '/upload/';
 
-// The pixel density to request for a fixed-size box.
+// Request 2x pixels so images stay sharp on high-DPI screens.
 const RETINA = 2;
 
 // Inserts a transformation into a Cloudinary URL.
 const cdnImage = (url, { w, h, crop = 'fit', dpr = RETINA } = {}) => {
   if (!url || typeof url !== 'string') return url || '';
 
-  // Only Cloudinary delivery URLs can carry transforms. A data:/blob: preview
-  // or a third-party logo must pass through untouched.
+  // Only Cloudinary URLs take transforms; data:/blob: previews and other hosts pass through.
   const marker = url.indexOf(UPLOAD_SEGMENT);
   if (marker === -1 || !url.includes('res.cloudinary.com')) return url;
 
-  // Already transformed by an earlier call — do not stack transformations.
+  // Already transformed; don't stack transforms.
   const rest = url.slice(marker + UPLOAD_SEGMENT.length);
   if (/^[a-z]+_[^/]+\//.test(rest)) return url;
 
   const parts = [];
-  // Multiplied here rather than passed as `dpr_`, so the width in the URL is
-  // the real pixel width being delivered and is obvious when reading it.
+  // Apply dpr to the size (not `dpr_`) so the URL shows the real pixel width.
   if (w) parts.push(`w_${Math.round(w * dpr)}`);
   if (h) parts.push(`h_${Math.round(h * dpr)}`);
   if (w || h) parts.push(`c_${crop}`);

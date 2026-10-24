@@ -14,7 +14,7 @@ import { lookupCache } from '../../middlewares/cache.js';
 
 const SORTABLE = ['createdAt', 'name', 'mrp', 'finalPrice', 'stock', 'status'];
 
-// Adds the derived numbers the list view needs to lean (non-hydrated) docs.
+// Adds the derived fields the list view needs to lean docs.
 const decorate = (perfume) => {
   const totalStock = perfume.stock || 0;
   const fillGrams = smallestFillGrams(perfume);
@@ -42,8 +42,7 @@ const buildPerfumeSearch = (search) => {
   const term = String(search || '').trim();
   if (!term) return {};
 
-  // Uppercase alphanumerics with optional dashes/underscores is a SKU, not a
-  // perfume name — no one types "AP-OUD-100" looking for a name.
+  // A term like "AP-OUD-100" is a SKU, so search SKUs instead of names.
   if (/^[A-Za-z0-9][A-Za-z0-9_-]{2,}$/.test(term) && /\d/.test(term)) {
     const prefix = new RegExp(`^${escapeRegex(term.toUpperCase())}`);
     return { $or: [{ sku: prefix }, { 'variants.sku': prefix }] };
@@ -66,16 +65,13 @@ export const listPerfumes = asyncHandler(async (req, res) => {
 
   if (stock !== 'all') {
     if (stock === 'out') filter.stock = { $lte: 0 };
-    // Running dry but still sellable — the two are counted apart because the UI
-    // names them apart.
+    // Low = still in stock but at or under the threshold.
     if (stock === 'low') Object.assign(filter, { stock: { $gt: 0 }, stockMargin: { $lte: 0 } });
     if (stock === 'in') filter.stockMargin = { $gt: 0 };
-    // Everything that needs restocking — what the dashboard's alert panel lists,
-    // so its "Manage" link lands on the same set rather than only the low half.
+    // Low + out of stock, matching the dashboard's restock alert panel.
     if (stock === 'restock') filter.stockMargin = { $lte: 0 };
   }
 
-  // Only what the table and `decorate` actually read.
   const LIST_FIELDS =
     'name sku brand category subCategory mrp discountPercent finalPrice stock lowStockThreshold ' +
     'sizeGrams hasVariants status createdAt images.url ' +
@@ -116,13 +112,12 @@ export const getPerfumeFacets = asyncHandler(async (req, res) => {
 });
 
 
-// Only what a type-ahead row draws or prices from.
 const LOOKUP_FIELDS =
   'name sku brand mrp discountPercent finalPrice sizeGrams hasVariants hsnCode images.url ' +
   'variants.sku variants.label variants.options variants.isActive variants.mrp ' +
   'variants.discountPercent variants.sellingPrice variants.sizeGrams variants.image.url variants.hsnCode';
 
-// How large a catalogue this may hold in memory before it stops trying.
+// Above this many perfumes, lookups query the DB instead of caching in memory.
 const LOOKUP_MAX_PERFUMES = 3000;
 const LOOKUP_KEY = 'published-options';
 
@@ -146,7 +141,7 @@ const optionRow = (perfume, variant) => {
     sizeGrams,
     image: variant?.image?.url || image,
     hsnCode: variant?.hsnCode || perfume.hsnCode || '',
-    // Lowercased once at build time so the filter does no per-keystroke casing.
+    // Lowercased once so filtering does no per-keystroke casing.
     haystack: [perfume.name, perfume.sku, perfume.brand, variant?.sku, variant?.label]
       .filter(Boolean)
       .join(' ')
@@ -154,7 +149,7 @@ const optionRow = (perfume, variant) => {
   };
 };
 
-// Every sellable row in the catalogue, built once and held until a catalogue write drops it.
+// All sellable rows, cached until a catalogue write clears the cache.
 const publishedOptions = async () => {
   const cached = lookupCache.get(LOOKUP_KEY);
   if (cached) return cached.tooLarge ? null : cached.rows;
@@ -162,7 +157,7 @@ const publishedOptions = async () => {
   const perfumes = await Perfume.find({ status: 'published' })
     .select(LOOKUP_FIELDS)
     .sort({ name: 1 })
-    // One over the ceiling, so hitting it is detectable without a second count.
+    // Fetch one extra to detect the limit without a second count.
     .limit(LOOKUP_MAX_PERFUMES + 1)
     .lean();
 
@@ -218,7 +213,7 @@ export const lookupPerfumes = asyncHandler(async (req, res) => {
     matches = (await queryOptions(q, limit)).slice(0, limit);
   }
 
-  // Stock, read now rather than from the cache.
+  // Stock is read live, not from the cache.
   const perfumeIds = [...new Set(matches.map((row) => String(row.perfumeId)))];
   const live = perfumeIds.length
     ? await Perfume.find({ _id: { $in: perfumeIds } }).select('stock').lean()
@@ -245,8 +240,7 @@ export const getPerfume = asyncHandler(async (req, res) => {
 
   if (!perfume) throw ApiError.notFound('Perfume not found');
 
-  // Sales figures shown on the perfume view page, split per fill size so a
-  // bare "3 units" can't hide three 50gm testers behind one 200gm bottle.
+  // Sales split per fill size, so different sizes are not lumped into one unit count.
   const soldRows = await Bill.aggregate([
     { $match: { status: 'paid' } },
     { $unwind: '$items' },
@@ -263,8 +257,7 @@ export const getPerfume = asyncHandler(async (req, res) => {
     { $sort: { sizeGrams: 1 } },
   ]);
 
-  // Prefer the perfume's current label — a size renamed after the sale should
-  // read the way the rest of the page reads.
+  // Prefer the current variant label in case a size was renamed after the sale.
   const variantById = new Map((perfume.variants || []).map((v) => [String(v._id), v]));
 
   const bySize = soldRows.map((row) => {
@@ -329,7 +322,7 @@ const stampSkus = async (payload) => {
   return { ...payload, sku, variants };
 };
 
-/** The number the wizard shows in a new perfume's SKU box before it is saved. */
+/** Preview SKU the wizard shows before a new perfume is saved. */
 export const getNextSku = asyncHandler(async (req, res) => {
   const prefix = await getSkuPrefix();
   const sku = await generateSku(prefix);
@@ -340,8 +333,8 @@ export const createPerfume = asyncHandler(async (req, res) => {
   const autoNumbered = !req.body.sku;
   let payload = await stampSkus(req.body);
 
-  // Two admins can hit Save in the same second and be handed the same number.
-  // A SKU the admin typed is their own to fix; one we generated, we re-roll.
+  // Two saves at once can get the same generated SKU, so re-roll it on conflict.
+  // A SKU the admin typed is reported instead.
   for (let attempt = 0; ; attempt += 1) {
     try {
       await assertSkusAreFree(payload);
@@ -373,8 +366,7 @@ export const updatePerfume = asyncHandler(async (req, res) => {
   const perfume = await Perfume.findById(req.params.id);
   if (!perfume) throw ApiError.notFound('Perfume not found');
 
-  // A perfume that already exists keeps its number: an empty SKU here means
-  // "unchanged", never "renumber me". Blank variant SKUs are still derived.
+  // An empty SKU means "unchanged", not "renumber". Blank variant SKUs are still derived.
   if (!req.body.sku) delete req.body.sku;
   if (Array.isArray(req.body.variants)) {
     req.body.variants = req.body.variants.map((variant, index) => ({
@@ -442,14 +434,14 @@ export const updatePerfumeStatus = asyncHandler(async (req, res) => {
   });
 });
 
-// Quick inline stock correction from the perfumes table — the value is grams.
+// Inline stock correction from the perfumes table. Values are in grams.
 export const adjustStock = asyncHandler(async (req, res) => {
   const { stock, addStock, lowStockThreshold } = req.body;
 
   if (addStock !== undefined) {
     const perfume = await incrementStock(req.params.id, addStock, req.user._id);
     if (!perfume) {
-      // Either it is gone, or the removal asked for more grams than exist.
+      // Either the perfume is gone or the removal exceeds the stock.
       const exists = await Perfume.exists({ _id: req.params.id });
       if (!exists) throw ApiError.notFound('Perfume not found');
       throw ApiError.badRequest('That is more stock than this perfume has on hand');
@@ -476,8 +468,7 @@ export const adjustStock = asyncHandler(async (req, res) => {
   const perfume = await Perfume.findById(req.params.id);
   if (!perfume) throw ApiError.notFound('Perfume not found');
 
-  // An absolute figure is only true of the shelf it was read off, so it is
-  // written against that reading rather than over whatever is there now.
+  // Only write if stock is unchanged since it was read, so a sale in between is not overwritten.
   const updated = await setStockExpecting(perfume._id, perfume.stock, stock, {
     ...(lowStockThreshold !== undefined ? { lowStockThreshold } : {}),
     updatedBy: req.user._id,
@@ -490,7 +481,6 @@ export const adjustStock = asyncHandler(async (req, res) => {
 });
 
 
-/** The fields the stock screen reads, and nothing else. */
 const STOCK_FIELDS = 'name sku brand stock lowStockThreshold status images.url';
 
 const stockOption = (perfume) => {
@@ -513,8 +503,7 @@ const stockOption = (perfume) => {
 const incrementStock = (id, delta, userId, action = 'stock') =>
   Perfume.findOneAndUpdate(
     delta < 0 ? { _id: id, stock: { $gte: -delta } } : { _id: id },
-    // `stockMargin` is `stock - lowStockThreshold`, so a delta on the weight is
-    // the same delta on the margin and this stays one atomic `$inc`.
+    // stockMargin = stock - lowStockThreshold, so both move by the same delta in one atomic $inc.
     { $inc: { stock: delta, stockMargin: delta }, $set: { updatedBy: userId, updatedAction: action } },
     { new: true }
   )
@@ -535,14 +524,13 @@ const setStockExpecting = (id, expected, next, extra = {}) => {
   );
 };
 
-/** The conflict every absolute stock write raises when it was beaten to the shelf. */
+/** Conflict raised when stock changed between read and write. */
 const stockMovedUnderYou = (perfume, was) =>
   ApiError.conflict(
     `"${perfume.name}" was billed while you were editing — it held ${formatGrams(was)} when the screen ` +
       'loaded and holds less now. Reload the perfume and enter the figure again.'
   );
 
-// Type-ahead for the single stock update.
 export const searchStockTargets = asyncHandler(async (req, res) => {
   const { q, limit } = req.query;
 
@@ -555,7 +543,7 @@ export const searchStockTargets = asyncHandler(async (req, res) => {
 
   const perfumes = await Perfume.find(filter)
     .select(STOCK_FIELDS)
-    // Lowest weight first when browsing, alphabetical once a term narrows it.
+    // Lowest stock first when browsing, alphabetical when searching.
     .sort(q ? { name: 1 } : { stock: 1, name: 1 })
     .limit(limit)
     .lean();
@@ -567,10 +555,10 @@ export const searchStockTargets = asyncHandler(async (req, res) => {
   });
 });
 
-/** Whitespace and case are the difference between two spellings of one name. */
+/** Ignores case and extra whitespace when comparing names. */
 const normaliseName = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
 
-// Matches the names read out of an uploaded sheet against the catalogue.
+// Matches names from an uploaded sheet against the catalogue.
 export const resolveStockNames = asyncHandler(async (req, res) => {
   const perfumes = await Perfume.find({ status: { $ne: 'archived' } })
     .select(STOCK_FIELDS)
@@ -580,7 +568,7 @@ export const resolveStockNames = asyncHandler(async (req, res) => {
   const bySku = new Map();
   perfumes.forEach((perfume) => {
     const key = normaliseName(perfume.name);
-    // First writer wins, and the flag says a second one existed.
+    // Duplicate names are flagged as ambiguous.
     if (byName.has(key)) byName.get(key).ambiguous = true;
     else byName.set(key, { perfume, ambiguous: false });
 
@@ -591,7 +579,7 @@ export const resolveStockNames = asyncHandler(async (req, res) => {
     const key = normaliseName(name);
     const hit = byName.get(key);
 
-    // A sheet exported from the catalogue may carry SKUs in the name column.
+    // The name column may hold SKUs instead.
     const perfume = hit?.perfume || bySku.get(key);
     if (!perfume) return { name, matched: false, reason: 'No perfume in the catalogue has this name' };
     if (hit?.ambiguous) {
@@ -608,15 +596,12 @@ export const resolveStockNames = asyncHandler(async (req, res) => {
   });
 });
 
-// Applies the reviewed sheet.
 export const bulkAdjustStock = asyncHandler(async (req, res) => {
   const { items, source } = req.body;
-  // The single stock screen posts here too, so the audit line follows the
-  // screen the admin actually used rather than the route they happened to hit.
+  // The single stock screen also uses this endpoint; audit by the screen used.
   const action = source === 'single' ? 'stock' : 'bulk-stock';
 
-  // The same perfume twice in one sheet would race itself inside the bulk
-  // write, so the rows are folded into a single movement per perfume first.
+  // Merge duplicate rows per perfume so the bulk write does not race itself.
   const merged = new Map();
   items.forEach(({ id, addStock }) => {
     merged.set(id, (merged.get(id) || 0) + addStock);
@@ -648,10 +633,8 @@ export const bulkAdjustStock = asyncHandler(async (req, res) => {
 
     operations.push({
       updateOne: {
-        // The guard is repeated in the filter, not just checked above: the read
-        // is a moment old and a bill may have drawn the weight down since.
+        // Re-check stock in the filter: a bill may have reduced it since the read.
         filter: delta < 0 ? { _id: id, stock: { $gte: -delta } } : { _id: id },
-        // Both move by the same delta — see `incrementStock`.
         update: {
           $inc: { stock: delta, stockMargin: delta },
           $set: { updatedBy: req.user._id, updatedAction: action },
@@ -665,7 +648,7 @@ export const bulkAdjustStock = asyncHandler(async (req, res) => {
     const result = await Perfume.bulkWrite(operations, { ordered: false });
     updated = result.modifiedCount ?? 0;
 
-    // A row that passed the read but lost the guard was sold from in between.
+    // Rows that failed the guard were sold from in between.
     const missed = operations.length - (result.matchedCount ?? 0);
     if (missed > 0) {
       failed.push({
@@ -685,13 +668,12 @@ export const bulkAdjustStock = asyncHandler(async (req, res) => {
 });
 
 
-/** The fields the repricing screen reads, and nothing else. */
 const PRICE_FIELDS =
   'name sku brand status images.url mrp discountPercent finalPrice ' +
   'variants.sku variants.label variants.options variants.sizeGrams ' +
   'variants.mrp variants.discountPercent variants.sellingPrice variants.isActive';
 
-/** One perfume as the repricing screen reads it: its sizes, smallest fill first. */
+/** Perfume for the repricing screen, sizes sorted smallest first. */
 const priceOption = (perfume) => {
   const variants = (perfume.variants || [])
     .map((variant) => ({
@@ -714,14 +696,12 @@ const priceOption = (perfume) => {
     brand: perfume.brand || '',
     image: perfume.images?.[0]?.url || '',
     status: perfume.status,
-    /** What the perfume sells for today, cheapest fill to dearest. */
     priceMin: priced.length ? Math.min(...priced) : 0,
     priceMax: priced.length ? Math.max(...priced) : 0,
     variants,
   };
 };
 
-// Type-ahead for the single repricing flow.
 export const searchPriceTargets = asyncHandler(async (req, res) => {
   const { q, limit } = req.query;
 
@@ -733,7 +713,7 @@ export const searchPriceTargets = asyncHandler(async (req, res) => {
   return sendSuccess(res, { message: 'Perfumes loaded', data: perfumes.map(priceOption) });
 });
 
-// Matches the names read out of an uploaded sheet against the catalogue.
+// Matches names from an uploaded sheet against the catalogue.
 export const resolvePriceNames = asyncHandler(async (req, res) => {
   const perfumes = await Perfume.find({ status: { $ne: 'archived' } }).select(PRICE_FIELDS).lean();
 
@@ -741,7 +721,7 @@ export const resolvePriceNames = asyncHandler(async (req, res) => {
   const bySku = new Map();
   perfumes.forEach((perfume) => {
     const key = normaliseName(perfume.name);
-    // First writer wins, and the flag says a second one existed.
+    // Duplicate names are flagged as ambiguous.
     if (byName.has(key)) byName.get(key).ambiguous = true;
     else byName.set(key, { perfume, ambiguous: false });
 
@@ -752,7 +732,7 @@ export const resolvePriceNames = asyncHandler(async (req, res) => {
     const key = normaliseName(name);
     const hit = byName.get(key);
 
-    // A sheet exported from the catalogue may carry SKUs in the name column.
+    // The name column may hold SKUs instead.
     const perfume = hit?.perfume || bySku.get(key);
     if (!perfume) return { name, matched: false, reason: 'No perfume in the catalogue has this name' };
     if (hit?.ambiguous) {
@@ -772,15 +752,12 @@ export const resolvePriceNames = asyncHandler(async (req, res) => {
   });
 });
 
-// Applies the reviewed prices — the one call in this trio that writes.
 export const bulkUpdatePrices = asyncHandler(async (req, res) => {
   const { items, source } = req.body;
-  // As with stock: the single repricing screen shares this endpoint, and the
-  // audit line should name the screen, not the route.
+  // The single repricing screen also uses this endpoint; audit by the screen used.
   const action = source === 'single' ? 'price' : 'bulk-price';
 
-  // The same perfume twice in one sheet is a contradiction, not an addition —
-  // the last set of prices given wins, which is what correcting a row means.
+  // Duplicate rows for a perfume: the last one wins.
   const merged = new Map();
   items.forEach(({ id, prices }) => merged.set(id, prices));
 
@@ -806,8 +783,7 @@ export const bulkUpdatePrices = asyncHandler(async (req, res) => {
 
     const wanted = pricesBySize(merged.get(id));
 
-    // Every variant is rewritten, but only the fills actually named change —
-    // an untouched size keeps its own price rather than being recalculated.
+    // Only the sizes named in the sheet change; others keep their price.
     let moved = 0;
     const variants = perfume.variants.map((variant) => {
       const next = wanted.get(resolveSizeGrams(variant));
@@ -824,8 +800,7 @@ export const bulkUpdatePrices = asyncHandler(async (req, res) => {
     }
     repricedSizes += moved;
 
-    // The perfume's own price is the cheapest row still on sale, matching
-    // `basePricingFor` in the admin and what a listing reads as "from ₹…".
+    // Base price = cheapest active size (matches `basePricingFor` in the admin).
     const sellable = variants.filter((v) => v.isActive !== false && (Number(v.mrp) || 0) > 0);
     const pool = sellable.length ? sellable : variants;
     const cheapest = pool.reduce((best, v) => (v.sellingPrice < best.sellingPrice ? v : best), pool[0]);
@@ -913,8 +888,7 @@ export const previewBulkCreate = asyncHandler(async (req, res) => {
     return { name, available: true };
   });
 
-  // Only the rows that will actually be created consume a number, so the run
-  // the admin reviews is the run the catalogue ends up with.
+  // Only creatable rows get a SKU, so the preview matches what gets saved.
   const skus = await generateSkuBlock(rows.filter((row) => row.available).length, prefix);
   let next = 0;
   rows.forEach((row) => {
@@ -928,14 +902,13 @@ export const previewBulkCreate = asyncHandler(async (req, res) => {
   });
 });
 
-// One reviewed row as a complete perfume document.
 const bulkPerfumeDoc = (item, sku, userId) => {
   const variants = [...pricesBySize(item.prices).entries()]
     .sort(([a], [b]) => a - b)
     .map(([sizeGrams, mrp]) => ({
       label: `${sizeGrams}gm`,
       options: { Size: `${sizeGrams}gm` },
-      // The same suffix the wizard builds — AP-925 + 50gm -> AP-925-50GM.
+      // Same suffix as the wizard: AP-925 + 50gm -> AP-925-50GM.
       sku: `${sku}-${sizeGrams}GM`,
       mrp,
       discountPercent: 0,
@@ -947,8 +920,7 @@ const bulkPerfumeDoc = (item, sku, userId) => {
       hsnCode: '',
     }));
 
-  // The perfume's own price is the cheapest size it sells, matching what the
-  // wizard writes and what a listing reads as "from ₹…".
+  // Base price = cheapest size, same as the wizard.
   const cheapest = variants.reduce((best, v) => (v.sellingPrice < best.sellingPrice ? v : best), variants[0]);
 
   const images = item.image
@@ -963,8 +935,7 @@ const bulkPerfumeDoc = (item, sku, userId) => {
     category: item.category || '',
     stock: item.stock || 0,
     lowStockThreshold: 100,
-    // `insertMany` skips the pre-save hook, so every derived field is written out
-    // here by hand — `stockMargin` alongside `slug` and `finalPrice` below.
+    // insertMany skips the pre-save hook, so derived fields (stockMargin, slug, finalPrice) are set by hand.
     stockMargin: (item.stock || 0) - 100,
     images,
     hasVariants: true,
@@ -983,10 +954,10 @@ const bulkPerfumeDoc = (item, sku, userId) => {
   };
 };
 
-/** Rows are written in batches so one enormous sheet is not one enormous write. */
+/** Insert batch size, so a huge sheet is not one huge write. */
 const INSERT_BATCH = 200;
 
-// Inserts the documents, returning what went in and which ones bounced.
+// Returns the inserted docs and the ones that failed.
 const insertPerfumes = async (docs) => {
   const inserted = [];
   const failed = [];
@@ -994,13 +965,12 @@ const insertPerfumes = async (docs) => {
   for (let start = 0; start < docs.length; start += INSERT_BATCH) {
     const batch = docs.slice(start, start + INSERT_BATCH);
     try {
-      // Sequential on purpose: a thousand-row sheet firing every batch at once
-      // is a burst the database gains nothing from.
+      // Sequential on purpose to avoid flooding the database.
       // eslint-disable-next-line no-await-in-loop
       const rows = await Perfume.insertMany(batch, { ordered: false });
       inserted.push(...rows);
     } catch (error) {
-      // A partial failure still inserts the rest; both halves are reported.
+      // Partial failure: the rest are still inserted and both are reported.
       (error.insertedDocs || []).forEach((row) => inserted.push(row));
 
       const errors = error.writeErrors || (error.code ? [error] : []);
@@ -1016,7 +986,7 @@ const insertPerfumes = async (docs) => {
   return { inserted, failed };
 };
 
-/** A written document back in the shape `bulkPerfumeDoc` accepts, for a retry. */
+/** Converts a doc back to `bulkPerfumeDoc` input for a retry. */
 const asBulkItem = (doc) => ({
   name: doc.name,
   brand: doc.brand,
@@ -1027,7 +997,6 @@ const asBulkItem = (doc) => ({
   prices: doc.variants.map((variant) => ({ sizeGrams: variant.sizeGrams, mrp: variant.mrp })),
 });
 
-// Creates the reviewed perfumes.
 export const bulkCreatePerfumes = asyncHandler(async (req, res) => {
   const { items } = req.body;
 
@@ -1061,8 +1030,7 @@ export const bulkCreatePerfumes = asyncHandler(async (req, res) => {
     const first = await insertPerfumes(docs);
     created = first.inserted;
 
-    // A number taken by a simultaneous upload is ours to re-roll — the admin
-    // never chose it. Anything else is reported as it happened.
+    // SKU clashes from a simultaneous upload are retried with new SKUs; other errors are reported.
     const clashed = first.failed.filter((row) => row.duplicate).map((row) => row.doc);
     first.failed
       .filter((row) => !row.duplicate)
@@ -1092,8 +1060,7 @@ export const bulkCreatePerfumes = asyncHandler(async (req, res) => {
       drafts: created.length - published,
       skipped: skipped.length,
       failed: skipped,
-      // What actually got written, so the finished screen can show real SKUs
-      // rather than the ones the review projected.
+      // The saved SKUs, which may differ from the preview.
       perfumes: created.map((perfume) => ({
         id: perfume._id,
         name: perfume.name,

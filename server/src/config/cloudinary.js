@@ -29,7 +29,7 @@ export const uploadBuffer = (buffer, { folder = '', resourceType = 'image', publ
         resource_type: resourceType,
         public_id: publicId,
         overwrite: true,
-        // Deliver the smallest sane file for the browser that asks for it.
+        // Auto quality/format gives each browser the smallest good file.
         transformation:
           resourceType === 'image'
             ? [{ quality: 'auto:good', fetch_format: 'auto' }]
@@ -52,7 +52,7 @@ export const uploadBuffer = (buffer, { folder = '', resourceType = 'image', publ
     stream.end(buffer);
   });
 
-// Every asset this app creates is written under CLOUDINARY_FOLDER by `uploadBuffer`.
+// Only allow assets under CLOUDINARY_FOLDER (where `uploadBuffer` writes).
 export const assertManagedAsset = (publicId) => {
   const id = String(publicId || '');
   const root = `${env.cloudinary.folder}/`;
@@ -62,19 +62,17 @@ export const assertManagedAsset = (publicId) => {
   return id;
 };
 
-/** Branding lives here and is replaced only through its own guarded endpoints. */
+/** Branding assets may only be replaced via their own guarded endpoints. */
 export const isBrandingAsset = (publicId) =>
   String(publicId || '').startsWith(`${env.cloudinary.folder}/branding`);
 
-// Deletes an asset.
 export const destroyAsset = async (publicId, resourceType = 'image', { strict = false } = {}) => {
   if (!publicId) return null;
 
   try {
     assertManagedAsset(publicId);
   } catch (error) {
-    // Opportunistic cleanup of a legacy id must not fail the request; a strict
-    // caller is deleting on purpose and has to hear about it.
+    // Best-effort cleanup should not fail the request; strict callers need the error.
     if (strict) throw error;
     logger.warn(`Refusing to destroy unmanaged asset "${publicId}"`);
     return null;
@@ -93,7 +91,7 @@ export const destroyAsset = async (publicId, resourceType = 'image', { strict = 
     return result;
   } catch (error) {
     if (strict) throw error;
-    // Opportunistic cleanup must never fail the user's request — log and move on.
+    // Best-effort cleanup: log and move on.
     logger.warn(`Cloudinary destroy failed for ${publicId}: ${error.message}`);
     return null;
   }

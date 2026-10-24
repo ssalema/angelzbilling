@@ -6,6 +6,7 @@ import { announceOnWrite } from '../../middlewares/realtime.js';
 import validate from '../../middlewares/validate.js';
 import { authorize } from '../../middlewares/authorize.js';
 import { lookupLimiter } from '../../middlewares/security.js';
+import idempotent from '../../middlewares/idempotency.js';
 import {
   createBillSchema,
   listBillQuerySchema,
@@ -27,12 +28,10 @@ import {
 
 const router = Router();
 router.use(authenticate);
-// Bills feed dashboard figures — any write here makes the cached analytics wrong, so it drops them.
+// Bill writes clear the cached dashboard analytics.
 router.use(invalidateDashboardOnWrite({ except: ['/preview'], scoped: true }));
-// And the open panels at that location are told, so a bill raised at one counter
-// lands on the other screens without anyone reloading. See middlewares/realtime.js.
-// Raising a bill takes weight off the shelf and refunding puts it back, so the
-// catalogue screens are told too — they watch perfumes, not bills.
+// Notify open screens at that location (bills and perfumes, since bills change stock).
+// See middlewares/realtime.js.
 router.use(announceOnWrite({ resource: 'bills', scoped: true, except: ['/preview'], also: ['perfumes'] }));
 
 const statsQuery = z.object({
@@ -52,23 +51,25 @@ router.get(
   lookupCustomers
 );
 
-// Any signed-in account may raise a bill — that is the billing staff's whole job.
+// Any signed-in account may raise a bill.
 router.post('/preview', validate({ body: createBillSchema.partial({ paymentMethod: true }) }), previewBill);
-router.post('/', validate({ body: createBillSchema }), createBill);
+// Idempotent: a retry returns the first bill instead of creating a second.
+router.post('/', idempotent, validate({ body: createBillSchema }), createBill);
 
 router.get('/:id', validate({ params: idParamSchema }), getBill);
 
-// Collecting the balance on a pending bill.
 router.patch(
   '/:id/payment',
+  idempotent,
   validate({ params: idParamSchema, body: collectPaymentSchema }),
   collectPayment
 );
 
-// Refunding moves money and stock — admins only.
+// Refunds are admin-only.
 router.patch(
   '/:id/status',
   authorize('superadmin', 'admin'),
+  idempotent,
   validate({ params: idParamSchema, body: updateStatusSchema }),
   updateBillStatus
 );

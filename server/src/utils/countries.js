@@ -239,7 +239,7 @@ const ROWS = [
   ['Zimbabwe', 'ZW', '+263', 9, 9],
 ];
 
-/** ISO 3166-1 alpha-2 to the regional-indicator pair browsers render as a flag. */
+/** Turns an ISO2 code into a flag emoji. */
 const flagOf = (iso2) => iso2.replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
 
 export const COUNTRIES = ROWS.map(([name, iso2, dial, min, max, primary = false]) => ({
@@ -248,7 +248,7 @@ export const COUNTRIES = ROWS.map(([name, iso2, dial, min, max, primary = false]
   dial,
   min,
   max,
-  /** Several countries share one dial code (+1, +44, +7…); one of them leads. */
+  /** Several countries share a dial code (+1, +44, +7); the primary one leads. */
   primary,
   flag: flagOf(iso2),
 })).sort((a, b) => a.name.localeCompare(b.name));
@@ -281,7 +281,6 @@ export const digitsLabel = (dial) => {
 
 export const onlyDigits = (value) => String(value ?? '').replace(/\D/g, '');
 
-// Validates one contact number against its dial code.
 const contactNumberIssue = (dial, number) => {
   if (!isDialCode(dial)) return 'Choose a country code';
   const raw = String(number ?? '').trim();
@@ -295,27 +294,24 @@ const contactNumberIssue = (dial, number) => {
   return null;
 };
 
-// Zod glue: report a bad contact number on the *number* field, since that is where the user is looking.
+// Zod helper: reports the error on the number field, where the user is looking.
 export const addContactNumberIssue = (ctx, { dial, number, path, required = true }) => {
   const digits = onlyDigits(number);
   if (!digits) {
     if (required) ctx.addIssue({ code: 'custom', path, message: 'Contact number is required' });
     return;
   }
-  // A partial update may omit the code; it then means "whatever is stored",
-  // which for every record in this system defaults to +91.
+  // A partial update may omit the code; it then defaults to +91.
   const message = contactNumberIssue(dial || DEFAULT_DIAL_CODE, number);
   if (message) ctx.addIssue({ code: 'custom', path, message });
 };
 
-/** "+91 9812521138" — the one way a contact number is rendered anywhere. */
+/** The standard display format, e.g. "+91 9812521138". */
 export const formatContactNumber = (dial, number, fallback = 'NA') => {
   const digits = onlyDigits(number);
   if (!digits) return fallback;
   return `${isDialCode(dial) ? dial : DEFAULT_DIAL_CODE} ${digits}`;
 };
-
-/* ───────────────────────────── Postal codes ───────────────────────────── */
 
 // Countries whose postal code the address form can resolve to a place.
 const POSTAL_LOOKUP_COUNTRIES = new Set(
@@ -398,7 +394,6 @@ export const postalMetaFor = (country) => {
   };
 };
 
-// Validates a postal code against its country.
 const postalCodeIssue = (country, value) => {
   const code = String(value ?? '').trim();
   if (!code) return null;

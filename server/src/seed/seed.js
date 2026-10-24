@@ -1,33 +1,42 @@
-// Creates the one account a fresh install cannot start without: the super admin.
+// Creates the first super admin. Development only; use `npm run admin:create` in production.
+import crypto from 'node:crypto';
 import mongoose from 'mongoose';
 import env from '../config/env.js';
 import logger from '../config/logger.js';
 import connectDB, { disconnectDB } from '../config/db.js';
 import User from '../models/User.js';
+import { passwordRule } from '../modules/auth/auth.validation.js';
 
-// Allowed only where NODE_ENV explicitly says 'development'.
 if (!env.isDev) {
   console.error(
     `\n[seed] Refusing to run with NODE_ENV=${env.nodeEnv}.\n` +
-      '[seed] This creates an account with a known password, so it runs only when\n' +
-      '[seed] NODE_ENV is explicitly "development". Seed a development database instead.\n'
+      '[seed] The seed is for development databases only. To create the first\n' +
+      '[seed] super admin anywhere else, run "npm run admin:create".\n'
   );
   process.exit(1);
 }
 
-if (!process.env.SEED_PASSWORD) {
-  console.warn(
-    '\n[seed] SEED_PASSWORD is not set, so a well-known default password will be used.\n' +
-      '[seed] Change it immediately, or set SEED_PASSWORD before seeding.\n'
-  );
-}
+// A random password is generated unless SEED_PASSWORD is set; both must pass the password rules.
+const generatePassword = () => {
+  let candidate;
+  do candidate = crypto.randomBytes(12).toString('base64url');
+  while (!passwordRule.safeParse(candidate).success);
+  return candidate;
+};
 
-const SEED_PASSWORD = process.env.SEED_PASSWORD || 'Admin@1234';
+const seedPassword = process.env.SEED_PASSWORD
+  ? passwordRule.safeParse(process.env.SEED_PASSWORD)
+  : { success: true, data: generatePassword() };
+
+if (!seedPassword.success) {
+  console.error(`\n[seed] SEED_PASSWORD is too weak: ${seedPassword.error.issues[0].message}\n`);
+  process.exit(1);
+}
 
 const ADMIN = {
   name: 'Super Admin',
   email: 'superadmin@angelzperfume.com',
-  password: SEED_PASSWORD,
+  password: seedPassword.data,
   role: 'superadmin',
   phone: '9800000000',
 };
@@ -38,22 +47,20 @@ const run = async () => {
   const existing = await User.findOne({ email: ADMIN.email });
   if (existing) {
     logger.info(`Super admin already present: ${existing.email}`);
+    logger.info('Its password is unchanged. Lost it? Run "npm run admin:reset-password".');
   } else {
     await User.create({ ...ADMIN, branch: null });
-    logger.info(`Super admin created: ${ADMIN.email}`);
+    logger.info('');
+    logger.info('─────────────────────────────────────────────');
+    logger.info(' Seed complete. Sign in with:');
+    logger.info(`   Super Admin : ${ADMIN.email}`);
+    logger.info(
+      process.env.SEED_PASSWORD
+        ? '   Password    : the SEED_PASSWORD you set'
+        : `   Password    : ${ADMIN.password}  (shown once, not stored anywhere)`
+    );
+    logger.info('─────────────────────────────────────────────');
   }
-
-  logger.info('');
-  logger.info('─────────────────────────────────────────────');
-  logger.info(' Seed complete. Sign in with:');
-  logger.info(`   Super Admin : ${ADMIN.email}`);
-  logger.info(
-    process.env.SEED_PASSWORD
-      ? '   Password    : the SEED_PASSWORD you set'
-      : `   Password    : ${SEED_PASSWORD}  (dev default — set SEED_PASSWORD to change it)`
-  );
-  logger.info('   Change this before the database is reachable by anyone else.');
-  logger.info('─────────────────────────────────────────────');
 
   await disconnectDB();
   process.exit(0);

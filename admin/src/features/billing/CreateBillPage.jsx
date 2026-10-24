@@ -53,6 +53,7 @@ import { buildBillSchema, emptyBill, calculateTotals, staffCeiling, splitGst } f
 import { perfumeApi, billApi, branchApi } from '../../api/endpoints.js';
 import useApiResource from '../../hooks/useApiResource.js';
 import useDebounce from '../../hooks/useDebounce.js';
+import useRequestKey from '../../hooks/useRequestKey.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
@@ -72,7 +73,8 @@ import { FONT, CARD_HEAD_PAD, CARD_PAD, GUTTER, INSET_RADIUS, ICON, brand, numer
 const CreateBillPage = () => {
   const navigate = useNavigate();
   const snackbar = useSnackbar();
-  // Only the Head Office Super Admin picks where a bill is raised.
+  // Reused on retry, so a lost reply can't create a duplicate bill.
+  const billKey = useRequestKey();
   const { user, isMainSuperAdmin, isAdmin } = useAuth();
   const {
     settings,
@@ -82,17 +84,15 @@ const CreateBillPage = () => {
     maxDiscountPercent,
   } = useSettings();
 
-  // Admins bill without a ceiling; staff get the store's. Same test the server
-  // runs, so the form refuses exactly what the save would have refused.
+  // Admins have no discount cap; staff use the store's (same check as the server).
   const discountCapPercent = isAdmin ? 100 : maxDiscountPercent;
 
   const [perfumeQuery, setPerfumeQuery] = useState('');
-  // Head Office by default: the main business is a location, not a fallback.
   const [billLocationId, setBillLocationId] = useState(HEAD_OFFICE.id);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [savedBill, setSavedBill] = useState(null);
 
-  // The saved slip is already on screen, so the PDF is rendered straight from it.
+  // The PDF is rendered from the on-screen slip.
   const savedSlipRef = useRef(null);
   const [downloading, setDownloading] = useState(false);
 
@@ -111,7 +111,6 @@ const CreateBillPage = () => {
     [branches.data]
   );
 
-  /** The location this bill will be recorded against, whoever is billing. */
   const billLocation = useMemo(() => {
     if (!canPickLocation) return locationOf(user?.branch);
     return locations.find((option) => option.id === billLocationId) || HEAD_OFFICE;
@@ -119,7 +118,7 @@ const CreateBillPage = () => {
 
   const atHeadOffice = billLocation.id === HEAD_OFFICE.id;
 
-  // The slip is headed by a favicon, and a branch with its own branding prints under its own.
+  // A branch with its own branding prints under its own logo.
   const slipStore = useMemo(
     () => ({
       ...settings,
@@ -148,8 +147,7 @@ const CreateBillPage = () => {
     formState: { isSubmitting },
   } = methods;
 
-  // Tax is the store's rate, not the biller's: every bill carries exactly what
-  // the admin set under Settings → Billing, and no tax at all until one is set.
+  // Tax always uses the store rate from Settings; 0 means no tax.
   const taxRate = Number(defaultTaxPercent) || 0;
   const taxEnabled = taxRate > 0;
   useEffect(() => {
@@ -161,7 +159,7 @@ const CreateBillPage = () => {
 
   const watched = useWatch({ control });
 
-  // Grams of a perfume already spoken for by the lines on this bill.
+  // Grams of a perfume already used by the lines on this bill.
   const gramsClaimed = useCallback(
     (perfumeId, exceptIndex = -1) =>
       (watched.items || []).reduce((sum, item, index) => {
@@ -171,7 +169,7 @@ const CreateBillPage = () => {
     [watched.items]
   );
 
-  /** Units this line can still reach, after the other lines take their share. */
+  /** Max units this line can take after the other lines' share. */
   const unitsCeilingFor = useCallback(
     (item, index) => {
       const free = (Number(item?.availableGrams) || 0) - gramsClaimed(item?.perfume, index);
@@ -188,8 +186,7 @@ const CreateBillPage = () => {
     [watched.items, watched.taxPercent, watched.extraDiscount]
   );
 
-  // Nothing beyond the billable amount can be discounted, and staff stop earlier
-  // still — at their share of it. The field ends wherever the save would.
+  // Discount is capped at the billable amount, and for staff at their % of it.
   const discountable = Math.max(0, Number((totals.subtotal - totals.lineDiscount).toFixed(2)));
   const maxExtraDiscount = staffCeiling(discountable, discountCapPercent);
   const discountCapped = discountCapPercent < 100 && discountable > 0;
@@ -203,11 +200,10 @@ const CreateBillPage = () => {
   const amountReceived = isPartial ? Math.min(Number(watched.amountPaid) || 0, totals.grandTotal) : totals.grandTotal;
   const balanceDue = Math.max(0, Number((totals.grandTotal - amountReceived).toFixed(2)));
 
-  // The type-ahead.
   const options = useApiResource(
     (signal) => perfumeApi.lookup({ q: debouncedQuery, limit: 25 }, signal),
     [debouncedQuery],
-    // Stock moves under this screen while a bill is being written.
+    // Stock can change while a bill is being written.
     { watch: 'perfumes' }
   );
 
@@ -265,7 +261,7 @@ const CreateBillPage = () => {
     [append, update, watched.items, snackbar, gramsClaimed]
   );
 
-  /** Strips display-only fields — the server prices from its own database. */
+  /** Drops display-only fields; the server prices from its own database. */
   const toPayload = (values) => ({
     customer: values.customer,
     items: values.items.map((item) => ({
@@ -278,24 +274,26 @@ const CreateBillPage = () => {
     paymentMethod: values.paymentMethod,
     taxPercent: Number(values.taxPercent) || 0,
     extraDiscount: Number(values.extraDiscount) || 0,
-    // Full Paid sends nothing at all: the server fills in the grand total it
-    // computed itself, so the two can never disagree about what "all of it" was.
+    // Full payment sends no amount; the server uses its own grand total.
     ...(values.paymentTerm === 'partial' ? { amountPaid: Number(values.amountPaid) || 0 } : {}),
     notes: values.notes,
-    // Sent only by the one account allowed to choose; null is the Head Office,
-    // which is an answer rather than an absence.
+    // Only the Head Office Super Admin sends this; null means Head Office.
     ...(canPickLocation ? { branch: atHeadOffice ? null : billLocation.id } : {}),
   });
 
   const onSubmit = async (values) => {
     try {
-      const result = await billApi.create(toPayload(values));
+      const result = await billApi.create(toPayload(values), billKey.get());
+      billKey.renew();
       snackbar.success(result.message);
       setSavedBill(result.data);
       setPreviewOpen(false);
     } catch (error) {
       applyServerErrors(error, setError);
-      snackbar.error(error.message);
+      // No response: the request key makes a retry safe, so tell the cashier.
+      snackbar.error(
+        error.isNetwork ? `${error.message} Pressing save again is safe — the bill won't be recorded twice.` : error.message
+      );
     }
   };
 
@@ -315,7 +313,6 @@ const CreateBillPage = () => {
     }
   };
 
-  /* ── Success state: the bill is saved, offer print / next actions ── */
   if (savedBill) {
     return (
       <Box>
@@ -327,9 +324,6 @@ const CreateBillPage = () => {
           breadcrumbs={[{ label: 'Bill records', to: '/billing' }, { label: savedBill.billNumber }]}
         />
 
-        {/* A bill with a balance is saved and stocked exactly like any other —
-            the only difference worth saying out loud is what is still owed and
-            that it is collected on this same bill, not a new one. */}
         <Alert
           severity={savedBill.amountDue > 0 ? 'warning' : 'success'}
           icon={<CheckCircleOutline />}
@@ -385,7 +379,6 @@ const CreateBillPage = () => {
       <FormProvider {...methods}>
         <form onSubmit={openPreview} noValidate>
           <Grid container spacing={GUTTER.page}>
-            {/* ── Left: customer + items ── */}
             <Grid item xs={12} lg={8}>
               <Card sx={{ p: CARD_PAD, mb: 2.5 }}>
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
@@ -396,7 +389,7 @@ const CreateBillPage = () => {
                 <CustomerRecallBanner />
 
                 <Grid container spacing={GUTTER.cards}>
-                  {/* The number comes first: it is what recalls a returning buyer. */}
+                  {/* Mobile first: it recalls a returning customer. */}
                   <Grid item xs={12} sm={6}>
                     <RHFContactNumber
                       name="customer.mobile"
@@ -422,7 +415,7 @@ const CreateBillPage = () => {
 
                 <Divider sx={{ my: 2.5 }} />
 
-                {/* Bill By is read-only and comes from the session, never the form */}
+                {/* Bill by comes from the session, never the form. */}
                 <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                   <TextField
                     label="Bill by"
@@ -458,7 +451,6 @@ const CreateBillPage = () => {
                 </Stack>
               </Card>
 
-              {/* Items */}
               <Card sx={{ mb: 2.5 }}>
                 <Box sx={{ ...CARD_HEAD_PAD }}>
                   <SectionTitle title="Perfumes" sx={{ mb: 1.75 }} />
@@ -628,7 +620,7 @@ const CreateBillPage = () => {
                               </TableCell>
 
                               <TableCell align="right">
-                                {/* Set on the perfume — bill-level changes go through Extra discount. */}
+                                {/* Set on the perfume; bill-level changes go through Extra discount. */}
                                 <Typography variant="body2">
                                   {formatNumber(Number(line.discountPercent) || 0)}%
                                 </Typography>
@@ -657,7 +649,6 @@ const CreateBillPage = () => {
               </Card>
             </Grid>
 
-            {/* ── Right: totals + payment ── */}
             <Grid item xs={12} lg={4}>
               <Card sx={{ p: CARD_PAD, position: { lg: 'sticky' }, top: 84 }}>
                 <SectionTitle title="Bill summary" />
@@ -679,11 +670,7 @@ const CreateBillPage = () => {
                     prefix={currencySymbol()}
                     min={0}
                     max={maxExtraDiscount}
-                    // Staff are told their ceiling rather than left to find it: the
-                    // server refuses the save past this, and a bill written up to
-                    // the preview is a poor place to learn that.
-                    // Only when there is a ceiling to name: an admin bills without
-                    // one, and a line saying so would be noise in a busy summary.
+                    // Only staff have a cap; show it so they don't hit the server's refusal.
                     helperText={
                       discountCapped
                         ? `You can give discount up to ${formatCurrency(maxExtraDiscount, {
@@ -694,9 +681,7 @@ const CreateBillPage = () => {
                         : undefined
                     }
                   />
-                  {/* Read-only like Bill by and Branch above, and tinted the same
-                      way, because the rate comes from Settings rather than the
-                      biller. Left out entirely when the store charges no tax. */}
+                  {/* Read-only: the rate comes from Settings. Hidden when no tax is set. */}
                   {taxEnabled && (
                     <RHFNumberField
                       name="taxPercent"
@@ -772,7 +757,6 @@ const CreateBillPage = () => {
                   )}
                 />
 
-                {/* ── How much of it is being settled now ── */}
                 <Typography variant="subtitle2" sx={{ mt: 2.25, mb: 1 }}>
                   Payment received
                 </Typography>
@@ -787,8 +771,7 @@ const CreateBillPage = () => {
                           label={term.label}
                           onClick={() => {
                             field.onChange(term.value);
-                            // Going back to Full clears the part amount, so a
-                            // stale figure cannot be sent with a settled bill.
+                            // Switching back to Full clears the part amount.
                             if (term.value === 'full') setValue('amountPaid', 0);
                           }}
                           variant={field.value === term.value ? 'filled' : 'outlined'}
@@ -827,7 +810,7 @@ const CreateBillPage = () => {
                   <RHFTextField name="notes" label="Notes (optional)" multiline minRows={2} />
                 </Box>
 
-                {/* Every bill is saved from the preview dialog, so this is the only way out of the form. */}
+                {/* Bills are only saved from the preview dialog. */}
                 <Button
                   type="submit"
                   variant="contained"
@@ -845,7 +828,6 @@ const CreateBillPage = () => {
         </form>
       </FormProvider>
 
-      {/* Preview before committing */}
       <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} maxWidth="md" fullWidth scroll="paper">
         <DialogCloseButton
           className="no-print"
@@ -876,8 +858,7 @@ const CreateBillPage = () => {
               taxPercent: totals.taxPercent,
               taxAmount: totals.taxAmount,
               grandTotal: totals.grandTotal,
-              // The preview has to show the slip the customer will actually be
-              // handed, balance and all — otherwise the paper changes after save.
+              // Include the balance so the preview matches the printed slip.
               amountPaid: amountReceived,
               amountDue: balanceDue,
               status: balanceDue > 0 ? 'pending' : 'paid',

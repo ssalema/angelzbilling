@@ -1,8 +1,8 @@
 import mongoose from 'mongoose';
 
-// One row per person ever billed, maintained on write instead of derived on read.
+// One row per person ever billed, kept up to date on each bill write.
 
-// Where this customer has been billed, and when they first were at each place.
+// Branches where the customer was billed, with the first visit at each.
 const seenAtSchema = new mongoose.Schema(
   {
     branch: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', default: null },
@@ -13,12 +13,12 @@ const seenAtSchema = new mongoose.Schema(
 
 const customerSchema = new mongoose.Schema(
   {
-    /** `${mobileCountryCode}${mobile}` — see IDENTITY above. */
+    /** `${mobileCountryCode}${mobile}` */
     _id: { type: String, required: true },
 
     mobile: { type: String, required: true },
     mobileCountryCode: { type: String, default: '+91' },
-    /** The name on their most recent bill. People correct their own spelling. */
+    /** Name from their most recent bill. */
     name: { type: String, default: '' },
 
     firstSeenAt: { type: Date, required: true },
@@ -29,12 +29,11 @@ const customerSchema = new mongoose.Schema(
   { versionKey: false, timestamps: true }
 );
 
-/** "New customers in this window", store-wide. */
+/** New customers in a date range, store-wide. */
 customerSchema.index({ firstSeenAt: 1 });
-/** The same question narrowed to one location — multikey, so it serves both. */
+/** Same, per branch (multikey index). */
 customerSchema.index({ 'branches.branch': 1, 'branches.firstSeenAt': 1 });
 
-// Records a bill against its customer.
 customerSchema.statics.recordBill = async function recordBill(bill, session = null) {
   const mobile = String(bill.customer?.mobile || '').trim();
   if (!mobile) return null;
@@ -55,7 +54,7 @@ customerSchema.statics.recordBill = async function recordBill(bill, session = nu
     { upsert: true, ...options }
   );
 
-  // The location entry, added only if this person has not been seen here before.
+  // Add the branch entry only on their first visit there.
   await this.updateOne(
     { _id: key, branches: { $not: { $elemMatch: { branch } } } },
     { $push: { branches: { branch, firstSeenAt: at } } },
@@ -65,7 +64,7 @@ customerSchema.statics.recordBill = async function recordBill(bill, session = nu
   return key;
 };
 
-// Rebuilds one customer's row from the bills that still count.
+// Rebuilds a customer's row from their remaining (non-refunded) bills.
 customerSchema.statics.reconcile = async function reconcile({ mobile, mobileCountryCode = '+91' }) {
   const number = String(mobile || '').trim();
   if (!number) return null;
@@ -77,8 +76,7 @@ customerSchema.statics.reconcile = async function reconcile({ mobile, mobileCoun
     {
       $match: {
         'customer.mobile': number,
-        // Written before country codes existed means +91, matching CUSTOMER_KEY
-        // in the dashboard and `recordBill` above.
+        // Bills from before country codes existed count as +91.
         ...(mobileCountryCode === '+91'
           ? { $or: [{ 'customer.mobileCountryCode': '+91' }, { 'customer.mobileCountryCode': { $in: [null, ''] } }] }
           : { 'customer.mobileCountryCode': mobileCountryCode }),
@@ -96,7 +94,7 @@ customerSchema.statics.reconcile = async function reconcile({ mobile, mobileCoun
     },
   ]);
 
-  // Every bill of theirs was handed back, so they were never a customer.
+  // All their bills were refunded, so remove the customer.
   if (!rows.length) {
     await this.deleteOne({ _id: key });
     return null;

@@ -30,11 +30,11 @@ const branchSchema = new mongoose.Schema(
     gstin: { type: String, trim: true, uppercase: true, default: '' },
     isActive: { type: Boolean, default: true },
 
-    // Set when branch management itself was switched off, so switching it back
-    // on restores exactly these branches and leaves manual deactivations alone.
+    // Set when branch management is turned off, so turning it back on restores only
+    // these branches (not ones deactivated by hand).
     deactivatedByFeature: { type: Boolean, default: false },
 
-    // A branch may print under its own branding; when off it inherits the store's.
+    // When off, the branch uses the store's branding.
     hasOwnLogo: { type: Boolean, default: false },
     logo: {
       url: { type: String, default: '' },
@@ -51,7 +51,7 @@ const branchSchema = new mongoose.Schema(
 branchSchema.index({ isActive: 1 });
 branchSchema.index({ name: 'text', code: 'text' });
 
-/** '' means the branch inherits the store's — the single place that rule lives. */
+/** '' means the branch uses the store's logo. */
 branchSchema.virtual('effectiveLogo').get(function effectiveLogo() {
   return this.hasOwnLogo ? this.logo?.url || '' : '';
 });

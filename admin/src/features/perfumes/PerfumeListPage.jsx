@@ -73,8 +73,7 @@ const PerfumeListPage = () => {
     search: '',
     category: '',
     status: 'all',
-    // Deep link from the dashboard's restock panel lands here pre-filtered. An
-    // unknown value in the URL falls back to showing everything.
+    // Pre-filtered when deep-linked from the dashboard's restock panel.
     stock: STOCK_VALUES.includes(searchParams.get('stock')) ? searchParams.get('stock') : 'all',
     sort: '-createdAt',
     page: 1,
@@ -105,10 +104,9 @@ const PerfumeListPage = () => {
     { cacheKey: 'perfumes:list', watch: 'perfumes' }
   );
 
-  // The dropdown contents, which change only when the catalogue does.
   const facets = useApiResource((signal) => perfumeApi.facets(signal), [], { cacheKey: 'perfumes:facets', watch: 'perfumes' });
 
-  // Deleting the last perfume of a category drops it from the facets.
+  // Clear the category filter if that category no longer exists.
   useEffect(() => {
     if (!filters.category || !facets.data) return;
     if (!(facets.data.categories || []).includes(filters.category)) {
@@ -117,8 +115,7 @@ const PerfumeListPage = () => {
   }, [facets.data, filters.category]);
 
   const patch = useCallback((changes) => {
-    // Any filter change resets to page 1 — staying on page 7 of a new result set
-    // is the classic way to show a user an empty table for no reason.
+    // Any filter change resets to page 1.
     setFilters((prev) => ({ ...prev, ...changes, page: changes.page ?? 1 }));
   }, []);
 
@@ -212,8 +209,7 @@ const PerfumeListPage = () => {
       label: 'Discount',
       align: 'center',
       hideBelow: 'md',
-      // A discount is money off, not a fault — it never wears the error red
-      // that out-of-stock, deactivate and delete use.
+      // Discounts use a positive color, never the error red.
       render: (row) =>
         row.discountPercent > 0 ? (
           <Chip
@@ -258,7 +254,7 @@ const PerfumeListPage = () => {
       key: 'stock',
       label: 'Stock',
       align: 'center',
-      // Stock is bulk weight; the tooltip spells out what that covers in bottles.
+      // Stock is bulk weight; the tooltip shows sellable units.
       render: (row) => (
         <Tooltip title={`${STOCK_LABELS[stockStatus(row)]} · ${formatNumber(row.unitsInStock ?? 0)} unit(s) sellable`}>
           <span>
@@ -288,8 +284,7 @@ const PerfumeListPage = () => {
         </Typography>
       ),
     },
-    // Billing staff can neither edit nor delete, so the column is left out for
-    // them rather than standing there labelled "Actions" and holding nothing.
+    // Billing staff can't edit or delete, so they get no actions column.
     ...(isAdmin
       ? [
           actionsColumn((row) => (
@@ -319,19 +314,12 @@ const PerfumeListPage = () => {
         action={
           isAdmin && (
             <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1.25, justifyContent: { sm: 'flex-end' } }}>
-              {/* Restocking is a routine job of its own, so it sits beside
-                  "Add perfume" rather than being buried a perfume at a time. */}
               <Button variant="outlined" startIcon={<AddchartOutlined />} onClick={() => setStockOpen(true)}>
                 Update stock
               </Button>
-              {/* Repricing is the same kind of routine, catalogue-wide job as
-                  restocking, and just as painful one perfume at a time. */}
               <Button variant="outlined" startIcon={<SellOutlined />} onClick={() => setPriceOpen(true)}>
                 Update price
               </Button>
-              {/* Filling a catalogue is a job of its own — a thousand fragrances
-                  is a spreadsheet, not a thousand trips through the wizard. The
-                  wizard itself is untouched and still the way to add one. */}
               <Button variant="outlined" startIcon={<UploadFileOutlined />} onClick={() => setBulkOpen(true)}>
                 Bulk upload
               </Button>
@@ -442,16 +430,13 @@ const PerfumeListPage = () => {
       <UpdatePriceDialog
         open={priceOpen}
         onClose={() => setPriceOpen(false)}
-        // Every row shows a price and a final-price range, so a repricing has
-        // to be reflected behind the dialog rather than on the next visit.
         onUpdated={perfumes.reload}
       />
 
       <BulkUploadDialog
         open={bulkOpen}
         onClose={() => setBulkOpen(false)}
-        // A run of new perfumes changes both the table and the category filter
-        // behind the dialog, so both are reloaded rather than left stale.
+        // New perfumes can add categories, so reload facets too.
         onCreated={() => {
           perfumes.reload();
           facets.reload();
@@ -461,8 +446,6 @@ const PerfumeListPage = () => {
       <UpdateStockDialog
         open={stockOpen}
         onClose={() => setStockOpen(false)}
-        // The table shows grams and a stock pill on every row, so a top-up has
-        // to be reflected behind the dialog rather than on the next visit.
         onUpdated={perfumes.reload}
       />
 

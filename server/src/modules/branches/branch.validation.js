@@ -5,6 +5,7 @@ import {
   addContactNumberIssue,
   addPostalCodeIssue,
 } from '../../utils/countries.js';
+import { partialWithoutDefaults } from '../../utils/zod.js';
 
 const addressSchema = z
   .object({
@@ -28,7 +29,7 @@ const branchFields = z.object({
     .min(2, 'Branch code must be at least 2 characters')
     .max(10, 'Branch code cannot exceed 10 characters')
     .regex(/^[A-Z0-9-]+$/, 'Use letters, numbers and hyphens only'),
-  address: addressSchema.optional().default({}),
+  address: addressSchema.optional().prefault({}),
   phone: z.string().trim().optional().default(''),
   phoneCountryCode: z.string().trim().optional().default(DEFAULT_DIAL_CODE),
   email: z.string().trim().toLowerCase().email('Enter a valid email').or(z.literal('')).optional().default(''),
@@ -47,7 +48,7 @@ const refineBranchContact = (data, ctx) =>
 
 export const createBranchSchema = branchFields.superRefine(refineBranchContact);
 
-export const updateBranchSchema = branchFields.partial().superRefine(refineBranchContact);
+export const updateBranchSchema = partialWithoutDefaults(branchFields).superRefine(refineBranchContact);
 
 export const listBranchQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),

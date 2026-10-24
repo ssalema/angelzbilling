@@ -11,8 +11,7 @@ import { SettingsProvider } from './context/SettingsContext.jsx';
 import { RealtimeProvider } from './context/RealtimeContext.jsx';
 import ErrorBoundary from './components/common/ErrorBoundary.jsx';
 
-// Before the first render, so the login and dashboard chunks are on the wire at
-// the same time as the session refresh rather than waiting behind it.
+// Start loading the first screens alongside the session refresh, not after it.
 warmFirstScreens();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -24,8 +23,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           {/* Auth is outermost: Settings needs to know whether we are signed in. */}
           <AuthProvider>
             <SnackbarProvider>
-              {/* The live connection opens once a session exists, so it sits
-                  under Auth and over everything that reads from the server. */}
+              {/* Realtime needs a session, so it sits inside Auth. */}
               <RealtimeProvider>
                 <SettingsProvider>
                   <RouterProvider router={router} />

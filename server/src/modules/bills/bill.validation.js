@@ -9,7 +9,7 @@ const billItemSchema = z.object({
   variantId: objectId.nullable().optional(),
   variantSku: z.string().trim().optional().default(''),
   quantity: z.coerce.number().int('Quantity must be a whole number').min(1, 'Quantity must be at least 1'),
-  /** Optional per-line override; the server still recomputes every total. */
+  // Optional per-line override; the server still recomputes every total.
   discountPercent: z.coerce.number().min(0).max(100, 'Discount cannot exceed 100%').optional(),
 });
 
@@ -32,17 +32,16 @@ export const createBillSchema = z.object({
     ),
   items: z.array(billItemSchema).min(1, 'Add at least one perfume to the bill'),
   paymentMethod: z.enum(['cash', 'card', 'upi', 'bank_transfer'], {
-    errorMap: () => ({ message: 'Choose a payment method' }),
+    error: 'Choose a payment method',
   }),
-  // Deliberately left without a default.
+  // No default on purpose.
   taxPercent: z.coerce.number().min(0).max(100).optional(),
-  /** Whole-bill discount in currency, applied after line discounts. */
+  // Whole-bill discount in money, applied after line discounts.
   extraDiscount: z.coerce.number().min(0).optional().default(0),
-  // How much of the bill the customer is settling right now.
+  // Amount paid now.
   amountPaid: z.coerce.number().min(0, 'Amount received cannot be negative').optional(),
   notes: z.string().trim().max(1000).optional().default(''),
-  // Only the Head Office Super Admin may send this: a branch id, or the Head
-  // Office itself. Everyone else is pinned to their own location server-side.
+  // Only the Head Office Super Admin may set this; others are locked to their own branch.
   branch: z.union([objectId, z.literal(HEAD_OFFICE_ID)]).nullable().optional(),
 });
 
@@ -56,8 +55,7 @@ export const listBillQuerySchema = z.object({
     .optional()
     .default('all'),
   branch: z.string().optional().default(''),
-  // Filtered on with `new ObjectId(...)`, so anything that is not an id (or the
-  // "all" sentinel) has to be refused here rather than blow up in the driver.
+  // Must be a valid id or "all", since it is passed to `new ObjectId(...)`.
   billedBy: z
     .string()
     .optional()
@@ -77,22 +75,20 @@ export const updateStatusSchema = z.object({
 // Collecting the balance on a pending bill.
 export const collectPaymentSchema = z.object({
   amount: z.coerce
-    .number({ invalid_type_error: 'Enter the amount received' })
+    .number({ error: (issue) => (issue.code === 'invalid_type' ? 'Enter the amount received' : undefined) })
     .positive('Enter an amount greater than zero'),
-  // Defaults to whatever the bill was raised under, resolved in the controller.
+  // Defaults to the bill's original method (set in the controller).
   method: z.enum(['cash', 'card', 'upi', 'bank_transfer']).optional(),
   note: z.string().trim().max(300).optional().default(''),
 });
 
 export const idParamSchema = z.object({ id: objectId });
 
-// Customer directory lookup.
 export const customerLookupQuerySchema = z
   .object({
     mobile: z.string().trim().regex(/^[0-9]*$/, 'Contact number must be digits only').max(15).optional().default(''),
     mobileCountryCode: z.string().trim().optional().default(DEFAULT_DIAL_CODE),
-    // Three characters minimum: a one-letter `q` matches most of the book, which
-    // turns a type-ahead into a way to page out every customer a branch has.
+    // Min 3 chars so short searches can't be used to dump the customer list.
     q: z
       .string()
       .trim()

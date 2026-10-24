@@ -29,6 +29,7 @@ import Dropzone from '../../../components/common/Dropzone.jsx';
 import Pagination from '../../../components/common/Pagination.jsx';
 import { perfumeApi } from '../../../api/endpoints.js';
 import { useSnackbar } from '../../../context/SnackbarContext.jsx';
+import useRequestKey from '../../../hooks/useRequestKey.js';
 import { formatGrams, formatNumber, truncate } from '../../../utils/format.js';
 import { readSheet, SheetError, SHEET_TYPES } from '../../../utils/spreadsheet.js';
 import { brand, CARD_RADIUS, FONT, ICON, numericText, surface } from '../../../theme/index.js';
@@ -42,12 +43,11 @@ import {
   parseTypedGrams,
 } from './stockSheet.js';
 
-/** How many review rows are drawn at once — a thousand-row sheet is normal here. */
 const PAGE_SIZE = 25;
 
-// Restocking a whole delivery from a spreadsheet.
 const BulkStockUpdate = ({ onUpdated }) => {
   const snackbar = useSnackbar();
+  const requestKey = useRequestKey();
 
   // 'idle' → 'reading' → 'review' → 'saving' → 'done'
   const [stage, setStage] = useState('idle');
@@ -66,7 +66,6 @@ const BulkStockUpdate = ({ onUpdated }) => {
     setPage(1);
   };
 
-  // Reads the chosen file and matches it against the catalogue.
   const handleFiles = async (fileList) => {
     const file = [...(fileList || [])][0];
     if (!file) return;
@@ -76,7 +75,7 @@ const BulkStockUpdate = ({ onUpdated }) => {
     setFileName(file.name);
 
     try {
-      // The sheet itself is 0–80% of the bar; matching it is the rest.
+      // Reading the sheet is 0–80% of the progress bar; matching is the rest.
       const { headers, rows: records } = await readSheet(file, (value) =>
         setProgress(Math.round(value * 0.8))
       );
@@ -93,7 +92,7 @@ const BulkStockUpdate = ({ onUpdated }) => {
 
       const sheetRows = buildSheetRows(records, columns);
 
-      // Only rows that survived the sheet's own rules are worth a lookup.
+      // Only look up rows that passed the sheet's own rules.
       const names = sheetRows.filter((row) => !row.issue).map((row) => row.name);
       if (!names.length) {
         setRows(sheetRows.map((row) => ({ ...row, matched: false })));
@@ -114,14 +113,13 @@ const BulkStockUpdate = ({ onUpdated }) => {
     }
   };
 
-  /** Editing one row's grams. Everything downstream is derived, never stored. */
   const editRow = (key, value) =>
     setRows((current) => current.map((row) => (row.key === key ? { ...row, newStock: value } : row)));
 
   const matched = useMemo(() => rows.filter((row) => row.matched), [rows]);
   const flagged = useMemo(() => rows.filter((row) => !row.matched), [rows]);
 
-  /** The rows that will actually be sent — a matched row with valid grams on it. */
+  // Matched rows with a valid gram value.
   const payload = useMemo(
     () =>
       matched
@@ -139,9 +137,9 @@ const BulkStockUpdate = ({ onUpdated }) => {
   const submit = async () => {
     setStage('saving');
     try {
-      const result = await perfumeApi.bulkAddStock(payload);
-      // The parsed rows are dropped here along with everything read from the
-      // file — only the counts stay on screen.
+      const result = await perfumeApi.bulkAddStock(payload, 'bulk', requestKey.get());
+      requestKey.renew();
+      // Drop the parsed sheet data; only the counts are kept.
       setSummary({ ...result.data, message: result.message, flagged });
       setRows([]);
       setStage('done');
@@ -151,8 +149,6 @@ const BulkStockUpdate = ({ onUpdated }) => {
       setStage('review');
     }
   };
-
-  /* ───────────────────────────── Reading ───────────────────────────── */
 
   if (stage === 'reading') {
     return (
@@ -174,8 +170,6 @@ const BulkStockUpdate = ({ onUpdated }) => {
       </Box>
     );
   }
-
-  /* ───────────────────────────── Done ───────────────────────────── */
 
   if (stage === 'done') {
     return (
@@ -243,8 +237,6 @@ const BulkStockUpdate = ({ onUpdated }) => {
       </Box>
     );
   }
-
-  /* ───────────────────────────── Review ───────────────────────────── */
 
   if (stage === 'review' || stage === 'saving') {
     const saving = stage === 'saving';
@@ -407,8 +399,6 @@ const BulkStockUpdate = ({ onUpdated }) => {
     );
   }
 
-  /* ───────────────────────────── Instructions ───────────────────────────── */
-
   return (
     <Box>
       <Alert severity="info" sx={{ mb: 2, alignItems: 'flex-start' }}>
@@ -424,9 +414,7 @@ const BulkStockUpdate = ({ onUpdated }) => {
         </Box>
       </Alert>
 
-      {/* What the sheet has to look like, rather than four more lines of prose.
-          Centred, and on the same 14px corner every Card in the panel carries,
-          so the specimen sits in the system rather than beside it. */}
+      {/* Sample sheet layout. */}
       <Box sx={{ mb: 2, mx: 'auto', maxWidth: 360 }}>
         <Typography
           variant="caption"
@@ -481,7 +469,6 @@ const BulkStockUpdate = ({ onUpdated }) => {
   );
 };
 
-/** One figure from the run — updated, or skipped. */
 const SummaryTile = ({ label, value, tone }) => (
   <Box
     sx={{

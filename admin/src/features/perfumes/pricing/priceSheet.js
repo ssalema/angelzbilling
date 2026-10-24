@@ -1,17 +1,15 @@
-// Turning an uploaded price sheet into reviewable rows.
+// Parses an uploaded price sheet into rows for review.
 
 import { SIZE_GRAMS, parsePrice, priceIssue } from './sizePricing.js';
 
-/** The one column the sheet must always carry, spelled exactly like this. */
+/** The only required column. */
 export const COLUMN_NAME = 'Perfume Name';
 
-/** "100gm Price" — the heading for a fill of that many grams. */
 export const priceColumnFor = (grams) => `${grams}gm Price`;
 
-/** The size columns a sheet is expected to carry, in catalogue order. */
 export const PRICE_COLUMNS = SIZE_GRAMS.map(priceColumnFor);
 
-/** The rules shown above the dropzone, in the order they are checked. */
+/** Rules shown above the dropzone. */
 export const SHEET_RULES = [
   `The first row must be a header. It needs a "${COLUMN_NAME}" column, plus a price column for each size you are changing — ${PRICE_COLUMNS.join(', ')}.`,
   'Include only the price columns you need. A sheet that changes just the 500gm price needs two columns.',
@@ -22,10 +20,9 @@ export const SHEET_RULES = [
   'List only the perfumes whose price is changing — anything left out of the sheet is left alone.',
 ];
 
-/** Header matching is forgiving about case and spacing, and nothing else. */
+/** Header matching ignores case and extra spacing only. */
 const headerKey = (value) => String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 
-// Reads the header row into the columns this screen understands.
 export const findColumns = (headers = []) => {
   const name = headers.find((header) => headerKey(header) === headerKey(COLUMN_NAME)) ?? null;
 
@@ -34,7 +31,7 @@ export const findColumns = (headers = []) => {
     const match = /^(\d+(?:\.\d+)?)\s*(?:gm|g|gms|gram|grams)\s*price$/i.exec(headerKey(header));
     if (match) {
       const grams = Number(match[1]);
-      // A sheet that repeats a size column would otherwise apply both silently.
+      // Ignore a repeated size column.
       if (grams > 0 && !sizes.some((size) => size.grams === grams)) sizes.push({ grams, header });
     }
   });
@@ -49,11 +46,10 @@ export const buildSheetRows = (records, columns) => {
   const seen = new Set();
 
   return records.map((record, index) => {
-    // +2: the header is line 1, and the first record is the line after it.
+    // +2: the header is line 1.
     const line = index + 2;
     const name = String(record[columns.name] ?? '').trim();
 
-    /** Only the sizes this row actually fills in. Blank cells never appear. */
     const prices = [];
     const badCells = [];
 
@@ -86,7 +82,7 @@ export const buildSheetRows = (records, columns) => {
   });
 };
 
-// Merges the catalogue's answer into the sheet's rows.
+// Merges the server's matches into the rows (in order, skipping rows with issues).
 export const applyMatches = (rows, matches) => {
   const queue = [...matches];
 
@@ -114,14 +110,13 @@ export const applyMatches = (rows, matches) => {
       ...row,
       matched: true,
       id: match.id,
-      // The catalogue's spelling, so the review table reads the way the rest of
-      // the panel does even when the sheet used a different case.
+      // Use the catalogue's spelling, not the sheet's.
       perfumeName: match.name,
       sku: match.sku,
       image: match.image || '',
       variants: match.variants || [],
       prices: usable,
-      // Shown as a warning on the row rather than silently dropped.
+      // Shown as a warning instead of being silently dropped.
       skippedSizes: unknown.map((price) => `${price.sizeGrams}gm`),
     };
   });

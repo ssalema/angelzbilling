@@ -44,14 +44,13 @@ const Row = ({ label, value }) => (
   </Stack>
 );
 
-// Final step: a read-only rendering of everything entered, plus the publish decision.
+// Final step: read-only preview plus publish status.
 const StepPreview = () => {
   const { control } = useFormContext();
   const data = useWatch({ control });
 
   const variants = data.variants || [];
-  // Prices are entered per variant, so the perfume's headline price is the
-  // cheapest active one — or the base price when it sells in a single size.
+  // Headline price: cheapest active variant, or the base price if no variants.
   const pricing = basePricingFor(data);
   const finalPrice = computeFinalPrice(pricing.mrp, pricing.discountPercent);
 
@@ -61,14 +60,12 @@ const StepPreview = () => {
   const priceFrom = Math.min(...prices);
   const priceTo = Math.max(...prices);
 
-  // One bulk weight for the whole perfume — variants are poured from it.
+  // One bulk weight shared by all variants.
   const totalStock = Number(data.stock) || 0;
 
-  // Publish readiness — same rules the server enforces, explained up front.
+  // Same publish rules the server enforces.
   const blockers = [];
   if (!data.images?.length) blockers.push('At least one perfume image is required');
-  // Nothing in the pool means sold out on day one, so stock is a condition of
-  // publishing rather than a warning to read past.
   if (!totalStock) blockers.push('Enter the stock you hold — a perfume with none cannot be published');
   if (!Number(pricing.mrp)) blockers.push(data.hasVariants ? 'Price at least one active variant' : 'A price must be set');
   if (data.hasVariants && !variants.length) blockers.push('Generate at least one variant combination');
@@ -81,7 +78,6 @@ const StepPreview = () => {
   return (
     <Box>
       <Grid container spacing={GUTTER.page}>
-        {/* ── Visual preview ── */}
         <Grid item xs={12} md={5}>
           <Card sx={{ p: CARD_PAD, position: { md: 'sticky' }, top: 84 }}>
             <Typography variant="overline" color="text.secondary">
@@ -165,7 +161,6 @@ const StepPreview = () => {
                 )}
               </Stack>
 
-              {/* Size selector, rendered the way the storefront would */}
               {data.hasVariants && variants.length > 0 && (
                 <Box sx={{ mt: 2 }}>
                   <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
@@ -189,7 +184,6 @@ const StepPreview = () => {
           </Card>
         </Grid>
 
-        {/* ── Summary + publish ── */}
         <Grid item xs={12} md={7}>
           {blockers.length > 0 && (
             <Alert severity="error" sx={{ mb: 2 }}>
@@ -230,7 +224,6 @@ const StepPreview = () => {
           <Card sx={{ p: CARD_PAD, mb: 2.5 }}>
             <SectionTitle title="Publish status" />
 
-            {/* Each option is its own card; StatusOption owns the form binding. */}
             <RadioGroup value={data.status}>
               {[
                 {
@@ -354,7 +347,6 @@ const StepPreview = () => {
   );
 };
 
-/** Kept separate so it can read form context for the radio binding. */
 const StatusOption = ({ option }) => {
   const { control } = useFormContext();
   const status = useWatch({ control, name: 'status' });

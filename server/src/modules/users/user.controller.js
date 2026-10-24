@@ -50,13 +50,12 @@ const shape = (user, stats = {}) => ({
   phoneCountryCode: user.phoneCountryCode || '+91',
   role: user.role,
   roleLabel: { superadmin: 'Super Admin', admin: 'Branch Admin', staff: 'Billing Staff' }[user.role],
-  // No branch is an assignment, not a gap: it means the Head Office. Shaping it
-  // here keeps every table, chip and picker reading one location structure.
+  // No branch means Head Office.
   branch: user.branch
     ? { id: user.branch._id, name: user.branch.name, code: user.branch.code, isHeadOffice: false }
     : { id: HEAD_OFFICE_ID, name: HEAD_OFFICE_LABEL, code: HEAD_OFFICE_CODE, isHeadOffice: true },
-  // A Super Admin with no branch is the main one: full authority store-wide.
-  // With a branch, they still see everything but only edit inside it.
+  // A Super Admin with no branch is the main one (full access). With a branch,
+  // they can see everything but only edit inside it.
   isMainSuperAdmin: user.role === 'superadmin' && !user.branch,
   avatar: user.avatar,
   isActive: user.isActive,
@@ -66,14 +65,12 @@ const shape = (user, stats = {}) => ({
   billTotal: round2(stats.total || 0),
 });
 
-// A location worded the way the person themselves reads it — "Testing (TB)", or
-// the Head Office when no branch is assigned.
+// e.g. "Testing (TB)", or Head Office when no branch is assigned.
 const locationLabelOf = (branch) => {
   if (!branch) return `${HEAD_OFFICE_LABEL} (${HEAD_OFFICE_CODE})`;
   return branch.code ? `${branch.name} (${branch.code})` : branch.name;
 };
 
-// The same label for a location we hold only by id.
 const locationLabelFor = async (branchId) => {
   if (!branchId) return locationLabelOf(null);
   const branch = await Branch.findById(branchId).select('name code').lean();
@@ -88,7 +85,6 @@ export const listUsers = asyncHandler(async (req, res) => {
   if (role !== 'all') filter.role = role;
   if (status === 'active') filter.isActive = true;
   if (status === 'inactive') filter.isActive = false;
-  // "all" is a filter word only — no account is ever assigned to it.
   if (branch && branch !== ALL_LOCATIONS) Object.assign(filter, locationFilter(branch, 'branch'));
   if (search) {
     const rx = new RegExp(escapeRegex(search), 'i');
@@ -105,7 +101,7 @@ export const listUsers = asyncHandler(async (req, res) => {
     User.countDocuments(filter),
   ]);
 
-  // The reference UI shows "N order(s) · ₹X" under each name.
+  // Paid bill count and total per user.
   const ids = items.map((u) => u._id);
   const stats = await Bill.aggregate([
     { $match: { 'billedBy.id': { $in: ids }, status: 'paid' } },
@@ -131,8 +127,7 @@ export const getUser = asyncHandler(async (req, res) => {
 export const createUser = asyncHandler(async (req, res) => {
   const { email, branch, role } = req.body;
 
-  // A Super Admin assigned to a branch builds that branch's team, and cannot
-  // mint another Super Admin — that is a store-wide grant.
+  // A branch Super Admin can only add users to their branch, and can't create Super Admins.
   if (!isGlobalSuperAdmin(req.user)) {
     if (role === 'superadmin') {
       throw ApiError.forbidden('Only the main Super Admin can create Super Admin accounts.');
@@ -173,7 +168,7 @@ export const updateUser = asyncHandler(async (req, res) => {
 
   const isSelf = String(user._id) === String(req.user._id);
 
-  // Guard rails that stop a super admin locking themselves (or everyone) out.
+  // Stop an admin locking themselves (or everyone) out.
   if (isSelf && req.body.role && req.body.role !== user.role) {
     throw ApiError.badRequest('You cannot change your own role');
   }
@@ -197,8 +192,7 @@ export const updateUser = asyncHandler(async (req, res) => {
   const nextBranch =
     req.body.branch !== undefined ? toBranchId(req.body.branch) : previousBranch ? String(previousBranch) : null;
 
-  // A branch Super Admin cannot grant the Super Admin role, and cannot push an
-  // account out of their own branch — either would reach past their assignment.
+  // A branch Super Admin can't grant Super Admin or move a user out of their branch.
   if (!isGlobalSuperAdmin(req.user)) {
     if (nextRole === 'superadmin') {
       throw ApiError.forbidden('Only the main Super Admin can grant the Super Admin role.');
@@ -206,8 +200,7 @@ export const updateUser = asyncHandler(async (req, res) => {
     assertBranchWrite(req, nextBranch);
   }
 
-  // Losing the last main Super Admin can happen by demotion, by branching one,
-  // or by switching one off from the edit form.
+  // Demoting, assigning a branch or deactivating can remove the last main Super Admin.
   if (
     user.role === 'superadmin' &&
     !previousBranch &&
@@ -218,8 +211,7 @@ export const updateUser = asyncHandler(async (req, res) => {
 
   const movedLocation =
     branchesOn(req) && String(toBranchId(previousBranch) || '') !== String(nextBranch || '');
-  // Read the location they are leaving before the move overwrites it, so the
-  // notice can name both ends rather than just asking them to sign in again.
+  // Read the old location before saving so the notice can name both.
   const leaving = movedLocation ? await locationLabelFor(previousBranch) : null;
 
   Object.assign(user, req.body);
@@ -227,7 +219,7 @@ export const updateUser = asyncHandler(async (req, res) => {
   await user.save();
   await user.populate('branch', 'name code');
 
-  // The session ends either way — this says which move ended it.
+  // Tells the user why their session ended.
   if (movedLocation) {
     req.revokeNotice = {
       reason: `Your assigned location was changed from ${leaving} to ${locationLabelOf(
@@ -237,8 +229,6 @@ export const updateUser = asyncHandler(async (req, res) => {
     };
   }
 
-  // Both halves of a move are worded together, the way a password reset is: the
-  // admin is told the session ended, in the same words the person will read.
   const message = movedLocation
     ? `${user.name} moved to ${locationLabelOf(user.branch)}. They must sign in again.`
     : `${user.name} updated`;
@@ -283,8 +273,7 @@ export const resetUserPassword = asyncHandler(async (req, res) => {
   user.refreshTokens = [];
   await user.save();
 
-  // Worded the way the person themselves is told, so the two halves of this
-  // agree: see SESSION_NOTICE on the admin side.
+  // Keep wording in sync with SESSION_NOTICE in the admin app.
   return sendSuccess(res, {
     message: `Password reset for ${user.name}. They must sign in with the new password.`,
   });
@@ -305,7 +294,7 @@ export const deleteUser = asyncHandler(async (req, res) => {
     if (!user.branch) await assertAnotherMainSuperAdminRemains(user._id);
   }
 
-  // Deleting someone who has billed would orphan the ledger — deactivate instead.
+  // Users with bills must be deactivated, not deleted, to keep records intact.
   const billed = await Bill.countDocuments({ 'billedBy.id': user._id });
   if (billed > 0) {
     throw ApiError.conflict(

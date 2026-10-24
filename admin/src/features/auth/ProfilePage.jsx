@@ -119,8 +119,7 @@ const ProfilePage = () => {
   const changePassword = async (values) => {
     try {
       await authApi.changePassword(values);
-      // The server invalidated every session — send them back to sign in, with
-      // the same notice a reset by an administrator leaves there.
+      // The server ended every session, so sign out and go to the login page.
       await logout(SESSION_NOTICE.passwordChanged);
       navigate('/login', { replace: true });
     } catch (error) {
@@ -138,7 +137,6 @@ const ProfilePage = () => {
       />
 
       <Grid container spacing={GUTTER.page}>
-        {/* Identity card */}
         <Grid item xs={12} md={4}>
           <Card sx={{ p: CARD_PAD, textAlign: 'center' }}>
             <ProfilePhoto />
@@ -180,14 +178,12 @@ const ProfilePage = () => {
           </Card>
         </Grid>
 
-        {/* Forms */}
         <Grid item xs={12} md={8}>
           <Card>
             <Tabs
               value={tab}
               onChange={(_e, next) => setSearchParams(next === 'password' ? { tab: 'password' } : {})}
-              // Both labels carry a start icon, so the pair runs wider than a
-              // small phone — scrollable keeps the second tab reachable.
+              // Scrollable so both tabs stay reachable on small phones.
               variant="scrollable"
               scrollButtons="auto"
               allowScrollButtonsMobile

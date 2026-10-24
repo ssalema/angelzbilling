@@ -14,8 +14,7 @@ import { signOutBranchUsers } from './branch.sessions.js';
 const SORTABLE = ['createdAt', 'name', 'code'];
 
 const syncBranchesFeature = async () => {
-  // A store with no branch that can bill is a single-location store, whether its
-  // last branch was closed or deleted outright — either way the switch follows.
+  // Branch mode is on only while at least one branch is active.
   const active = await Branch.countDocuments({ isActive: true });
 
   const settings = await Settings.getSingleton();
@@ -24,8 +23,7 @@ const syncBranchesFeature = async () => {
   if (current === next) return;
 
   settings.set('features.branches', next);
-  // Mongoose Map keys may not carry a dot, so the audit map escapes it the same
-  // way the settings controller does.
+  // Mongoose Map keys can't contain dots, so use ':' (same as the settings controller).
   settings.updatedFields.set('features:branches', new Date());
   await settings.save();
 
@@ -33,10 +31,8 @@ const syncBranchesFeature = async () => {
   Settings.invalidateCache();
 };
 
-/** The two marks a branch can carry, named the way the store names them. */
 const BRANDING = { logo: 'Logo', favicon: 'Favicon' };
 
-/** Resolved once, here, so every picker, table and print header agrees. */
 const withBranding = (branch) => ({
   ...branch,
   id: branch._id,
@@ -56,8 +52,7 @@ export const listBranches = asyncHandler(async (req, res) => {
     filter.$or = [{ name: rx }, { code: rx }, { 'address.city': rx }];
   }
 
-  // A branch admin only ever needs to see their own branch in pickers. Scoped
-  // roles with no branch are refused outright rather than shown every branch.
+  // Non-superadmins only see their own branch; with no branch they are refused.
   if (req.user.role !== 'superadmin') {
     if (!req.user.branch) {
       throw ApiError.forbidden('Your account is not assigned to a branch yet. Contact the super admin.');
@@ -70,7 +65,6 @@ export const listBranches = asyncHandler(async (req, res) => {
     Branch.countDocuments(filter),
   ]);
 
-  // Attach the counts the Settings > Branches table shows.
   const ids = items.map((b) => b._id);
   const [userCounts, billCounts] = await Promise.all([
     User.aggregate([{ $match: { branch: { $in: ids } } }, { $group: { _id: '$branch', count: { $sum: 1 } } }]),
@@ -141,8 +135,7 @@ export const updateBranch = asyncHandler(async (req, res) => {
   await branch.save();
   await syncBranchesFeature();
 
-  // Closing a location from this form ends its sessions exactly as the status
-  // switch does — the same change should not depend on where it was made.
+  // Deactivating here signs users out, same as the status toggle.
   const signedOut = closing ? await signOutBranchUsers(branch._id) : 0;
 
   return sendSuccess(res, {
@@ -157,8 +150,7 @@ export const deleteBranch = asyncHandler(async (req, res) => {
   const branch = await Branch.findById(req.params.id);
   if (!branch) throw ApiError.notFound('Branch not found');
 
-  // Deleting a branch that owns history would orphan users and break reports —
-  // deactivate instead, which is what the UI offers.
+  // Branches with users or bills must be deactivated, not deleted.
   const [users, bills] = await Promise.all([
     User.countDocuments({ branch: branch._id }),
     Bill.countDocuments({ 'branch.id': branch._id }),
@@ -171,8 +163,7 @@ export const deleteBranch = asyncHandler(async (req, res) => {
     );
   }
 
-  // Both branding slots, not just the logo: a branch can own a favicon too, and
-  // once the document is gone nothing else knows that asset ever existed.
+  // Clean up both logo and favicon assets.
   const brandingIds = Object.keys(BRANDING)
     .map((kind) => branch[kind]?.publicId)
     .filter(Boolean);
@@ -188,16 +179,12 @@ export const toggleBranchStatus = asyncHandler(async (req, res) => {
   if (!branch) throw ApiError.notFound('Branch not found');
 
   branch.isActive = !branch.isActive;
-  // A hand-made status change owns the branch from here on: switching branch
-  // management back on must not undo it.
+  // A manual change must not be undone when branch mode is switched back on.
   branch.deactivatedByFeature = false;
   await branch.save();
-  // The last branch closing switches branch management off; the first reopening
-  // switches it back on.
   await syncBranchesFeature();
 
-  // Nobody is left sitting at a counter that just shut: every session held there
-  // ends now, worded the way the sign-in page words a closed location.
+  // Sign out everyone at a branch that was just deactivated.
   const signedOut = branch.isActive ? 0 : await signOutBranchUsers(branch._id);
 
   return sendSuccess(res, {
@@ -242,8 +229,7 @@ export const removeBranchBranding = asyncHandler(async (req, res) => {
   const publicId = branch[kind]?.publicId;
   branch[kind] = { url: '', publicId: '' };
 
-  // The switch only goes off once there is no artwork left to switch on: losing
-  // the favicon should not quietly drop the logo back to the store's as well.
+  // Only fall back to store branding once both logo and favicon are gone.
   const other = kind === 'logo' ? 'favicon' : 'logo';
   if (!branch[other]?.url) branch.hasOwnLogo = false;
   await branch.save();

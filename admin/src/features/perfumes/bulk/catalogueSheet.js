@@ -1,25 +1,21 @@
-// Turning an uploaded catalogue sheet into reviewable new perfumes.
+// Parses an uploaded catalogue sheet into new perfumes for review.
 
 import { SIZE_GRAMS, parsePrice, priceIssue } from '../pricing/sizePricing.js';
 
-/** The one column every sheet must carry, spelled exactly like this. */
+/** The only required column. */
 export const COLUMN_NAME = 'Perfume Name';
 
-/** The optional columns, in the order they are read. */
 export const COLUMN_CATEGORY = 'Category';
-/** Spelled with its unit, because a column headed "Stock" invites "1.5 kg". */
+/** Includes the unit so nobody writes "1.5 kg". */
 export const COLUMN_STOCK = 'Stock (GM)';
 
-// Headings that also mean the stock column.
 const STOCK_ALIASES = [COLUMN_STOCK, 'Stock', 'Stock GM', 'Stock in GM', 'Stock (gm)'];
 
-/** "100gm Price" — the heading for a fill of that many grams. */
 export const priceColumnFor = (grams) => `${grams}gm Price`;
 
-/** The size columns a catalogue sheet is expected to carry, smallest first. */
 export const PRICE_COLUMNS = SIZE_GRAMS.map(priceColumnFor);
 
-/** The rules shown above the dropzone, in the order they are checked. */
+/** Rules shown above the dropzone. */
 export const SHEET_RULES = [
   `The first row must be a header. It needs a "${COLUMN_NAME}" column, and may also carry "${COLUMN_CATEGORY}" and "${COLUMN_STOCK}", plus a price column for each size — ${PRICE_COLUMNS.join(', ')}.`,
   'Every new perfume SKU is automatically numbered, carrying on from the last one in your catalogue.',
@@ -31,23 +27,21 @@ export const SHEET_RULES = [
   'List each perfume once. A name that repeats in the sheet is flagged, and only its first row is used.',
 ];
 
-// Most perfumes one sheet can carry.
 export const MAX_SHEET_ROWS = 2000;
 
-/** Header matching is forgiving about case and spacing, and nothing else. */
+/** Header matching ignores case and extra spacing only. */
 const headerKey = (value) => String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 
 const findHeader = (headers, wanted) =>
   headers.find((header) => headerKey(header) === headerKey(wanted)) ?? null;
 
-// Reads the header row into the columns this screen understands.
 export const findColumns = (headers = []) => {
   const sizes = [];
   headers.forEach((header) => {
     const match = /^(\d+(?:\.\d+)?)\s*(?:gm|g|gms|gram|grams)\s*price$/i.exec(headerKey(header));
     if (match) {
       const grams = Number(match[1]);
-      // A sheet that repeats a size column would otherwise price it twice.
+      // Ignore a repeated size column.
       if (grams > 0 && !sizes.some((size) => size.grams === grams)) sizes.push({ grams, header });
     }
   });
@@ -62,7 +56,6 @@ export const findColumns = (headers = []) => {
   };
 };
 
-// Grams out of a cell.
 export const parseGrams = (raw) => {
   const text = String(raw ?? '').trim().replace(/,/g, '').replace(/\s*(gm|gms|g|grams?)$/i, '');
   if (!text) return NaN;
@@ -72,20 +65,18 @@ export const parseGrams = (raw) => {
 
 const normaliseName = (value) => String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 
-/** The longest name the catalogue will hold. */
 const MAX_NAME = 180;
 
 export const buildSheetRows = (records, columns) => {
   const seen = new Set();
 
   return records.map((record, index) => {
-    // +2: the header is line 1, and the first record is the line after it.
+    // +2: the header is line 1.
     const line = index + 2;
     const name = String(record[columns.name] ?? '').trim();
     const category = columns.category ? String(record[columns.category] ?? '').trim() : '';
     const rawStock = columns.stock ? String(record[columns.stock] ?? '').trim() : '';
 
-    /** Only the sizes this row actually fills in. Blank cells never appear. */
     const prices = [];
     const badCells = [];
 
@@ -101,11 +92,10 @@ export const buildSheetRows = (records, columns) => {
 
     const stock = rawStock ? parseGrams(rawStock) : 0;
 
-    // `photo` and `photoPublicId` are the review screen's to fill in.
+    // Photos are added later on the review screen.
     const row = { key: `row-${index}`, line, name, category, prices, stock, photo: '', photoPublicId: '' };
 
-    /* The order matters: the first thing wrong with a row is the thing worth
-       telling the admin about, and a row with no name has nothing else to say. */
+    // Order matters: only the first problem in a row is reported.
     if (!name) return { ...row, issue: 'The Perfume Name cell is empty' };
     if (name.length < 2) return { ...row, issue: 'That name is too short to be a perfume' };
     if (name.length > MAX_NAME) return { ...row, issue: `That name is longer than ${MAX_NAME} characters` };
@@ -131,7 +121,7 @@ export const buildSheetRows = (records, columns) => {
   });
 };
 
-// Merges the catalogue's answer into the sheet's rows.
+// Merges the server's check results into the rows (in order, skipping rows with issues).
 export const applyChecks = (rows, checks) => {
   const queue = [...checks];
 
@@ -147,10 +137,9 @@ export const applyChecks = (rows, checks) => {
   });
 };
 
-// What a row will be created as.
+// Published only with both a photo and stock; otherwise draft.
 export const statusFor = (row) => (row.photo && Number(row.stock) > 0 ? 'published' : 'draft');
 
-/** The rows that will actually be sent — everything the server needs, and nothing else. */
 export const toPayload = (rows) =>
   rows
     .filter((row) => row.ready)
@@ -159,8 +148,7 @@ export const toPayload = (rows) =>
       category: row.category,
       stock: row.stock || 0,
       image: row.photo || '',
-      // Carried so the perfume owns its upload: deleting it later takes the
-      // Cloudinary asset with it, the same as an image added in the wizard.
+      // So deleting the perfume also deletes its Cloudinary image.
       imagePublicId: row.photoPublicId || '',
       prices: row.prices,
     }));

@@ -11,8 +11,7 @@ import { getCachedUser, setCachedUser } from '../utils/userCache.js';
 import { toLocationId } from '../utils/locations.js';
 import { isBranchInactive, BRANCH_INACTIVE_MESSAGE } from '../utils/branchAccess.js';
 
-// The push half of the API: every write the REST layer makes is announced here,
-// so an open panel does not have to be told to refresh.
+// Pushes REST writes to open clients so panels refresh on their own.
 
 export const ROOM_ALL = 'all';
 export const userRoom = (userId) => `user:${userId}`;
@@ -25,9 +24,7 @@ let io = null;
 
 export const getIO = () => io;
 
-// ─── Handshake ──────────────────────────────────────────────────────────────
-
-// The same checks `middlewares/authenticate.js` runs, against the handshake token.
+// Same checks as `middlewares/authenticate.js`, on the handshake token.
 const resolveSocketUser = async (token) => {
   if (!token) throw new Error('You are not signed in.');
 
@@ -69,7 +66,7 @@ const scheduleExpiry = (socket, exp) => {
   }
 
   socket.data.expiryTimer = setTimeout(() => {
-    // The client mints a fresh token and reconnects; it is not signed out.
+    // The client refreshes its token and reconnects; it is not signed out.
     socket.emit('auth:expired');
     socket.disconnect(true);
   }, ms);
@@ -83,18 +80,15 @@ const joinRooms = (socket, user) => {
   socket.join(branchRoom(user.branch?._id || user.branch));
 };
 
-// ─── Fan-out ────────────────────────────────────────────────────────────────
-
 const emitLocally = (rooms, event, payload) => {
   if (!io || !event) return;
   io.to(rooms).emit(event, payload);
 };
 
-// A worker holds only its own sockets, so an event raised here has to reach the
-// connections on the other workers. See config/broadcast.js.
+// Each worker holds only its own sockets, so relay events from other workers.
 onBroadcast('realtime', (message) => emitLocally(message?.rooms || [], message?.event, message?.payload));
 
-/** Announces an event to a set of rooms, on every worker. */
+// Emits to the given rooms on every worker.
 export const emit = (event, payload = null, { rooms = [ROOM_ALL] } = {}) => {
   const targets = (Array.isArray(rooms) ? rooms : [rooms]).filter(Boolean);
   if (!targets.length || !event) return;
@@ -103,20 +97,17 @@ export const emit = (event, payload = null, { rooms = [ROOM_ALL] } = {}) => {
   broadcast('realtime', { rooms: targets, event, payload });
 };
 
-// A write at one location reaches that location plus every super admin, who
-// reads the whole store. A null scope means the write was store-wide.
+// A branch write goes to that branch plus all super admins; null scope means everyone.
 export const roomsForScope = (scope) =>
   scope === null || scope === undefined ? [ROOM_ALL] : [branchRoom(scope), roleRoom('superadmin')];
 
 export const emitToScope = (event, payload, scope) => emit(event, payload, { rooms: roomsForScope(scope) });
 
-/** Tells one account's open tabs that its session is no longer usable. */
+// Tells one account's open tabs that its session has ended.
 export const revokeSession = (userId, reason = 'Your session has ended. Please sign in again.', severity = 'info') => {
   if (!userId) return;
   emit('session:revoked', { reason, severity }, { rooms: [userRoom(userId)] });
 };
-
-// ─── Lifecycle ──────────────────────────────────────────────────────────────
 
 export const initSocket = (httpServer) => {
   if (!env.realtime.enabled) {
@@ -134,14 +125,13 @@ export const initSocket = (httpServer) => {
           : callback(new Error(`Origin ${origin} is not allowed to connect.`)),
       credentials: true,
     },
-    // Long polling spreads a session over several requests, and under
-    // `start:cluster` each could land on a different worker. A websocket stays
-    // where it opened, so no sticky-session layer is needed in front of the app.
+    // In cluster mode, polling requests could hit different workers; websockets
+    // stay on one, so no sticky sessions are needed.
     transports: cluster.isWorker ? ['websocket'] : ['polling', 'websocket'],
     pingInterval: env.realtime.pingIntervalMs,
     pingTimeout: env.realtime.pingTimeoutMs,
     maxHttpBufferSize: 1e5,
-    // A phone that loses signal for a moment gets the events it missed back.
+    // Replays missed events after a brief disconnect.
     connectionStateRecovery: { maxDisconnectionDuration: 60_000, skipMiddlewares: false },
   });
 
@@ -186,7 +176,7 @@ export const closeSocket = async () => {
   await new Promise((resolve) => closing.close(resolve));
 };
 
-// This worker's own connections; under the cluster each reports its share.
+// Counts only this worker's connections.
 export const socketStats = () => {
   if (!io) return { enabled: false, connections: 0 };
   const rooms = io.sockets.adapter.rooms;

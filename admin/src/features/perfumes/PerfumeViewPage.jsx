@@ -58,7 +58,6 @@ import {
 import { FONT, CARD_HEAD_PAD, CARD_PAD, CARD_RADIUS, GUTTER, DISCOUNT_COLOR, ICON, brand, numericText, surface } from '../../theme/index.js';
 import { IMG } from '../../utils/image.js';
 
-// What the last write changed, in words.
 const UPDATE_ACTION_LABELS = {
   created: 'Created',
   'bulk-upload': 'Bulk upload',
@@ -71,21 +70,19 @@ const UPDATE_ACTION_LABELS = {
   archived: 'Archived',
 };
 
-/** Adding a perfume is not an update to it — these two are creation, not change. */
+// These mark creation, not an update.
 const CREATION_ACTIONS = new Set(['created', 'bulk-upload']);
 
-// Whether anyone has actually changed this perfume since it was added.
 const wasUpdated = (perfume) => {
   if (perfume.updatedAction) return !CREATION_ACTIONS.has(perfume.updatedAction);
 
-  // Perfumes written before the action was recorded have no slug to read, so
-  // the stamps decide: a second's drift is the write itself, not an edit.
+  // Older perfumes have no recorded action, so compare timestamps (allowing 1s drift).
   const created = new Date(perfume.createdAt).getTime();
   const updated = new Date(perfume.updatedAt).getTime();
   return Number.isFinite(created) && Number.isFinite(updated) && updated - created > 1000;
 };
 
-/** "Lucifer — Stock", or just the name when the change predates this field. */
+/** "Lucifer — Stock", or just the name for older records. */
 const byLine = (user, action) => {
   const name = user?.name;
   if (!name) return '';
@@ -112,8 +109,7 @@ const PerfumeViewPage = () => {
 
   const { data: perfume, loading, error, reload } = useApiResource(() => perfumeApi.get(id), [id], { watch: 'perfumes' });
 
-  // Loading, error and loaded all render the same header — same breadcrumbs,
-  // same height — so the page never jumps when the perfume arrives.
+  // Same header in every state so the page doesn't jump.
   const crumbs = [
     { label: 'Dashboard', to: '/dashboard' },
     { label: 'Perfumes', to: '/perfumes' },
@@ -149,7 +145,7 @@ const PerfumeViewPage = () => {
 
   const images = perfume.images || [];
   const variants = perfume.variants || [];
-  // "1 × 50gm · 2 × 100gm" reads truer than a bare unit count pooled across sizes.
+  // Size-wise split of units sold, shown in a dialog.
   const soldBySize = (perfume.sales?.bySize || []).filter((row) => row.unitsSold > 0);
 
   return (
@@ -158,8 +154,6 @@ const PerfumeViewPage = () => {
         title={perfume.name}
         subtitle={[perfume.brand, perfume.sku].filter(Boolean).join(' · ')}
         breadcrumbs={crumbs}
-        // The breadcrumb is how you go back; the action slot is for the one
-        // thing you came here to do.
         action={
           isAdmin && (
             <Button
@@ -252,7 +246,7 @@ const PerfumeViewPage = () => {
               label="Created by"
               value={byLine(perfume.createdBy, perfume.createdVia === 'bulk-upload' ? 'bulk-upload' : 'created')}
             />
-            {/* Both read NA until someone actually changes something. */}
+            {/* Show NA until the perfume is actually edited. */}
             <Row label="Last updated" value={wasUpdated(perfume) ? formatDate(perfume.updatedAt, 'time') : ''} />
             <Row
               label="Updated by"
@@ -312,8 +306,7 @@ const PerfumeViewPage = () => {
                       onClick={() => setSoldOpen(true)}
                       aria-label="See the size-wise split of units sold"
                       sx={{
-                        // Block-level and left-aligned so the figure keeps the
-                        // exact position the other stat tiles put theirs in.
+                        // Keeps the figure aligned with the other stat tiles.
                         display: 'flex',
                         width: 'fit-content',
                         borderRadius: 1,
@@ -367,7 +360,7 @@ const PerfumeViewPage = () => {
               </Grid>
             </Grid>
 
-            {/* The size-wise story behind the pooled units-sold figure. */}
+            {/* Units sold by size. */}
             <Dialog open={soldOpen} onClose={() => setSoldOpen(false)} maxWidth="xs" fullWidth>
               <DialogCloseButton onClose={() => setSoldOpen(false)} />
 

@@ -8,21 +8,20 @@ import { IMG } from '../../utils/image.js';
 import { cachedSiteName } from '../../utils/branding.js';
 import { splitGst } from './billSchema.js';
 
-// The printable bill — a thermal receipt slip, not an A4 invoice.
+// Printable bill: a thermal receipt slip, not an A4 invoice.
 
-/** Settings arrive flattened from /bills/:id and nested from /settings — accept both. */
+/** Settings come flat from /bills/:id and nested from /settings; accept both. */
 const readShop = (store, bill) => {
   const s = store || bill?.store || {};
   return {
     name: s.siteName || cachedSiteName(),
-    // No literal fallbacks below this line: a tagline and a slip footer are the store's own words.
+    // No hardcoded fallbacks: the tagline and footer are the store's own text.
     tagline: s.tagline || '',
     favicon: s.favicon || s.branding?.favicon?.url || '',
     gstin: s.gstin || '',
     footer: s.invoiceFooter || s.billing?.invoiceFooter || '',
     terms: s.termsAndConditions || s.billing?.termsAndConditions || '',
-    // Settings > Billing. Falls back to whatever the app is already formatting
-    // money with, so a reprint never disagrees with the screen behind it.
+    // Falls back to the app's current currency so a reprint matches the screen.
     currency: s.currencySymbol || s.billing?.currencySymbol || currencySymbol(),
     branchesEnabled: s.features?.branches !== false,
   };
@@ -34,10 +33,10 @@ const money = (value) => formatAmount(value);
 /** How a collected instalment is dated on the slip: "06 Sept 2026, 04:49 PM". */
 const stamp = (at) => `${formatDate(at, 'medium')}, ${formatDate(at, 'clock').toUpperCase()}`;
 
-/** "upi" → "UPI". An unmapped code prints as it is stored rather than blank. */
+/** "upi" → "UPI". Unknown codes print as stored. */
 const methodLabel = (method) => PAYMENT_METHOD_LABELS[method] || method || '';
 
-/** Browsers drop background fills when printing — the black stamps must opt back in. */
+/** Browsers drop background colors when printing, so the black stamps opt back in. */
 const KEEP_FILL = { WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' };
 
 const RULE = { borderTop: `1px solid ${brand.ink}`, opacity: 0.18 };
@@ -52,22 +51,20 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
   const gst = splitGst(bill.taxPercent, bill.taxAmount);
   const branch = bill.branch || {};
   const isPaid = (bill.status || 'paid') === 'paid';
-  // What is still owed. Bills raised before part payments existed carry no
-  // balance field at all, and those were settled in full — so absent means zero.
+  // Old bills (before part payments) have no balance field and were paid in full.
   const amountDue = Number(bill.amountDue || 0);
-  // Oldest first: the slip reads down the way the money came in.
+  // Oldest payment first.
   const instalments = [...(bill.payments || [])].sort((a, b) => new Date(a.at) - new Date(b.at));
   const showInstalments = amountDue > 0 || instalments.length > 1;
 
   const latestMethod = instalments.length ? instalments[instalments.length - 1].method : '';
   const modeValue = methodLabel(latestMethod || bill.paymentMethod);
 
-  // A bill rung up at a branch prints that branch's GSTIN, not head office's.
+  // Branch bills print the branch's GSTIN, not head office's.
   const gstin = branch.gstin || shop.gstin;
-  // …and names the location it was raised at, under the biller.
+  // Location name, shown under the biller.
   const location = shop.branchesEnabled ? branch.name || HEAD_OFFICE.name : '';
-  // The slip prints under the favicon alone — no wordmark, and nothing at all
-  // when the store has not uploaded a favicon.
+  // Only the favicon is printed as the logo; nothing if none is uploaded.
   const mark = shop.favicon;
 
   return (
@@ -81,13 +78,11 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
         color: brand.ink,
         fontSize: '0.78rem',
         boxShadow: '0 10px 30px rgba(36,24,38,0.10)',
-        // The slip is laid out in px; zoom scales type and column widths together,
-        // so 360px lands at exactly 72mm of a 80mm roll.
+        // Laid out in px; zoom scales it so 360px = 72mm on an 80mm roll.
         '@media print': { width: 360, maxWidth: 'none', zoom: 0.756, boxShadow: 'none' },
       }}
     >
       <Box sx={{ px: 2.5, pt: 3, pb: 2 }}>
-        {/* ── Masthead ── */}
         {mark && (
           <Stack direction="row" alignItems="center" justifyContent="center">
             <Box component="img" src={IMG.print(mark)} alt={shop.name} sx={{ height: 70 }} />
@@ -122,7 +117,6 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
 
         <Box sx={{ ...DASHED, my: 1.75 }} />
 
-        {/* ── Meta ── */}
         <Box sx={{ minWidth: 0 }}>
           <MetaRow label="Bill No" value={bill.billNumber} strong />
           {bill.customer?.name && <MetaRow label="Customer" value={bill.customer.name} />}
@@ -144,7 +138,6 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
 
         <Box sx={{ ...DASHED, my: 1.75 }} />
 
-        {/* ── Lines ── */}
         <Row sx={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.08em', color: brand.inkSoft }}>
           <span>#</span>
           <span>PERFUME</span>
@@ -173,7 +166,6 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
 
         <Box sx={{ ...DASHED, my: 1.5 }} />
 
-        {/* ── Totals ── */}
         <Box sx={{ pl: '32%' }}>
           <TotalRow label="Subtotal" value={`${cur} ${money(bill.subtotal)}`} />
           {bill.totalDiscount > 0 && <TotalRow label="Discount" value={`- ${cur} ${money(bill.totalDiscount)}`} />}
@@ -191,14 +183,8 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
             <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>{`${cur} ${money(bill.grandTotal)}`}</Typography>
           </Stack>
 
-          {/* A bill settled in instalments prints each one on its own line —
-              never a single rolled-up figure. The customer has to be able to
-              match a receipt against the payment they actually made, so the
-              money taken at the counter reads "During Billing" and everything
-              collected afterwards carries the date and time it came in.
-
-              A bill paid in full in one go has nothing extra to say, so it keeps
-              the plain TOTAL it always printed. */}
+          {/* Instalment bills list each payment on its own line so the customer can match
+              receipts. A bill paid in one go keeps the plain TOTAL. */}
           {showInstalments && (
             <>
               <Box sx={{ ...RULE, my: 1, opacity: 0.35 }} />
@@ -225,7 +211,6 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
           )}
         </Box>
 
-        {/* ── Payment ── */}
         <Stack
           direction="row"
           alignItems="center"
@@ -266,7 +251,6 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
           </Stack>
         </Stack>
 
-        {/* ── Sign-off ── */}
         <Box sx={{ textAlign: 'center', mt: 2.5 }}>
           <Typography
             sx={{ fontFamily: "'Great Vibes', 'Cormorant Garamond', cursive", fontSize: '2.2rem', lineHeight: 1.1 }}
@@ -285,7 +269,6 @@ const BillPrintView = forwardRef(({ bill, store }, ref) => {
 
         <Box sx={{ ...RULE, mt: 2 }} />
 
-        {/* ── Trust badges ── */}
         <Stack direction="row" sx={{ pt: 1.5 }}>
           <Badge icon={<BottleGlyph />} label={'Original\nPerfumes'} />
           <Badge icon={<GiftGlyph />} label={'Great\nFragrances'} divider />
@@ -384,7 +367,7 @@ const HeartGlyph = () => (
   </svg>
 );
 
-// The status stamp's tick, drawn the same on screen, on paper and in the PDF.
+// Status stamp tick, drawn the same on screen, paper and PDF.
 const TickIcon = ({ color = '#fff', mark = brand.ink }) => (
   <svg
     width="15"

@@ -2,17 +2,16 @@ import { useRef, useState } from 'react';
 import { Box } from '@mui/material';
 import { surface, brand } from '../../theme/index.js';
 
-/** Corner of the 'frame' outline, in px — the SVG needs the same number. */
+// In px; shared by the CSS border radius and the SVG outline.
 const FRAME_RADIUS = 8;
 
-// The dashed outline of a 'frame' dropzone, as a background SVG.
+// Dashed outline drawn as a background SVG (CSS dashes can't be sized).
 const frameOutline = (color, dashes = true) => {
   const dash = dashes ? ' stroke-dasharray="8 6"' : '';
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" fill="none"><rect width="100%" height="100%" rx="${FRAME_RADIUS}" stroke="${color}" stroke-width="3"${dash}/></svg>`;
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 };
 
-// The one drag-and-drop file target in the panel.
 const Dropzone = ({
   onFiles,
   accept,
@@ -20,10 +19,9 @@ const Dropzone = ({
   disabled = false,
   label = 'Add files',
   variant = 'panel',
-  /** 'dashed' (empty, still asking for a file) or 'solid' (already filled). */
+  // 'dashed' (empty) or 'solid' (has a file).
   outline = 'dashed',
-  // Lets a sibling control ("Replace") reopen the picker without owning an
-  // input of its own.
+  // Lets another control (e.g. "Replace") open the file picker.
   openRef,
   sx,
   children,
@@ -38,7 +36,7 @@ const Dropzone = ({
 
   const active = dragging && !disabled;
 
-  // 'frame' — the single-image slot (logo, favicon, branch logo).
+  // 'frame' is the single-image slot (logo, favicon).
   const dashes = outline !== 'solid';
   const dashed =
     variant === 'frame'
@@ -77,7 +75,7 @@ const Dropzone = ({
         if (!disabled) onFiles?.(event.dataTransfer.files);
       }}
       sx={{
-        // Reset the button chrome — the dashed frame below is the whole visual.
+        // Reset default button styles.
         width: '100%',
         display: 'block',
         font: 'inherit',

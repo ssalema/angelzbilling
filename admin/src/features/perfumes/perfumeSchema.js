@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-// Mirrors the server's Zod schema so the wizard catches problems before a round trip.
+// Mirrors the server's Zod schema.
 
 const media = z.object({
   url: z.string().min(1),
@@ -11,16 +11,16 @@ const media = z.object({
 const variantSchema = z.object({
   _id: z.string().optional(),
   label: z.string().min(1, 'Label is required'),
-  options: z.record(z.string()).default({}),
+  options: z.record(z.string(), z.string()).default({}),
   sku: z
     .string()
     .trim()
     .min(2, 'SKU is required')
     .max(60)
     .regex(/^[A-Za-z0-9-_]+$/, 'Letters, numbers, hyphens and underscores only'),
-  mrp: z.coerce.number({ invalid_type_error: 'Enter a price' }).min(0, 'Price cannot be negative'),
+  mrp: z.coerce.number({ error: (issue) => (issue.code === 'invalid_type' ? 'Enter a price' : undefined) }).min(0, 'Price cannot be negative'),
   discountPercent: z.coerce.number().min(0, 'Cannot be negative').max(100, 'Cannot exceed 100%').default(0),
-  // Read-only here: the server derives it from the Size option ("100gm" -> 100).
+  // Read-only: the server derives it from the Size option ("100gm" -> 100).
   sizeGrams: z.coerce.number().min(0).optional(),
   isActive: z.boolean().default(true),
   image: z.object({ url: z.string().default(''), publicId: z.string().default('') }).default({ url: '', publicId: '' }),
@@ -45,16 +45,16 @@ export const perfumeSchema = z
     concentration: z.string().trim().max(80).default(''),
     shortDescription: z.string().trim().max(300, 'Keep this under 300 characters').default(''),
     description: z.string().trim().max(8000).default(''),
-    // Pricing is not typed on this step any more: it belongs to the variants step.
-    mrp: z.coerce.number({ invalid_type_error: 'Enter a price' }).min(0, 'Price cannot be negative').default(0),
+    // Price is entered on the variants step.
+    mrp: z.coerce.number({ error: (issue) => (issue.code === 'invalid_type' ? 'Enter a price' : undefined) }).min(0, 'Price cannot be negative').default(0),
     discountPercent: z.coerce.number().min(0, 'Cannot be negative').max(100, 'Cannot exceed 100%').default(0),
-    // Stock is bulk weight in grams throughout, so decimals are allowed. This is
-    // the perfume's ONE inventory figure — variants draw down this same pool.
+    // Stock is bulk weight in grams (decimals allowed), shared by all variants.
     sizeGrams: z.coerce.number().min(0, 'Pack size cannot be negative').default(0),
     stock: z.coerce
-      .number({ invalid_type_error: 'Enter the stock you hold, in grams' })
+      .number({ error: (issue) => (issue.code === 'invalid_type' ? 'Enter the stock you hold, in grams' : undefined) })
       .positive('Enter the stock you hold, in grams')
-      .default(0),
+      // prefault, not default: the 0 must still go through `.positive()`.
+      .prefault(0),
     lowStockThreshold: z.coerce.number().min(0).default(100),
     hsnCode: z.string().trim().max(20).default(''),
     barcode: z.string().trim().max(60).default(''),
@@ -96,26 +96,26 @@ export const perfumeSchema = z
     if (data.hasVariants) {
       if (!data.variantAttributes.length) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom',
           path: ['variantAttributes'],
           message: 'Add an attribute (for example Size) before generating combinations',
         });
       }
       if (!data.variants.length) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom',
           path: ['variants'],
           message: 'Generate at least one combination, or switch variants off',
         });
       }
 
-      // Duplicate SKUs would collide on the server; catch it in the table instead.
+      // Catch duplicate SKUs here before the server rejects them.
       const seen = new Map();
       data.variants.forEach((variant, index) => {
         const sku = variant.sku?.toUpperCase();
         if (seen.has(sku)) {
           ctx.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: 'custom',
             path: ['variants', index, 'sku'],
             message: 'This SKU is used by another variant',
           });
@@ -125,18 +125,17 @@ export const perfumeSchema = z
 
       if (data.variants.length && !data.variants.some((v) => v.isActive)) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom',
           path: ['variants'],
           message: 'Keep at least one variant active',
         });
       }
 
-      // Variants are now the only place a price is entered, so an active row
-      // left at zero would leave the perfume unsellable at that size.
+      // Every active variant needs a price, or it can't be sold.
       data.variants.forEach((variant, index) => {
         if (variant.isActive && !(Number(variant.mrp) > 0)) {
           ctx.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: 'custom',
             path: ['variants', index, 'mrp'],
             message: 'Set a price for this variant',
           });
@@ -146,14 +145,14 @@ export const perfumeSchema = z
 
     if (data.status === 'published' && !data.images.length) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['images'],
         message: 'Add at least one image before publishing',
       });
     }
   });
 
-/** Which fields each wizard step is responsible for, used by "Continue". */
+// Fields validated by each wizard step's "Continue".
 export const stepFields = {
   0: ['name', 'sku', 'brand', 'category', 'subCategory', 'fragranceFamily', 'concentration', 'shortDescription', 'description', 'sizeGrams', 'stock', 'lowStockThreshold', 'tags'],
   1: ['features', 'faqs'],
@@ -175,8 +174,7 @@ export const emptyPerfume = {
   mrp: '',
   discountPercent: 0,
   sizeGrams: '',
-  // Blank rather than zero: the weight held is the admin's to type, and a
-  // pre-filled 0 reads as an answer already given.
+  // Blank, not 0, so the admin must enter it.
   stock: '',
   lowStockThreshold: 100,
   hsnCode: '',
@@ -187,8 +185,7 @@ export const emptyPerfume = {
   images: [],
   videos: [],
   hasVariants: true,
-  // Perfume is nearly always sold by fill size, so the usual ladder is
-  // pre-filled — values can still be removed or added before generating.
+  // Common sizes pre-filled; they can be edited before generating.
   variantAttributes: [
     {
       name: 'Size',
@@ -200,7 +197,7 @@ export const emptyPerfume = {
   status: 'draft',
 };
 
-/** "100gm" / "1 kg" / "50 ml" -> grams. Mirrors the server's parseGrams. */
+// "100gm" / "1 kg" / "50 ml" -> grams. Mirrors the server's parseGrams.
 const parseGrams = (text) => {
   const match = /(\d+(?:\.\d+)?)\s*(kg|kgs|g|gm|gms|gram|grams|ml|l)\b/i.exec(String(text ?? ''));
   if (!match) return 0;
@@ -219,7 +216,7 @@ export const sizeGramsFor = (target) => {
   return parseGrams(sizeOption) || parseGrams(target?.label) || 1;
 };
 
-// The perfume-level price the API and every listing still expect.
+// Perfume-level price (cheapest active variant) that the API and listings expect.
 export const basePricingFor = (data) => {
   const variants = data?.variants || [];
   const active = variants.filter((v) => v?.isActive !== false);

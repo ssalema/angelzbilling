@@ -1,16 +1,13 @@
-// Reads an .xlsx (or .csv) file in the browser, and nowhere else.
+// Reads an .xlsx or .csv file entirely in the browser.
 
-/** Anything larger is not a stock sheet — it is the wrong file. */
+/** Max file size; anything larger is the wrong file. */
 const MAX_SHEET_BYTES = 5 * 1024 * 1024;
 
-/** What the file picker offers, and what `readSheet` will actually open. */
 export const SHEET_TYPES =
   '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.csv,text/csv';
 
-/** Raised for anything the admin can fix by picking a different file. */
+/** For errors the admin can fix by picking a different file. */
 export class SheetError extends Error {}
-
-/* ────────────────────────────── ZIP ────────────────────────────── */
 
 const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_SIGNATURE = 0x02014b50;
@@ -53,11 +50,9 @@ const readZip = async (buffer) => {
 
     const name = decoder.decode(bytes.subarray(offset + 46, offset + 46 + nameLength));
 
-    // Only the three parts a workbook's values live in — a sheet full of
-    // charts and images should not be inflated to read two columns.
+    // Only unzip the parts that hold values, not charts or images.
     if (/^xl\/(workbook\.xml|_rels\/workbook\.xml\.rels|sharedStrings\.xml|worksheets\/)/.test(name)) {
-      // The local header repeats the name and carries its own extra field,
-      // which is usually a different length from the central one.
+      // The local header's extra field can differ in length from the central one.
       const localNameLength = view.getUint16(localOffset + 26, true);
       const localExtraLength = view.getUint16(localOffset + 28, true);
       const start = localOffset + 30 + localNameLength + localExtraLength;
@@ -76,13 +71,10 @@ const inflateRaw = async (bytes) => {
   if (typeof DecompressionStream === 'undefined') {
     throw new SheetError('This browser cannot open .xlsx files. Save the sheet as .csv, or use a current browser.');
   }
-  // `bytes` is a view into the whole file, so it is copied — a stream must own
-  // its buffer, and a subarray hands over the entire workbook behind it.
+  // Copy the bytes: a subarray would hand the whole file's buffer to the stream.
   const stream = new Blob([bytes.slice()]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 };
-
-/* ────────────────────────────── XML ────────────────────────────── */
 
 const parseXml = (bytes) => {
   const doc = new DOMParser().parseFromString(new TextDecoder().decode(bytes), 'application/xml');
@@ -105,7 +97,6 @@ const tags = (node, name) => {
   return found;
 };
 
-/** True when `node` sits anywhere inside an element with this local name. */
 const isInside = (node, name) => {
   for (let parent = node.parentNode; parent; parent = parent.parentNode) {
     if (parent.localName === name) return true;
@@ -159,7 +150,7 @@ const firstSheetPath = (entries) => {
     }
   }
 
-  // A workbook with an unusual rels layout still has its sheets in one place.
+  // Fallback for workbooks with an unusual rels layout.
   return [...entries.keys()].find((name) => name.startsWith('xl/worksheets/') && name.endsWith('.xml'));
 };
 
@@ -171,8 +162,8 @@ const readXlsx = async (buffer) => {
 
   const shared = readSharedStrings(entries.get('xl/sharedStrings.xml'));
 
-  // Empty cells are simply absent from the XML, so each row is laid out by the
-  // cell's own reference — otherwise a blank Stock cell would shift the columns.
+  // Empty cells are missing from the XML, so place each cell by its reference
+  // to keep the columns aligned.
   return tags(parseXml(entries.get(sheetPath)), 'row').map((row) => {
     const cells = [];
     tags(row, 'c').forEach((cell) => {
@@ -182,8 +173,6 @@ const readXlsx = async (buffer) => {
     return [...cells].map((value) => value ?? '');
   });
 };
-
-/* ────────────────────────────── CSV ────────────────────────────── */
 
 /** RFC 4180: quoted fields may hold commas, newlines and doubled quotes. */
 const readCsv = (text) => {
@@ -226,8 +215,6 @@ const readCsv = (text) => {
   return rows;
 };
 
-/* ────────────────────────────── Public ────────────────────────────── */
-
 export const readSheet = async (file, onProgress) => {
   if (!file) throw new SheetError('No file was chosen.');
   if (file.size > MAX_SHEET_BYTES) {
@@ -248,8 +235,7 @@ export const readSheet = async (file, onProgress) => {
 
   onProgress?.(80);
 
-  // The header is the first row that actually has text in it — an exported
-  // sheet often opens with a blank line or two.
+  // The header is the first non-empty row; exports often start with blank lines.
   const headerIndex = grid.findIndex((row) => row.some((cell) => String(cell).trim()));
   if (headerIndex < 0) throw new SheetError('That sheet is empty.');
 

@@ -33,6 +33,7 @@ import Pagination from '../../../components/common/Pagination.jsx';
 import SizePriceTable from './SizePriceTable.jsx';
 import { perfumeApi } from '../../../api/endpoints.js';
 import { useSnackbar } from '../../../context/SnackbarContext.jsx';
+import useRequestKey from '../../../hooks/useRequestKey.js';
 import { formatNumber, truncate } from '../../../utils/format.js';
 import { readSheet, SheetError, SHEET_TYPES } from '../../../utils/spreadsheet.js';
 import { brand, CARD_RADIUS, FONT, ICON, numericText, surface } from '../../../theme/index.js';
@@ -48,12 +49,12 @@ import {
   reviewRowsFor,
 } from './priceSheet.js';
 
-/** How many review rows are drawn at once — a thousand-row sheet is normal here. */
+/** Review rows per page; sheets with a thousand rows are normal. */
 const PAGE_SIZE = 25;
 
-// Repricing a whole catalogue from a spreadsheet.
 const BulkPriceUpdate = ({ onUpdated }) => {
   const snackbar = useSnackbar();
+  const requestKey = useRequestKey();
 
   // 'idle' → 'reading' → 'review' → 'saving' → 'done'
   const [stage, setStage] = useState('idle');
@@ -82,7 +83,6 @@ const BulkPriceUpdate = ({ onUpdated }) => {
       return next;
     });
 
-  // Reads the chosen file and matches it against the catalogue.
   const handleFiles = async (fileList) => {
     const file = [...(fileList || [])][0];
     if (!file) return;
@@ -92,7 +92,7 @@ const BulkPriceUpdate = ({ onUpdated }) => {
     setFileName(file.name);
 
     try {
-      // The sheet itself is 0–80% of the bar; matching it is the rest.
+      // Reading the sheet is 0–80% of the progress bar; matching is the rest.
       const { headers, rows: records } = await readSheet(file, (value) =>
         setProgress(Math.round(value * 0.8))
       );
@@ -113,7 +113,7 @@ const BulkPriceUpdate = ({ onUpdated }) => {
 
       const sheetRows = buildSheetRows(records, columns);
 
-      // Only rows that survived the sheet's own rules are worth a lookup.
+      // Only look up rows that passed the sheet checks.
       const names = sheetRows.filter((row) => !row.issue).map((row) => row.name);
       if (!names.length) {
         setRows(sheetRows.map((row) => ({ ...row, matched: false })));
@@ -125,8 +125,7 @@ const BulkPriceUpdate = ({ onUpdated }) => {
       const matches = await perfumeApi.resolvePriceNames(names);
 
       setProgress(100);
-      // Each match is expanded into per-size rows here so the admin reviews the
-      // real before/after for every fill, not just the cells they typed.
+      // Expand each match into per-size rows so the admin sees before/after for every size.
       setRows(
         applyMatches(sheetRows, matches).map((row) =>
           row.matched ? { ...row, sizes: reviewRowsFor(row) } : row
@@ -143,7 +142,7 @@ const BulkPriceUpdate = ({ onUpdated }) => {
   const matched = useMemo(() => rows.filter((row) => row.matched), [rows]);
   const flagged = useMemo(() => rows.filter((row) => !row.matched), [rows]);
 
-  /** Only the sizes that actually move travel — the server leaves the rest alone. */
+  /** Only sizes whose price changes are sent. */
   const payload = useMemo(
     () =>
       matched
@@ -161,9 +160,9 @@ const BulkPriceUpdate = ({ onUpdated }) => {
   const submit = async () => {
     setStage('saving');
     try {
-      const result = await perfumeApi.bulkUpdatePrices(payload);
-      // The parsed rows are dropped here along with everything read from the
-      // file — only the counts stay on screen.
+      const result = await perfumeApi.bulkUpdatePrices(payload, 'bulk', requestKey.get());
+      requestKey.renew();
+      // Drop the parsed rows; only the counts stay on screen.
       setSummary({ ...result.data, message: result.message, flagged });
       setRows([]);
       setStage('done');
@@ -173,8 +172,6 @@ const BulkPriceUpdate = ({ onUpdated }) => {
       setStage('review');
     }
   };
-
-  /* ───────────────────────────── Reading ───────────────────────────── */
 
   if (stage === 'reading') {
     return (
@@ -196,8 +193,6 @@ const BulkPriceUpdate = ({ onUpdated }) => {
       </Box>
     );
   }
-
-  /* ───────────────────────────── Done ───────────────────────────── */
 
   if (stage === 'done') {
     return (
@@ -266,8 +261,6 @@ const BulkPriceUpdate = ({ onUpdated }) => {
       </Box>
     );
   }
-
-  /* ───────────────────────────── Review ───────────────────────────── */
 
   if (stage === 'review' || stage === 'saving') {
     const saving = stage === 'saving';
@@ -414,7 +407,6 @@ const BulkPriceUpdate = ({ onUpdated }) => {
                           </TableCell>
                         </TableRow>
 
-                        {/* The sizes themselves, in the table both flows share. */}
                         <TableRow sx={{ '&:hover': { bgcolor: 'transparent' } }}>
                           <TableCell colSpan={5} sx={{ py: 0, border: 0 }}>
                             <Collapse in={open} timeout="auto" unmountOnExit>
@@ -486,8 +478,6 @@ const BulkPriceUpdate = ({ onUpdated }) => {
     );
   }
 
-  /* ───────────────────────────── Instructions ───────────────────────────── */
-
   return (
     <Box>
       <Alert severity="info" sx={{ mb: 2, alignItems: 'flex-start' }}>
@@ -503,7 +493,7 @@ const BulkPriceUpdate = ({ onUpdated }) => {
         </Box>
       </Alert>
 
-      {/* What the sheet has to look like, rather than four more lines of prose. */}
+      {/* Example of the expected sheet layout. */}
       <Typography
         variant="caption"
         color="text.secondary"
@@ -520,8 +510,7 @@ const BulkPriceUpdate = ({ onUpdated }) => {
           overflow: 'hidden',
           width: 'fit-content',
           maxWidth: '100%',
-          // Centred under its caption: a shrink-to-fit table pinned left in a
-          // wide dialog reads as though it had drifted out of place.
+          // Centred under its caption so it does not look misaligned.
           mx: 'auto',
         }}
       >
@@ -574,7 +563,6 @@ const BulkPriceUpdate = ({ onUpdated }) => {
   );
 };
 
-/** One figure from the run — repriced, sizes touched, or skipped. */
 const SummaryTile = ({ label, value, tone }) => (
   <Box
     sx={{

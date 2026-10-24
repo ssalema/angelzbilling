@@ -21,6 +21,7 @@ import SectionTitle from '../../components/common/SectionTitle.jsx';
 import DialogCloseButton from '../../components/common/DialogCloseButton.jsx';
 import { billApi } from '../../api/endpoints.js';
 import { useSnackbar } from '../../context/SnackbarContext.jsx';
+import useRequestKey from '../../hooks/useRequestKey.js';
 import { currencySymbol, formatCurrency } from '../../utils/format.js';
 import { PAYMENT_METHODS } from '../../utils/constants.js';
 import { clampNumericInput } from '../../utils/numberInput.js';
@@ -31,6 +32,7 @@ const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100
 // Collects the balance on a pending bill.
 const CollectPaymentDialog = ({ open, bill, onClose, onCollected }) => {
   const snackbar = useSnackbar();
+  const requestKey = useRequestKey();
 
   const due = round2(bill?.amountDue);
   const [amount, setAmount] = useState('');
@@ -63,7 +65,8 @@ const CollectPaymentDialog = ({ open, bill, onClose, onCollected }) => {
   const submit = async () => {
     setSaving(true);
     try {
-      const result = await billApi.collectPayment(bill.id, { amount: received, method, note });
+      const result = await billApi.collectPayment(bill.id, { amount: received, method, note }, requestKey.get());
+      requestKey.renew();
       snackbar.success(result.message);
       onCollected?.(result.data);
       onClose();

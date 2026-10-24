@@ -46,7 +46,6 @@ const buildCells = (year, month) => {
 const CELL = 34;
 const GRID_WIDTH = CELL * 7;
 
-// Month and year cells share one look, so a tap on either reads the same way.
 const PickerCell = ({ children, selected, disabled, onClick }) => (
   <ButtonBase
     disabled={disabled}
@@ -65,14 +64,7 @@ const PickerCell = ({ children, selected, disabled, onClick }) => (
   </ButtonBase>
 );
 
-/**
- * The two-click range picker behind Custom. One calendar rather than two date
- * fields: the first click opens the window, the second closes it, and the days
- * between light up as you go — which the browser's own date popup cannot show.
- *
- * The title is also a way up: days to months to years, so last year's figures
- * are two taps away rather than a dozen presses of the back arrow.
- */
+/** Two-click range picker; clicking the title zooms out from days to months to years. */
 const RangeCalendar = ({ value, onChange, max = todayKey() }) => {
   const { from, to } = value;
 
@@ -97,7 +89,7 @@ const RangeCalendar = ({ value, onChange, max = todayKey() }) => {
     setView((current) => ({ ...current, year: current.year + direction * years }));
   };
 
-  // Nothing to pick past the running month, so the forward arrow stops there.
+  // Can't navigate past the current month.
   const canGoForward =
     level === 'days'
       ? dayKey(view.year, view.month + 1, 1) <= max
@@ -106,12 +98,12 @@ const RangeCalendar = ({ value, onChange, max = todayKey() }) => {
         : yearPageStart + YEAR_PAGE <= maxYear;
 
   const pick = (key) => {
-    // A complete window starts over; a half-open one closes, either way round.
+    // A full range starts over; a half range closes (in either direction).
     if (!from || to) return onChange({ from: key, to: '' });
     return onChange(key < from ? { from: key, to: from } : { from, to: key });
   };
 
-  // While the second end is still open, the hovered day previews the window.
+  // While picking the end, preview the range up to the hovered day.
   const end = to || (from && hover && hover > from ? hover : to);
 
   const title =
@@ -208,7 +200,7 @@ const RangeCalendar = ({ value, onChange, max = todayKey() }) => {
             return (
               <Box
                 key={key}
-                // The wash runs edge to edge so a week reads as one band.
+                // Full-width highlight so a week reads as one band.
                 sx={{
                   height: CELL,
                   display: 'flex',

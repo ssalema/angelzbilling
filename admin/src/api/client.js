@@ -1,7 +1,15 @@
 import axios from 'axios';
 import { clearResourceCache } from './resourceCache.js';
+import {
+  NETWORK,
+  diagnose,
+  isConnectionKind,
+  isOffline,
+  reportConnectionHealthy,
+  reportConnectionProblem,
+} from './network.js';
 
-// Same-origin deploys leave VITE_API_URL unset and call the relative prefix; cross-origin ones set a full base.
+// Leave VITE_API_URL unset for same-origin deploys; set it for cross-origin ones.
 const trimSlash = (value) => String(value ?? '').trim().replace(/\/+$/, '');
 
 const API_PREFIX = trimSlash(import.meta.env.VITE_API_PREFIX) || '/api/v1';
@@ -16,44 +24,56 @@ export const setAccessToken = (token) => {
   accessToken = token;
 };
 
-/** The live token, read by the socket handshake on every connect attempt. */
+// Read by the socket handshake on every connect attempt.
 export const getAccessToken = () => accessToken;
 export const setSessionExpiredHandler = (handler) => {
   onSessionExpired = handler;
 };
 
-/**
- * Called once when the server refuses a request because the session itself is
- * finished — the account or its location was switched off mid-session. The
- * realtime nudge normally gets there first; this is the same ending for a tab
- * that has no socket open.
- */
+// Called once when the account or its branch is switched off mid-session.
 export const setSessionRevokedHandler = (handler) => {
   onSessionRevoked = handler;
+};
+
+const REQUEST_TIMEOUT_MS = 30_000;
+
+// All requests waiting on a refresh wait on this one, so it must time out.
+const REFRESH_TIMEOUT_MS = 15_000;
+
+// Upload timeout scales with file size so slow mobile links don't time out.
+const UPLOAD_FLOOR_BYTES_PER_SEC = 20_000;
+const UPLOAD_MIN_TIMEOUT_MS = 60_000;
+
+const uploadTimeoutFor = (form) => {
+  let bytes = 0;
+  for (const [, value] of form.entries()) if (value instanceof Blob) bytes += value.size;
+  return Math.max(UPLOAD_MIN_TIMEOUT_MS, Math.ceil((bytes / UPLOAD_FLOOR_BYTES_PER_SEC) * 1000));
 };
 
 export const api = axios.create({
   baseURL: BASE_URL,
   withCredentials: true, // sends the refresh cookie
-  timeout: 30000,
+  timeout: REQUEST_TIMEOUT_MS,
   headers: { 'Content-Type': 'application/json' },
 });
 
 api.interceptors.request.use((config) => {
   if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
-  // Let the browser set the multipart boundary itself.
-  if (config.data instanceof FormData) delete config.headers['Content-Type'];
+  if (config.data instanceof FormData) {
+    // Let the browser set the multipart boundary itself.
+    delete config.headers['Content-Type'];
+    if (config.timeout === REQUEST_TIMEOUT_MS) config.timeout = uploadTimeoutFor(config.data);
+  }
   return config;
 });
 
 let refreshPromise = null;
-// One ending per session: several screens can fail at once on the same cause.
 let revoking = false;
 
 const refreshAccessToken = async () => {
   if (!refreshPromise) {
     refreshPromise = axios
-      .post(`${BASE_URL}/auth/refresh`, {}, { withCredentials: true })
+      .post(`${BASE_URL}/auth/refresh`, {}, { withCredentials: true, timeout: REFRESH_TIMEOUT_MS })
       .then((response) => {
         const token = response.data?.data?.accessToken;
         setAccessToken(token);
@@ -66,20 +86,13 @@ const refreshAccessToken = async () => {
   return refreshPromise;
 };
 
-/**
- * Mints a fresh access token, sharing the in-flight request with the interceptor
- * above. The socket calls this when the server hangs up on an expired token.
- */
+// Used by the socket when the server drops it for an expired token.
 export const refreshSession = () => refreshAccessToken();
 
-/**
- * Ends the session on a response that says the session itself is finished — an
- * account or a location switched off while someone was working. Returns whether
- * this response was one of those, so callers can fall back to their own wording.
- */
+// Returns true if the response means the session was revoked (SESSION_ENDED).
 const endSession = (response) => {
   if (response?.status !== 403 || response.data?.code !== 'SESSION_ENDED') return false;
-  // Several screens can fail at once on the same cause; the session ends once.
+  // Several requests can fail at once; end the session only once.
   if (revoking) return true;
 
   revoking = true;
@@ -90,17 +103,32 @@ const endSession = (response) => {
   return true;
 };
 
-// Which verbs change something the cached reads describe.
 const MUTATING = new Set(['post', 'put', 'patch', 'delete']);
+
+// No response at all, or a proxy error for a server that is down.
+const isUnreachable = (error) =>
+  !error.response ? !isTimeout(error) && !isCancel(error) : [502, 503, 504].includes(error.response.status);
+
+const isTimeout = (error) => error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT';
+const isCancel = (error) => error.code === 'ERR_CANCELED' || error.name === 'CanceledError';
+
+const isConnectionFailure = (error) => !error.response || error.response.status >= 500;
+
+// GETs are safe to repeat, so brief outages are retried silently.
+const READ_RETRY_DELAYS_MS = [1000, 2500];
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 api.interceptors.response.use(
   (response) => {
+    reportConnectionHealthy();
     // Any successful write drops every cached read.
     if (MUTATING.has(String(response.config?.method || '').toLowerCase())) clearResourceCache();
     return response;
   },
   async (error) => {
     const { config, response } = error;
+    if (response && response.status < 500) reportConnectionHealthy();
 
     // Never try to refresh the refresh call itself, or the login call.
     const isAuthRoute = config?.url?.includes('/auth/refresh') || config?.url?.includes('/auth/login');
@@ -114,53 +142,68 @@ api.interceptors.response.use(
           return api(config);
         }
       } catch (refreshError) {
+        // A network failure is not a logout; keep the session and retry later.
+        if (isConnectionFailure(refreshError)) return rejectWith(refreshError);
+
         setAccessToken(null);
-        // The refresh was refused because the session is finished, not stale:
-        // that reason is the one worth showing on the sign-in page.
         if (!endSession(refreshError.response)) onSessionExpired?.();
       }
+    }
+
+    const attempt = config?._attempt || 0;
+    const isRead = String(config?.method || 'get').toLowerCase() === 'get';
+    if (config && isRead && isUnreachable(error) && !isOffline() && attempt < READ_RETRY_DELAYS_MS.length) {
+      config._attempt = attempt + 1;
+      await wait(READ_RETRY_DELAYS_MS[attempt]);
+      // The screen may have moved on while this waited.
+      if (!config.signal?.aborted) return api(config);
     }
 
     if (response?.status === 401 && isAuthRoute && config?.url?.includes('/auth/refresh')) {
       setAccessToken(null);
     }
 
-    // The session is over rather than this one request being out of bounds. The
-    // sign-out call itself is skipped, or ending the session would restart this.
+    // Skip the logout call itself, or ending the session would loop.
     if (!config?.url?.includes('/auth/logout')) endSession(response);
 
-    return Promise.reject(normaliseError(error));
+    return rejectWith(error);
   }
 );
 
-/** Every failure reaches the UI in the same shape, so error states stay simple. */
-const normaliseError = (error) => {
-  // A request this app cancelled on purpose is not a failure.
-  if (error.code === 'ERR_CANCELED' || error.name === 'CanceledError') {
+// Normalises the error and tells the network banner about connection problems.
+const rejectWith = async (error) => {
+  const normalised = await normaliseError(error);
+  if (isConnectionKind(normalised.kind)) reportConnectionProblem(NETWORK[normalised.kind]);
+  return Promise.reject(normalised);
+};
+
+const connectionError = ({ kind, title, message }) => ({ message, title, kind, errors: [], status: 0, isNetwork: true });
+
+// Every failure reaches the UI in the same shape.
+const normaliseError = async (error) => {
+  if (isCancel(error)) {
     return { message: 'Request cancelled', errors: [], status: 0, aborted: true };
   }
-  if (error.code === 'ECONNABORTED') {
-    return { message: 'The request took too long. Please check your connection and try again.', errors: [], status: 0 };
-  }
-  if (!error.response) {
-    return {
-      message: `Cannot reach the server. Make sure the API is running and reachable at ${BASE_URL}.`,
-      errors: [],
-      status: 0,
-    };
-  }
+  if (!error.response) return connectionError(await diagnose({ timedOut: isTimeout(error) }));
+
   const { status, data } = error.response;
+  // A 5xx without our JSON envelope came from a proxy, i.e. the server is down.
+  const fromApi = data && typeof data === 'object' && data.message;
+  if (status === 504) return { ...connectionError(NETWORK.serverSlow), status };
+  if (status >= 500 && (!fromApi || status === 502)) return { ...connectionError(NETWORK.serverDown), status };
+
   return {
     message: data?.message || 'Something went wrong. Please try again.',
     errors: data?.errors || [],
     status,
     code: data?.code,
+    kind: status >= 500 ? 'server' : undefined,
     isPermission: status === 403,
     isNotFound: status === 404,
   };
 };
 
-/** Maps server field errors onto react-hook-form fields. */
+// Maps server field errors onto react-hook-form fields.
 export const applyServerErrors = (error, setError) => {
   if (!error?.errors?.length || !setError) return false;
   error.errors.forEach(({ field, message }) => {

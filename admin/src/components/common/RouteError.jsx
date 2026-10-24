@@ -30,7 +30,6 @@ const describe = (error) => {
   };
 };
 
-// Route-level error screen.
 const RouteError = ({ fullHeight = false }) => {
   const error = useRouteError();
   const navigate = useNavigate();

@@ -9,10 +9,8 @@ const MAX_VIDEO_BYTES = 30 * 1024 * 1024; // 30 MB
 
 const storage = multer.memoryStorage();
 
-// A browser derives a file's type from its extension, and that mapping is often
-// missing or wrong — a .jfif with no entry in the Windows registry, or a JPEG
-// that was saved as .png. The real bytes are checked in enforceFileLimits, so a
-// vague or absent type is settled there rather than refused on the label alone.
+// Browsers often send a missing or wrong type (e.g. .jfif). For these we guess from
+// the extension; the real bytes are checked later in enforceFileLimits.
 const VAGUE_TYPES = ['', 'application/octet-stream', 'binary/octet-stream'];
 
 const EXTENSION_TYPES = {
@@ -35,7 +33,6 @@ const typeFromName = (name = '') => {
   return EXTENSION_TYPES[extension] || '';
 };
 
-/** The declared type, or the one the extension implies when the browser gave us nothing useful. */
 const declaredType = (file) =>
   VAGUE_TYPES.includes(file.mimetype) ? typeFromName(file.originalname) : file.mimetype;
 
@@ -60,7 +57,7 @@ export const upload = multer({
   limits: { fileSize: MAX_VIDEO_BYTES, files: 7, fields: 20 },
 });
 
-/** Single-image routes (branding, branch logos) never need the video ceiling. */
+// For single-image routes (branding, branch logos).
 export const imageUpload = multer({
   storage,
   fileFilter: makeFilter(
@@ -85,8 +82,7 @@ const createUploadGate = ({ maxConcurrent, maxQueued = 20, timeoutMs = 30_000 })
   };
 
   return (req, res, next) => {
-    // Release exactly once, whichever way the response ends — a client that
-    // disconnects mid-upload must not leak a slot and shrink the pool forever.
+    // Release exactly once, even if the client disconnects, so slots never leak.
     let released = false;
     const releaseOnce = () => {
       if (released) return;
@@ -112,12 +108,12 @@ const createUploadGate = ({ maxConcurrent, maxQueued = 20, timeoutMs = 30_000 })
       );
     }
 
-    // Do not let a slot be held forever by a stalled client.
+    // Give up waiting in the queue after timeoutMs.
     const timer = setTimeout(() => {
       const index = queue.indexOf(queued);
       if (index !== -1) queue.splice(index, 1);
       res.set('Retry-After', '5');
-      next(ApiError.badRequest('The upload queue timed out. Please try again.'));
+      next(ApiError.serviceUnavailable('The server is busy handling other uploads. Please try again in a moment.'));
     }, timeoutMs);
 
     const queued = () => {
@@ -134,7 +130,7 @@ export const uploadGate = createUploadGate({
   maxConcurrent: Number.parseInt(process.env.UPLOAD_MAX_CONCURRENT, 10) || 3,
 });
 
-// What the bytes actually are, as opposed to what the uploader said they are.
+// Magic-byte checks: detect the real file type from its contents.
 const startsWith = (buffer, bytes, offset = 0) =>
   bytes.every((byte, index) => buffer[offset + index] === byte);
 
@@ -163,13 +159,8 @@ const TYPE_LABELS = {
   'video/webm': 'WEBM',
 };
 
-/**
- * What the buffer really holds, or '' when it is nothing we recognise.
- *
- * The declared type is only a hint. A perfectly good photo saved as .png may hold
- * JPEG or WEBP bytes, so the header decides the answer and the declared type is
- * merely tried first because it is usually right.
- */
+// Returns the real type from the file header, or '' if unknown.
+// The declared type is only tried first since it is usually right.
 const sniffType = (buffer, mimetype) => {
   if (!Buffer.isBuffer(buffer) || buffer.length < 12) return '';
   if (SIGNATURES[mimetype]?.(buffer)) return mimetype === 'image/jpg' ? 'image/jpeg' : mimetype;
@@ -209,8 +200,7 @@ export const enforceFileLimits = (req, _res, next) => {
       );
     }
 
-    // Trust the bytes from here on, so storage and Cloudinary see the true type
-    // even when the file name says otherwise.
+    // Use the real type from now on, whatever the file name says.
     file.mimetype = actualType;
   }
   return next();

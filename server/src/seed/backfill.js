@@ -1,16 +1,6 @@
-// Fills in the derived stores that were added after data already existed.
-//
-// Two figures on the dashboard are read from denormalised stores rather than
-// recomputed on every request: `Perfume.stockMargin` (stock minus its low-stock
-// threshold, so the restock filters are indexable) and the `customers`
-// collection (one row per person ever billed). Every write path maintains both,
-// but rows written *before* those stores existed carry neither — a perfume with
-// no `stockMargin` cannot match `{ stockMargin: { $lte: 0 } }`, because Mongo's
-// range operators never match a missing field. That is why a catalogue could
-// report "2 out of stock" on the summary card and still show an empty restock
-// panel, and why a shop with bills could report zero customers.
-//
-// Both passes below are idempotent, so running this twice changes nothing.
+// Fills `Perfume.stockMargin` and the `customers` collection for data created
+// before those fields existed (Mongo range queries never match a missing field).
+// Safe to run more than once.
 import mongoose from 'mongoose';
 import connectDB, { disconnectDB } from '../config/db.js';
 import logger from '../config/logger.js';
@@ -19,12 +9,6 @@ import Perfume from '../models/Perfume.js';
 import Bill from '../models/Bill.js';
 import Customer from '../models/Customer.js';
 
-/**
- * Writes `stockMargin` onto perfumes that have none.
- *
- * `{ stockMargin: { $exists: false } }` is served by the index on that field, so
- * this costs nothing once every document has been filled.
- */
 export const backfillStockMargin = async ({ all = false } = {}) => {
   const filter = all ? {} : { stockMargin: { $exists: false } };
 
@@ -41,12 +25,7 @@ export const backfillStockMargin = async ({ all = false } = {}) => {
   return result.modifiedCount || 0;
 };
 
-/**
- * Rebuilds the customer roll-up from the bills that still count.
- *
- * Refunded bills are excluded for the same reason `Customer.reconcile` excludes
- * them: a person whose only bill was handed back was never a customer.
- */
+// Rebuilds customers from bills. Refunded bills are skipped, like `Customer.reconcile`.
 export const backfillCustomers = async () => {
   const rows = await Bill.aggregate([
     { $match: { status: { $ne: 'refunded' } } },
@@ -62,8 +41,7 @@ export const backfillCustomers = async () => {
     { $match: { 'customer.mobile': { $nin: [null, ''] } } },
     {
       $group: {
-        // Country code + number together, exactly as `CUSTOMER_KEY` and
-        // `recordBill` build it, so a rebuild lands on the same _id.
+        // Same key as `CUSTOMER_KEY` / `recordBill`, so a rebuild hits the same _id.
         _id: {
           key: {
             $concat: [{ $ifNull: ['$customer.mobileCountryCode', '+91'] }, '$customer.mobile'],
@@ -83,8 +61,7 @@ export const backfillCustomers = async () => {
         _id: '$_id.key',
         mobile: { $first: '$mobile' },
         mobileCountryCode: { $first: '$code' },
-        // Sorted by recency above, so the last one is the name on their most
-        // recent bill — the rule `recordBill` follows.
+        // Sorted by recency, so this is the name on the latest bill.
         name: { $last: '$latestName' },
         firstSeenAt: { $min: '$firstSeenAt' },
         lastSeenAt: { $max: '$lastSeenAt' },
@@ -124,13 +101,7 @@ export const backfillCustomers = async () => {
   return written;
 };
 
-/**
- * The boot-time pass: cheap enough to run on every start, and it only touches
- * what is actually missing.
- *
- * A failure here is logged rather than thrown — an incomplete roll-up is a wrong
- * number on one card, not a reason to refuse to serve the API.
- */
+// Runs on every boot. Errors are logged, not thrown, so the API still starts.
 export const runBackfill = async ({ force = false } = {}) => {
   const summary = { perfumes: 0, customers: 0 };
 
@@ -141,8 +112,7 @@ export const runBackfill = async ({ force = false } = {}) => {
   }
 
   try {
-    // Rebuilding every customer on every boot would be wasteful, so the pass is
-    // skipped once the roll-up is already populated.
+    // Only rebuild customers when the collection is empty (or forced).
     const needed = force || (await Customer.estimatedDocumentCount()) === 0;
     if (needed) summary.customers = await backfillCustomers();
   } catch (error) {
@@ -158,13 +128,10 @@ export const runBackfill = async ({ force = false } = {}) => {
   return summary;
 };
 
-/* ─────────────────────────── Standalone runner ─────────────────────────── */
-
 const run = async () => {
   await connectDB();
 
-  // `--force` recomputes everything rather than only what is missing, for when a
-  // write path is suspected of having drifted.
+  // `--force` recomputes everything, not just missing values.
   const force = process.argv.includes('--force');
 
   console.log(`\n[backfill] Running against ${mongoose.connection.name}${force ? ' (forced)' : ''}\n`);

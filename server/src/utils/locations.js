@@ -8,14 +8,14 @@ export const ALL_LOCATIONS = 'all';
 
 const OBJECT_ID = /^[a-f\d]{24}$/i;
 
-/** True for every way the Head Office reaches us: null, undefined or its id. */
+/** Head Office can arrive as null, undefined, '' or its id. */
 export const isHeadOffice = (value) =>
   value === null || value === undefined || value === '' || String(value) === HEAD_OFFICE_ID;
 
-/** Anything the API is handed, as a location id: 'head-office' or a branch id. */
+/** Normalises to a location id: 'head-office' or a branch id. */
 export const toLocationId = (value) => (isHeadOffice(value) ? HEAD_OFFICE_ID : String(value));
 
-/** The branch ObjectId to store — null when it is the Head Office. */
+/** Branch id to store; null for Head Office. */
 export const toBranchId = (value) => (isHeadOffice(value) ? null : String(value));
 
 export const isValidLocationId = (value) =>

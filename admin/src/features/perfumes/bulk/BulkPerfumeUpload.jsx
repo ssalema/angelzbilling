@@ -29,6 +29,7 @@ import Pagination from '../../../components/common/Pagination.jsx';
 import StatusChip from '../../../components/common/StatusChip.jsx';
 import { perfumeApi, uploadApi } from '../../../api/endpoints.js';
 import { useSnackbar } from '../../../context/SnackbarContext.jsx';
+import useRequestKey from '../../../hooks/useRequestKey.js';
 import { formatPrice, formatGrams, formatNumber, truncate } from '../../../utils/format.js';
 import { readSheet, SheetError, SHEET_TYPES } from '../../../utils/spreadsheet.js';
 import { IMAGE_TYPES, rejectImageReason } from '../../../utils/constants.js';
@@ -47,12 +48,11 @@ import {
   toPayload,
 } from './catalogueSheet.js';
 
-/** How many review rows are drawn at once — a thousand-row sheet is the point here. */
 const PAGE_SIZE = 25;
 
-// Adding a whole catalogue from a spreadsheet.
 const BulkPerfumeUpload = ({ onCreated }) => {
   const snackbar = useSnackbar();
+  const requestKey = useRequestKey();
 
   // 'idle' → 'reading' → 'review' → 'saving' → 'done'
   const [stage, setStage] = useState('idle');
@@ -77,7 +77,6 @@ const BulkPerfumeUpload = ({ onCreated }) => {
     setPage(1);
   };
 
-  // A photo the admin picked for one row, already uploaded.
   const setPhoto = (key, asset) =>
     setRows((current) =>
       current.map((row) => {
@@ -89,7 +88,6 @@ const BulkPerfumeUpload = ({ onCreated }) => {
       })
     );
 
-  // Reads the chosen file and checks it against the catalogue.
   const handleFiles = async (fileList) => {
     const file = [...(fileList || [])][0];
     if (!file) return;
@@ -99,7 +97,7 @@ const BulkPerfumeUpload = ({ onCreated }) => {
     setFileName(file.name);
 
     try {
-      // The sheet itself is 0–80% of the bar; checking it is the rest.
+      // Reading the sheet is 0–80% of the progress bar; checking is the rest.
       const { headers, rows: records } = await readSheet(file, (value) =>
         setProgress(Math.round(value * 0.8))
       );
@@ -126,7 +124,7 @@ const BulkPerfumeUpload = ({ onCreated }) => {
       const sheetRows = buildSheetRows(records, columns);
       setSizes(columns.sizes.map((size) => size.grams));
 
-      // Only rows that survived the sheet's own rules are worth checking.
+      // Only check rows that passed the sheet's own rules.
       const names = sheetRows.filter((row) => !row.issue).map((row) => row.name);
       if (!names.length) {
         setRows(sheetRows.map((row) => ({ ...row, ready: false })));
@@ -150,7 +148,7 @@ const BulkPerfumeUpload = ({ onCreated }) => {
   const ready = useMemo(() => rows.filter((row) => row.ready), [rows]);
   const flagged = useMemo(() => rows.filter((row) => !row.ready), [rows]);
 
-  /** The sizes actually priced by at least one row — the table's price columns. */
+  // Only show price columns for sizes that at least one row uses.
   const pricedSizes = useMemo(() => {
     const used = new Set();
     ready.forEach((row) => row.prices.forEach((price) => used.add(price.sizeGrams)));
@@ -164,9 +162,9 @@ const BulkPerfumeUpload = ({ onCreated }) => {
   const submit = async () => {
     setStage('saving');
     try {
-      const result = await perfumeApi.bulkCreatePerfumes(toPayload(ready));
-      // The parsed rows are dropped here along with everything read from the
-      // file — only the counts stay on screen.
+      const result = await perfumeApi.bulkCreatePerfumes(toPayload(ready), requestKey.get());
+      requestKey.renew();
+      // Drop the parsed sheet data; only the counts are kept.
       setSummary({ ...result.data, message: result.message, flagged });
       setRows([]);
       setStage('done');
@@ -176,8 +174,6 @@ const BulkPerfumeUpload = ({ onCreated }) => {
       setStage('review');
     }
   };
-
-  /* ───────────────────────────── Reading ───────────────────────────── */
 
   if (stage === 'reading') {
     return (
@@ -199,8 +195,6 @@ const BulkPerfumeUpload = ({ onCreated }) => {
       </Box>
     );
   }
-
-  /* ───────────────────────────── Done ───────────────────────────── */
 
   if (stage === 'done') {
     const notAdded = summary.skipped + summary.flagged.length;
@@ -267,8 +261,6 @@ const BulkPerfumeUpload = ({ onCreated }) => {
       </Box>
     );
   }
-
-  /* ───────────────────────────── Review ───────────────────────────── */
 
   if (stage === 'review' || stage === 'saving') {
     const saving = stage === 'saving';
@@ -440,8 +432,6 @@ const BulkPerfumeUpload = ({ onCreated }) => {
     );
   }
 
-  /* ───────────────────────────── Instructions ───────────────────────────── */
-
   return (
     <Box>
       <Alert severity="info" sx={{ mb: 2, alignItems: 'flex-start' }}>
@@ -457,9 +447,7 @@ const BulkPerfumeUpload = ({ onCreated }) => {
         </Box>
       </Alert>
 
-      {/* What the sheet has to look like, rather than four more lines of prose.
-          Centred, and on the same 14px corner every Card in the panel carries,
-          so the specimen sits in the system rather than beside it. */}
+      {/* Sample sheet layout. */}
       <Box sx={{ mb: 2, mx: 'auto', maxWidth: 640 }}>
         <Typography
           variant="caption"
@@ -544,7 +532,6 @@ const BulkPerfumeUpload = ({ onCreated }) => {
   );
 };
 
-// The picture slot on one review row.
 const RowPhoto = ({ row, disabled, onPhoto }) => {
   const snackbar = useSnackbar();
   const [progress, setProgress] = useState(null);
@@ -578,8 +565,7 @@ const RowPhoto = ({ row, disabled, onPhoto }) => {
 
   return (
     <Tooltip title={uploading ? `Uploading… ${progress}%` : hint}>
-      {/* A span, because a disabled Dropzone fires no events of its own and a
-          Tooltip needs something that does. */}
+      {/* Wrapper span: a disabled Dropzone fires no events for the Tooltip. */}
       <Box component="span" sx={{ display: 'inline-block' }}>
         <Dropzone
           variant="frame"
@@ -618,7 +604,6 @@ const RowPhoto = ({ row, disabled, onPhoto }) => {
   );
 };
 
-/** One figure from the run — published, draft, or skipped. */
 const SummaryTile = ({ label, value, tone }) => (
   <Box
     sx={{

@@ -58,7 +58,7 @@ export const updateSettingsSchema = z.object({
     .optional(),
 })
   .superRefine((data, ctx) => {
-    // The store contact number is optional, but if given it must fit its code.
+    // Contact number is optional, but must match its country code if given.
     if (data.contactNumber === undefined) return;
     addContactNumberIssue(ctx, {
       dial: data.contactNumberCountryCode || DEFAULT_DIAL_CODE,
@@ -96,7 +96,7 @@ export const getSettings = asyncHandler(async (req, res) => {
   return sendSuccess(res, { message: 'Settings loaded', data: settings });
 });
 
-/** Public-ish subset the login screen and print header need before auth. */
+/** Public subset the login screen and print header need before sign-in. */
 export const getPublicSettings = asyncHandler(async (_req, res) => {
   const settings = await Settings.getSingleton();
   return sendSuccess(res, {
@@ -120,8 +120,7 @@ export const updateSettings = asyncHandler(async (req, res) => {
   const currentBranches = settings.features?.branches !== false;
   let closedBranchIds = [];
   if (nextBranches === false && currentBranches) {
-    // Which locations this switch closes, read before the update so their people
-    // can be signed out of them below.
+    // Read before the update so users of these branches can be signed out below.
     closedBranchIds = (await Branch.find({ isActive: true }).select('_id').lean()).map((b) => b._id);
     await Branch.updateMany({ isActive: true }, { $set: { isActive: false, deactivatedByFeature: true } });
   } else if (nextBranches === true && !currentBranches) {
@@ -138,15 +137,12 @@ export const updateSettings = asyncHandler(async (req, res) => {
   settings.updatedBy = req.user._id;
   await settings.save();
 
-  // Branch scoping is decided from a cached copy of this flag; drop it now so
-  // the very next request already sees the switch in its new position.
+  // Clear the cached feature flags so the next request sees the change.
   refreshFeatures();
-  // The bill print header reads a cached copy of the whole document, so that
-  // goes too — otherwise a renamed store keeps printing its old name for a minute.
+  // The print header reads cached settings too.
   Settings.invalidateCache();
 
-  // Switching branch management off closes every location, so it signs out
-  // everyone scoped to one, the same way closing a single branch does.
+  // Turning branches off closes every branch, so sign out their users.
   if (closedBranchIds.length) await signOutBranchUsers(closedBranchIds);
 
   return sendSuccess(res, { message: 'Settings saved', data: settings });
@@ -185,8 +181,7 @@ export const removeBranding = asyncHandler(async (req, res) => {
   const publicId = settings.branding?.[kind]?.publicId;
 
   settings.set(`branding.${kind}`, { url: '', publicId: '' });
-  // Back to the default (no artwork), so the audit stamp goes with it — the
-  // panel reads these keys to decide whether branding has been edited at all.
+  // Clear the audit stamp too; the panel uses it to tell if branding was edited.
   settings.updatedFields.delete(auditKey(`branding.${kind}`));
   settings.updatedBy = req.user._id;
   await settings.save();

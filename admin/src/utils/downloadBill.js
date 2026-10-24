@@ -1,15 +1,12 @@
-// Saving a slip as a PDF.
-
-/** Rasterise at 3× so the small print stays sharp when the PDF is zoomed or printed. */
+/** Render at 3x so small print stays sharp when zoomed or printed. */
 const SCALE = 3;
 
-/** The printed roll is 80mm wide with a ~4mm margin each side. */
+/** 80mm thermal roll (~4mm margin each side). */
 const PDF_WIDTH_MM = 80;
 
-/** `AP-HQ-2609-0039` → `AP-HQ-2609-0039.pdf`, with anything filesystem-hostile stripped. */
+/** Bill number as a safe file name, e.g. `AP-HQ-2609-0039.pdf`. */
 const fileName = (billNumber) => `${String(billNumber || 'bill').replace(/[^\w.-]+/g, '-')}.pdf`;
 
-// Renders the mounted slip to a PDF and saves it.
 export const downloadBillPdf = async (element, bill) => {
   if (!element) throw new Error('The bill slip is not ready yet.');
 
@@ -21,8 +18,7 @@ export const downloadBillPdf = async (element, bill) => {
   const canvas = await html2canvas(element, {
     scale: SCALE,
     backgroundColor: '#ffffff',
-    // The logo is served from Cloudinary — ask for it cross-origin so it is not
-    // dropped from the capture.
+    // Load the Cloudinary logo with CORS so it is not dropped from the capture.
     useCORS: true,
     logging: false,
   });

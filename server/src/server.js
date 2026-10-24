@@ -9,7 +9,7 @@ import { initSocket, closeSocket } from './config/socket.js';
 import { runBackfill } from './seed/backfill.js';
 import app from './app.js';
 
-// Every security control that can be switched off now says so at boot.
+// Logs a warning at boot for any security control that is switched off.
 const announceConfig = () => {
   const warnings = configWarnings();
   if (!warnings.length) return;
@@ -26,15 +26,10 @@ const start = async () => {
 
   await connectDB();
 
-  // Rows written before the derived stores existed carry none of them, which is
-  // a wrong figure on a dashboard card rather than an error anyone would see.
-  // The pass is idempotent and only touches what is missing, so it costs nothing
-  // on a database that is already current. One worker does it for the cluster —
-  // the rest would only race each other over the same upserts.
+  // Fill in derived fields for old data. Only one worker runs it to avoid races.
   if (!cluster.isWorker || cluster.worker.id === 1) await runBackfill();
 
-  // The websocket layer shares the HTTP server the API listens on, so there is
-  // one port, one origin and one set of CORS rules. See config/socket.js.
+  // Socket.IO shares the HTTP server: one port, one origin, one set of CORS rules.
   const server = http.createServer(app);
   initSocket(server);
 
@@ -44,8 +39,7 @@ const start = async () => {
 
   const shutdown = async (signal) => {
     logger.info(`${signal} received — shutting down gracefully`);
-    // Close the sockets first: an open connection would hold the HTTP server
-    // up past the grace period, and every client reconnects on its own anyway.
+    // Close sockets first, or open connections keep the HTTP server alive.
     closeSocket().catch(() => {});
     server.close(async () => {
       await disconnectDB();

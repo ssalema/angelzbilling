@@ -11,7 +11,7 @@ const PAYMENT_METHOD_LABELS = {
   bank_transfer: 'Bank Transfer',
 };
 
-// Every line snapshots the perfume exactly as it was sold.
+// Each line is a snapshot of the perfume as it was sold.
 const billItemSchema = new mongoose.Schema(
   {
     perfume: { type: mongoose.Schema.Types.ObjectId, ref: 'Perfume', required: true },
@@ -22,9 +22,7 @@ const billItemSchema = new mongoose.Schema(
     variantLabel: { type: String, default: '', trim: true },
     image: { type: String, default: '' },
     quantity: { type: Number, required: true, min: [1, 'Quantity must be at least 1'] },
-    /** Fill size sold, and the grams this line actually removed from stock.
-     *  Snapshotted like the price: if the catalogue is later re-sized, a refund
-     *  must still put back exactly what was taken out. */
+    // Snapshotted so a refund restores exactly the grams taken, even if sizes change later.
     sizeGrams: { type: Number, default: 0, min: 0 },
     gramsDeducted: { type: Number, default: 0, min: 0 },
     mrp: { type: Number, required: true, min: 0 },
@@ -36,7 +34,7 @@ const billItemSchema = new mongoose.Schema(
   { _id: false }
 );
 
-/** Who did it and when — stamped from the session, never from the request body. */
+// Always taken from the session, never from the request body.
 const actorSchema = new mongoose.Schema(
   {
     id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -46,7 +44,7 @@ const actorSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// One instalment of money actually received.
+// One payment received.
 const paymentEntrySchema = new mongoose.Schema(
   {
     amount: { type: Number, required: true, min: 0 },
@@ -60,7 +58,7 @@ const paymentEntrySchema = new mongoose.Schema(
   { _id: true }
 );
 
-/** Every status transition, so "who marked this refunded, and when" has an answer. */
+// Audit log of status changes.
 const statusEventSchema = new mongoose.Schema(
   {
     from: { type: String, default: '' },
@@ -78,8 +76,7 @@ const billSchema = new mongoose.Schema(
 
     customer: {
       name: { type: String, required: [true, 'Customer name is required'], trim: true, maxlength: 120 },
-      // Digits only; how many of them is decided per country code by the
-      // request validator, so a +65 number is 8 and a +91 number is 10.
+      // Digits only; length per country code is checked by the request validator.
       mobile: {
         type: String,
         required: [true, 'Customer contact number is required'],
@@ -105,17 +102,16 @@ const billSchema = new mongoose.Schema(
     taxAmount: { type: Number, default: 0, min: 0 },
     grandTotal: { type: Number, required: true, min: 0 },
     amountPaid: { type: Number, default: 0, min: 0 },
-    // What is still owed.
     amountDue: { type: Number, default: 0, min: 0, index: true },
 
-    /** The audit trail: money in, and every status change. Append-only. */
+    // Append-only audit trail.
     payments: { type: [paymentEntrySchema], default: [] },
     statusHistory: { type: [statusEventSchema], default: [] },
 
     paymentMethod: { type: String, enum: PAYMENT_METHODS, required: true, index: true },
     status: { type: String, enum: BILL_STATUSES, default: 'paid', index: true },
 
-    // ── Snapshots: multi-branch reporting must survive renames and deletions ──
+    // Snapshots, so reports survive branch/user renames and deletions.
     branch: {
       id: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', default: null, index: true },
       name: { type: String, default: '' },
@@ -162,7 +158,7 @@ billSchema.virtual('paymentMethodLabel').get(function paymentMethodLabel() {
   return PAYMENT_METHOD_LABELS[this.paymentMethod] || this.paymentMethod;
 });
 
-// A refund gives the money back, so a refunded bill earns nothing.
+// Refunded bills don't count as revenue.
 billSchema.statics.revenueMatch = () => ({ status: { $ne: 'refunded' } });
 
 export const Bill = mongoose.model('Bill', billSchema);

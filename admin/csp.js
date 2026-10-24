@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 
 const sha256 = (source) => `'sha256-${crypto.createHash('sha256').update(source, 'utf8').digest('base64')}'`;
 
-/** Every inline <script> in the document, so each can be allowed by hash. */
+// Hashes of every inline <script>, so each can be allowed by hash.
 const inlineScriptHashes = (html) => {
   const hashes = new Set();
   const pattern = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi;
@@ -16,7 +16,6 @@ const inlineScriptHashes = (html) => {
   return [...hashes];
 };
 
-// Where the panel is allowed to talk to.
 const apiOrigin = (apiUrl) => {
   if (!apiUrl) return [];
   try {
@@ -26,8 +25,6 @@ const apiOrigin = (apiUrl) => {
   }
 };
 
-// The same origin as a websocket URL. A same-origin API needs no entry: 'self'
-// already covers its socket.
 const websocketOrigin = (origin) => origin.replace(/^http/, 'ws');
 
 export const contentSecurityPolicy = ({ html, apiUrl }) => {
@@ -39,10 +36,8 @@ export const contentSecurityPolicy = ({ html, apiUrl }) => {
   const httpsOnly = !api.length || api.every((origin) => origin.startsWith('https://'));
 
   const directives = {
-    // Nothing is fetchable unless a directive below says otherwise.
     'default-src': ["'self'"],
 
-    // Bundled files and the handful of hashed inline snippets in index.html.
     'script-src': ["'self'", ...scriptHashes],
 
     'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
@@ -50,18 +45,14 @@ export const contentSecurityPolicy = ({ html, apiUrl }) => {
 
     'img-src': ["'self'", 'data:', 'blob:', 'https:'],
 
-    // The websocket shares the API's origin, but ws:// and wss:// are separate
-    // schemes to a CSP and have to be named.
+    // ws:// and wss:// must be listed separately from http(s).
     'connect-src': ["'self'", ...api, ...api.map(websocketOrigin)],
 
     'object-src': ["'none'"],
-    // Saving a bill as a PDF renders it through an off-screen iframe (html2canvas),
-    // so 'none' here would give a blank download.
+    // PDF export renders bills in an off-screen iframe (html2canvas).
     'frame-src': ["'self'", 'blob:'],
     'worker-src': ["'self'", 'blob:'],
 
-    // Stops an injected <base> quietly repointing every relative script URL,
-    // and stops a form being posted off-site.
     'base-uri': ["'self'"],
     'form-action': ["'self'"],
   };
@@ -73,7 +64,7 @@ export const contentSecurityPolicy = ({ html, apiUrl }) => {
     .join('; ');
 };
 
-// Injects the CSP meta tag into the built index.html, last so the hashes cover the final document.
+// Runs last so the script hashes cover the final index.html.
 export const cspPlugin = ({ apiUrl } = {}) => ({
   name: 'inject-csp',
   apply: 'build',
@@ -81,8 +72,7 @@ export const cspPlugin = ({ apiUrl } = {}) => ({
   transformIndexHtml: {
     order: 'post',
     handler(html) {
-      // connect-src is frozen into the build, so a wrong API URL blocks every call
-      // with nothing but a console error to show for it.
+      // connect-src is baked into the build; a wrong API URL blocks every call.
       if (!apiUrl) {
         this.warn(
           'VITE_API_URL is not set, so the CSP will only allow API calls to the panel\'s own ' +
@@ -105,8 +95,6 @@ export const cspPlugin = ({ apiUrl } = {}) => ({
             attrs: { 'http-equiv': 'Content-Security-Policy', content: policy },
             injectTo: 'head-prepend',
           },
-          // Belt and braces for the two headers a meta policy cannot express
-          // on its own; a host that sets real headers should set these too.
           {
             tag: 'meta',
             attrs: { name: 'referrer', content: 'strict-origin-when-cross-origin' },

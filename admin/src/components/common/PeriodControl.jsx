@@ -25,7 +25,7 @@ import {
 } from '../../utils/period.js';
 import { CARD_PAD, FIELD_RADIUS, FONT, ICON, surface } from '../../theme/index.js';
 
-// Local, not UTC: toISOString() would call it yesterday for half the evening.
+// Local date, not UTC (toISOString() can return the wrong day).
 const today = () => {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -34,7 +34,6 @@ const today = () => {
 const dayText = (day) =>
   day ? new Date(`${day}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 
-// The two ends of the window, so the calendar always says what it has so far.
 const RangeEnd = ({ label, day, active }) => (
   <Box
     sx={{
@@ -52,17 +51,12 @@ const RangeEnd = ({ label, day, active }) => (
   </Box>
 );
 
-/**
- * Monthly / Yearly / All time / Custom, with a stepper for walking back through
- * the months or financial years. Replaces the old range dropdown across the app:
- * picking September is now one click, and a hand-picked window is still there
- * behind Custom for the odd fortnight that spans two months.
- */
+// Monthly / Yearly / All time / Custom, with arrows to step through months or financial years.
 const PeriodControl = ({
   value,
   onChange,
   onReset,
-  // Greys the reset button out while the card is already on the running month.
+  // False disables reset (e.g. already on the current month).
   canReset = true,
   label = 'Period',
 }) => {
@@ -76,8 +70,7 @@ const PeriodControl = ({
 
   const step = (delta) => onChange(shiftPeriod(value, delta));
 
-  // Custom is applied from the popover, not from picking the toggle, so the
-  // period only changes once both ends of the window are chosen.
+  // Custom applies from the popover once both dates are picked.
   const openCustom = () => {
     setDraft(periodDays(value));
     setOpen(true);
@@ -152,8 +145,7 @@ const PeriodControl = ({
             <ChevronLeftRounded sx={{ fontSize: ICON.action }} />
           </IconButton>
 
-          {/* Fixed width so the arrows hold still as Sep 2026 becomes 2026-27.
-              On a custom window the label is also the way back into the picker. */}
+          {/* Fixed width keeps the arrows still. In custom mode, clicking reopens the picker. */}
           <ButtonBase
             disabled={mode !== 'custom'}
             onClick={openCustom}
@@ -207,8 +199,7 @@ const PeriodControl = ({
 
             <RangeCalendar value={draft} onChange={setDraft} max={today()} />
 
-            {/* A popover is dismissible by clicking away, so Apply is the only
-                action it needs — matching the no-Cancel rule dialogs follow. */}
+            {/* No Cancel button: clicking away closes the popover. */}
             <Button variant="contained" onClick={applyCustom} disabled={!draft.from || !draft.to}>
               Apply range
             </Button>

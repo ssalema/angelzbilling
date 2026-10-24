@@ -31,14 +31,15 @@ import { perfumeApi } from '../../../api/endpoints.js';
 import useApiResource from '../../../hooks/useApiResource.js';
 import useDebounce from '../../../hooks/useDebounce.js';
 import { useSnackbar } from '../../../context/SnackbarContext.jsx';
+import useRequestKey from '../../../hooks/useRequestKey.js';
 import { formatNumber } from '../../../utils/format.js';
 import { brand, CARD_RADIUS, FONT, ICON, numericText, surface } from '../../../theme/index.js';
 import { IMG } from '../../../utils/image.js';
 import { changedPrices, currentRange, formatRange, newRange, sizeRows } from './sizePricing.js';
 
-// Repricing perfumes by hand.
 const SinglePriceUpdate = ({ onUpdated }) => {
   const snackbar = useSnackbar();
+  const requestKey = useRequestKey();
 
   const [query, setQuery] = useState('');
   const [rows, setRows] = useState([]);
@@ -47,8 +48,7 @@ const SinglePriceUpdate = ({ onUpdated }) => {
 
   const debouncedQuery = useDebounce(query, 300);
 
-  // The dropdown shows the prices in force right now, and those move while this
-  // panel is open — a stale figure here becomes a wrong write.
+  // Watch perfumes so the dropdown never shows stale prices.
   const options = useApiResource(
     () => perfumeApi.priceSearch({ q: debouncedQuery, limit: 20 }),
     [debouncedQuery],
@@ -57,19 +57,17 @@ const SinglePriceUpdate = ({ onUpdated }) => {
 
   const chosen = useMemo(() => new Set(rows.map((row) => row.id)), [rows]);
 
-  // A perfume already on the list is dropped from the dropdown rather than
-  // added twice — two rows for one perfume is two sets of prices for it.
+  // Hide perfumes already added so none is listed twice.
   const available = (options.data?.items || []).filter((option) => !chosen.has(option.id));
 
   const addRow = (option) => {
     if (!option || chosen.has(option.id)) return;
-    // Newly added rows open on their sizes, because that is where the prices
-    // are actually typed. Later rows can be collapsed away.
+    // New rows start expanded so prices can be typed right away.
     setExpanded((current) => new Set(current).add(option.id));
     setRows((current) => [...current, { key: `${option.id}-${Date.now()}`, ...option, edits: {} }]);
   };
 
-  /** One size of one perfume. Every box is independent of every other box. */
+  // Each size is edited independently.
   const editSize = (id, sizeGrams, value) =>
     setRows((current) =>
       current.map((row) =>
@@ -90,7 +88,6 @@ const SinglePriceUpdate = ({ onUpdated }) => {
       return next;
     });
 
-  // Each row's sizes, worked out from whatever is in its boxes right now.
   const previews = rows.map((row) => {
     const sizes = sizeRows(row, row.edits);
     return {
@@ -113,8 +110,9 @@ const SinglePriceUpdate = ({ onUpdated }) => {
   const submit = async () => {
     setSaving(true);
     try {
-      // Only the sizes that moved are sent; the server leaves the rest alone.
-      const result = await perfumeApi.bulkUpdatePrices(payload, 'single');
+      // Only changed sizes are sent; the rest keep their prices.
+      const result = await perfumeApi.bulkUpdatePrices(payload, 'single', requestKey.get());
+      requestKey.renew();
       const { updated, failed = [] } = result.data || {};
 
       if (failed.length) {
@@ -127,7 +125,6 @@ const SinglePriceUpdate = ({ onUpdated }) => {
       setExpanded(new Set());
       setQuery('');
       onUpdated?.();
-      // The perfumes just repriced should read back at their new prices.
       options.reload();
     } catch (error) {
       snackbar.error(error.message);
@@ -362,7 +359,7 @@ const SinglePriceUpdate = ({ onUpdated }) => {
                           </TableCell>
                         </TableRow>
 
-                        {/* Where the repricing actually happens — one box per size. */}
+                        {/* One price box per size. */}
                         <TableRow sx={{ '&:hover': { bgcolor: 'transparent' } }}>
                           <TableCell colSpan={6} sx={{ py: 0, border: 0 }}>
                             <Collapse in={open} timeout="auto" unmountOnExit>

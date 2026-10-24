@@ -39,7 +39,7 @@ import { currencySymbol, formatPrice, formatGrams, formatNumber, unitsFromGrams 
 import { computeFinalPrice, sizeGramsFor } from '../perfumeSchema.js';
 import { FONT, CARD_HEAD_PAD, CARD_PAD, CARD_RADIUS, GUTTER, INSET_RADIUS, ICON, brand, numericText, surface } from '../../../theme/index.js';
 
-/** Cartesian perfume of every attribute's values — {Size:'50gm'} × {Colour:'Gold'}. */
+// Every combination of attribute values, e.g. {Size:'50gm'} × {Colour:'Gold'}.
 const buildCombinations = (attributes) => {
   const usable = attributes.filter((attribute) => attribute.name && attribute.values?.length);
   if (!usable.length) return [];
@@ -62,14 +62,12 @@ const skuFor = (baseSku, options) => {
   return `${(baseSku || 'SKU').toUpperCase()}-${suffix}`;
 };
 
-/* ─────────────────────────── One variant row ─────────────────────────── */
-
 const VariantRow = ({ index, attributeNames, onRemove, onOpenDetail, expanded, perfumeStock }) => {
   const { control } = useFormContext();
   const variant = useWatch({ control, name: `variants.${index}` });
 
   const sellingPrice = computeFinalPrice(variant?.mrp, variant?.discountPercent);
-  // A variant holds no stock of its own.
+  // Variants hold no stock; units are worked out from the perfume's grams.
   const fillGrams = sizeGramsFor(variant);
   const unitsLeft = unitsFromGrams(perfumeStock, fillGrams);
   const outOfStock = unitsLeft === 0;
@@ -78,7 +76,7 @@ const VariantRow = ({ index, attributeNames, onRemove, onOpenDetail, expanded, p
     <>
       <TableRow sx={{ opacity: variant?.isActive === false ? 0.55 : 1 }}>
         <TableCell sx={{ width: 54 }}>
-          {/* The thumbnail is the toggle for this row's image field. */}
+          {/* The thumbnail toggles this row's image field. */}
           <Tooltip title={expanded ? 'Hide image field' : 'Set a variant image'}>
             <IconButton size="small" onClick={onOpenDetail} sx={{ p: 0.25 }}>
               <Avatar
@@ -167,14 +165,14 @@ const VariantRow = ({ index, attributeNames, onRemove, onOpenDetail, expanded, p
           />
         </TableCell>
 
-        {/* Selling price is derived, never typed — one source of truth for money */}
+        {/* Selling price is derived, never typed */}
         <TableCell align="right" sx={{ width: 106 }}>
           <Typography variant="body2" sx={{ fontWeight: 700, color: 'primary.main' }}>
             {formatPrice(sellingPrice)}
           </Typography>
         </TableCell>
 
-        {/* Fill size, and what the shared stock covers at it — both derived */}
+        {/* Fill size and sellable units, both derived */}
         <TableCell align="right" sx={{ width: 112 }}>
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
             {formatGrams(fillGrams)}
@@ -204,7 +202,6 @@ const VariantRow = ({ index, attributeNames, onRemove, onOpenDetail, expanded, p
         </TableCell>
       </TableRow>
 
-      {/* Image field, collapsed by default to keep the table readable */}
       <TableRow>
         <TableCell colSpan={attributeNames.length + 8} sx={{ py: 0, border: 0 }}>
           <Collapse in={expanded} unmountOnExit>
@@ -223,9 +220,7 @@ const VariantRow = ({ index, attributeNames, onRemove, onOpenDetail, expanded, p
   );
 };
 
-/* ───────────────────── Price for a perfume with no variants ───────────────────── */
-
-// Pricing belongs to the variants: each combination carries its own MRP and discount in the table below.
+// Price for a perfume with no variants.
 const BasePricing = () => {
   const { control } = useFormContext();
   const [mrp, discountPercent] = useWatch({ control, name: ['mrp', 'discountPercent'] });
@@ -291,14 +286,12 @@ const BasePricing = () => {
   );
 };
 
-/* ─────────────────────────── The step itself ─────────────────────────── */
-
 const StepVariants = () => {
   const { control, setValue, getValues, formState } = useFormContext();
   const hasVariants = useWatch({ control, name: 'hasVariants' });
   const attributes = useWatch({ control, name: 'variantAttributes' }) || [];
   const variants = useWatch({ control, name: 'variants' }) || [];
-  // Inventory lives on the perfume (step 1). Every row reads it; none owns it.
+  // Stock lives on the perfume (step 1), not on variants.
   const perfumeStock = Number(useWatch({ control, name: 'stock' })) || 0;
   const lowStockThreshold = Number(useWatch({ control, name: 'lowStockThreshold' })) || 0;
 
@@ -317,8 +310,7 @@ const StepVariants = () => {
 
   const generateCombinations = () => {
     const baseSku = getValues('sku');
-    // Seeds each new row so a perfume that already had a single price does not
-    // start over at zero when it gains sizes; every row stays editable.
+    // New rows start from the existing single price instead of zero.
     const baseMrp = Number(getValues('mrp')) || 0;
     const baseDiscount = Number(getValues('discountPercent')) || 0;
     const existing = getValues('variants') || [];
@@ -394,7 +386,7 @@ const StepVariants = () => {
                     checked={Boolean(field.value)}
                     onChange={(event) => {
                       field.onChange(event.target.checked);
-                      // Turning it on with nothing configured: offer the perfume sizes straight away.
+                      // Add the Size attribute when first switched on.
                       if (event.target.checked && !attributes.length) addSizeAttribute();
                     }}
                   />
@@ -429,7 +421,6 @@ const StepVariants = () => {
             </Alert>
           )}
 
-          {/* ── 1. Define the attributes ── */}
           <Card sx={{ p: CARD_PAD, mb: 2.5 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
               1 · Define the options
@@ -514,7 +505,6 @@ const StepVariants = () => {
             </Stack>
           </Card>
 
-          {/* ── 2. Generate and price ── */}
           <Card>
             <Stack
               direction={{ xs: 'column', sm: 'row' }}
@@ -547,7 +537,6 @@ const StepVariants = () => {
               <>
                 <Divider />
 
-                {/* Summary + bulk edit + find */}
                 <Stack
                   direction={{ xs: 'column', lg: 'row' }}
                   spacing={1.5}

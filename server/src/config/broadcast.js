@@ -1,13 +1,12 @@
 import cluster from 'node:cluster';
 
-// A one-box message bus, so the in-process caches stay correct across workers.
+// Message bus between cluster workers so in-process caches stay in sync.
 
 /** Marks our own IPC traffic, so nothing else on the channel is mistaken for it. */
 const ENVELOPE = '__angelz_bust__';
 
 const handlers = new Map();
 
-// Registers what to do when `channel` arrives from another worker.
 export const onBroadcast = (channel, handler) => {
   handlers.set(channel, handler);
 };
@@ -24,7 +23,6 @@ const apply = (message) => {
   if (handler) handler(message.payload);
 };
 
-// Listens for relayed evictions.
 export const listenForBroadcasts = () => {
   if (!cluster.isWorker) return;
   process.on('message', apply);

@@ -44,7 +44,7 @@ import { applyServerErrors } from '../../api/client.js';
 
 const STEPS = ['Basic information', 'Features & FAQs', 'Perfume media', 'Variants', 'Preview & publish'];
 
-/** A submit landing this soon after a step change is a stray click, not intent. */
+/** Submits this soon after a step change are treated as stray clicks. */
 const STEP_SETTLE_MS = 700;
 
 const PerfumeFormPage = () => {
@@ -56,9 +56,9 @@ const PerfumeFormPage = () => {
   const [activeStep, setActiveStep] = useState(0);
   const [visited, setVisited] = useState({ 0: true });
   const [confirmLeave, setConfirmLeave] = useState(null);
-  // Which button is in flight, so only that one shows a spinner: 'draft' | 'publish'.
+  // Which button shows a spinner: 'draft' | 'publish'.
   const [pendingAction, setPendingAction] = useState(null);
-  // When the current step opened — guards the final Save against stray clicks.
+  // When the current step opened; guards the final Save against stray clicks.
   const stepEnteredAt = useRef(Date.now());
 
   const methods = useForm({
@@ -77,16 +77,14 @@ const PerfumeFormPage = () => {
     formState: { isSubmitting, isDirty },
   } = methods;
 
-  // Brands and categories another admin adds show up in the pickers here. The
-  // perfume being edited is deliberately not watched, so a half-filled form is
-  // never overwritten underneath the person typing into it.
+  // Watch brands/categories only; the perfume itself isn't watched so a
+  // half-filled form never gets overwritten.
   const facets = useApiResource(() => perfumeApi.facets(), [], { watch: 'perfumes' });
 
   const existing = useApiResource(() => (isEdit ? perfumeApi.get(id) : Promise.resolve(null)), [id], {
     immediate: isEdit,
   });
 
-  // Hydrate the form once the perfume arrives.
   useEffect(() => {
     if (!existing.data) return;
     const perfume = existing.data;
@@ -95,7 +93,6 @@ const PerfumeFormPage = () => {
       ...emptyPerfume,
       ...perfume,
       mrp: perfume.mrp ?? '',
-      // New perfumes start with variants on; an existing one keeps its own answer.
       hasVariants: Boolean(perfume.hasVariants),
       tags: perfume.tags || [],
       features: perfume.features || [],
@@ -131,7 +128,6 @@ const PerfumeFormPage = () => {
     };
   }, [isEdit, setValue, getValues]);
 
-  /** Warn before losing unsaved wizard progress. */
   const blocker = useBlocker(
     useCallback(
       ({ currentLocation, nextLocation }) =>
@@ -169,14 +165,12 @@ const PerfumeFormPage = () => {
       status: statusOverride || values.status,
       mrp: pricing.mrp,
       discountPercent: pricing.discountPercent,
-      // The perfume's single stock and its alert weight, both in grams.
-      // sizeGrams is the pack size used only when there are no variants.
+      // Stock and alert weight are in grams. sizeGrams is only used when there are no variants.
       sizeGrams: Number(values.sizeGrams) || 0,
       stock: Number(values.stock) || 0,
       lowStockThreshold: Number(values.lowStockThreshold) || 0,
       sku: values.sku.toUpperCase(),
-      // A variant is size + price + SKU. `stock` is dropped on purpose: the
-      // inventory above belongs to the perfume and every size draws on it.
+      // `stock` is dropped: inventory belongs to the perfume and every size draws on it.
       variants: values.hasVariants
         ? values.variants.map(({ stock: _ignored, ...variant }) => ({
             ...variant,
@@ -204,8 +198,7 @@ const PerfumeFormPage = () => {
   const saveAsDraft = handleSubmit(
     (values) => save(values, 'draft'),
     async () => {
-      // A draft should save even when publish-only rules fail — check the
-      // essentials only, then submit what we have.
+      // Drafts skip publish-only rules; check the essentials only.
       const valid = await trigger(['name', 'sku']);
       if (!valid) {
         snackbar.warning('A name and SKU are needed even for a draft');
@@ -217,8 +210,6 @@ const PerfumeFormPage = () => {
     }
   );
 
-  // Loading, error and loaded all render the same trail, so the page does not
-  // lose its place in the hierarchy the moment the perfume fails to arrive.
   const crumbs = [
     { label: 'Dashboard', to: '/dashboard' },
     { label: 'Perfumes', to: '/perfumes' },
@@ -243,7 +234,7 @@ const PerfumeFormPage = () => {
           title="Edit perfume"
           breadcrumbs={crumbs}
         />
-        {/* Mirrors the wizard: the stepper rail, then the fields of step one. */}
+        {/* Skeleton mirrors the wizard: stepper, then step one's fields. */}
         <Card sx={{ p: CARD_PAD, mb: 2.5 }}>
           <Stack direction="row" spacing={2} sx={{ overflow: 'hidden' }}>
             {STEPS.map((step) => (
@@ -286,12 +277,7 @@ const PerfumeFormPage = () => {
       />
 
       <Card sx={{ p: CARD_PAD, mb: 2.5 }}>
-        {/*
-          Five labels side by side are unreadable on a phone, so below `sm` the
-          stepper keeps only its numbered dots and the current step is named
-          here instead — the footer bar carries the same line, but only from
-          `md` up, which left small screens with no step name at all.
-        */}
+        {/* Below `sm` the stepper shows only dots, so name the current step here. */}
         <Box sx={{ display: { xs: 'block', sm: 'none' }, mb: 1.5 }}>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.2 }}>
             Step {activeStep + 1} of {STEPS.length}
@@ -308,7 +294,6 @@ const PerfumeFormPage = () => {
           sx={{
             '& .MuiStepLabel-labelContainer': { display: { xs: 'none', sm: 'block' } },
             '& .MuiStepLabel-label': { fontSize: FONT.small, mt: 1 },
-            // Every step is reachable, so make the whole label feel like a target.
             '& .MuiStepButton-root': {
               borderRadius: 1.5,
               py: 1,
@@ -335,7 +320,6 @@ const PerfumeFormPage = () => {
       <FormProvider {...methods}>
         <form
           onSubmit={(event) => {
-            // Only the final step saves.
             if (!isLastStep) {
               event.preventDefault();
               goToStep(activeStep + 1);
@@ -357,7 +341,6 @@ const PerfumeFormPage = () => {
 
           <StickyActionBar
             progress={
-              /* Thin wizard progress across the top of the bar. */
               <LinearProgress
                 variant="determinate"
                 value={((activeStep + 1) / STEPS.length) * 100}

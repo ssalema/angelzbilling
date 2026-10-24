@@ -9,7 +9,6 @@ const required = ['MONGODB_URI', 'JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET'];
 const missing = required.filter((key) => !process.env[key]);
 
 if (missing.length) {
-  // Fail fast and loudly — a half configured auth system is worse than none.
   console.error(
     `\n[config] Missing required environment variables: ${missing.join(', ')}\n` +
       `[config] Copy server/.env.example to server/.env and fill them in.\n`
@@ -22,7 +21,7 @@ const toInt = (value, fallback) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-// A tri-state boolean: an unset variable keeps the default, anything else is read literally.
+// Unset keeps the fallback; otherwise "1/true/yes/on" means true.
 const toBool = (value, fallback) => {
   if (value === undefined || value === '') return fallback;
   return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
@@ -32,11 +31,10 @@ const nodeEnv = process.env.NODE_ENV || 'development';
 const isProd = nodeEnv === 'production';
 const isDev = nodeEnv === 'development';
 
-// The panel and the API are on different origins in production, and `none` is the
-// only SameSite a browser sends cross-site. Set it to `lax` once they share one.
+// Panel and API are on different origins in production, which needs SameSite=None.
 const cookieSameSite = (process.env.COOKIE_SAMESITE || (isProd ? 'none' : 'lax')).toLowerCase();
 
-// A browser rejects SameSite=None without this.
+// Browsers reject SameSite=None without Secure.
 const cookieSecure = toBool(process.env.COOKIE_SECURE, !isDev || cookieSameSite === 'none');
 
 export const env = {
@@ -58,15 +56,12 @@ export const env = {
   adminUrl: process.env.ADMIN_URL || 'http://localhost:5173',
   cookieDomain: process.env.COOKIE_DOMAIN || undefined,
 
-  // `Secure` and `SameSite` on the refresh cookie. See the notes above.
   cookieSecure,
   cookieSameSite,
 
-  /** Content-Security-Policy on API responses. Off only for local debugging. */
   cspEnabled: toBool(process.env.ENABLE_CSP, !isDev),
 
-  // The websocket layer. Off is a supported deployment: the panel falls back to
-  // reloading on its own, it just stops being live. See config/socket.js.
+  // Can be turned off; the panel still works, just without live updates.
   realtime: {
     enabled: toBool(process.env.ENABLE_REALTIME, true),
     path: process.env.SOCKET_PATH || '/socket.io',
@@ -74,7 +69,6 @@ export const env = {
     pingTimeoutMs: toInt(process.env.SOCKET_PING_TIMEOUT_MS, 20_000),
   },
 
-  // Whether a 500 carries its stack back to the caller.
   exposeErrorStacks: toBool(process.env.EXPOSE_ERROR_STACKS, isDev),
 
   cloudinary: {
@@ -98,13 +92,12 @@ export const env = {
     timeoutMs: toInt(process.env.GEO_TIMEOUT_MS, 8000),
   },
 
-  // How many proxies sit in front of the API — Render and Nginx are one each.
-  // Rate limiting reads the client IP off X-Forwarded-For, so it must match reality:
-  // too high lets a caller forge that header, too low makes everyone share a counter.
+  // Number of proxies in front of the API. Must be exact: too high lets clients
+  // spoof their IP, too low makes everyone share one rate-limit counter.
   trustProxy: toInt(process.env.TRUST_PROXY_HOPS, 1),
   trustProxyConfigured: process.env.TRUST_PROXY_HOPS !== undefined,
 
-  // How many worker processes `npm run start:cluster` should run.
+  // Worker count for `npm run start:cluster`.
   workers: toInt(process.env.WEB_CONCURRENCY, 0),
 
   rateLimit: {
@@ -116,7 +109,7 @@ export const env = {
   },
 };
 
-// Configuration that is legal but probably not what anyone meant.
+// Valid but likely-mistaken settings, logged at startup.
 export const configWarnings = () => {
   const warnings = [];
 

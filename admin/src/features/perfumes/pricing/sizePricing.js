@@ -1,18 +1,16 @@
-// Per-size pricing, browser side.
-
 import { currencySymbol, formatPrice } from '../../../utils/format.js';
 import { sizeGramsFor } from '../perfumeSchema.js';
 
-/** The fills the catalogue sells, smallest first, in grams. */
+/** Sizes the catalogue sells, in grams, smallest first. */
 export const SIZE_GRAMS = [25, 50, 100, 250, 500, 1000];
 
 const MIN_PRICE = 1;
 const MAX_PRICE = 10_000_000;
 
-/** Escaped for a character class — the symbol is any string the admin typed. */
+/** Escapes text for a regex character class (the currency symbol can be anything). */
 const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
 
-// A price typed into a box, or read out of a spreadsheet cell.
+// Parses a typed or spreadsheet price, ignoring the currency symbol, commas and a trailing "/-".
 export const parsePrice = (raw) => {
   if (raw === '' || raw === null || raw === undefined) return NaN;
   const strip = new RegExp(`[${escapeRe(currencySymbol())},\\s]`, 'g');
@@ -22,7 +20,7 @@ export const parsePrice = (raw) => {
   return Number.isFinite(value) ? value : NaN;
 };
 
-/** Why this price cannot be used, or '' when it can. */
+/** Error message for an invalid price, or '' when valid. */
 export const priceIssue = (value) => {
   if (Number.isNaN(value)) return 'Enter the price as a number';
   if (value <= 0) return 'Price must be more than zero';
@@ -31,7 +29,7 @@ export const priceIssue = (value) => {
   return '';
 };
 
-// One row per size the perfume sells, smallest fill first, carrying what it costs now and what it would cost.
+// One row per size, smallest first, with the current and new price.
 export const sizeRows = (perfume, edits = {}) =>
   (perfume?.variants || [])
     .map((variant) => {
@@ -59,26 +57,24 @@ export const sizeRows = (perfume, edits = {}) =>
     })
     .sort((a, b) => a.sizeGrams - b.sizeGrams);
 
-/** Cheapest and dearest across a set of prices, ignoring unpriced sizes. */
+/** Min and max price, ignoring unpriced sizes. */
 const rangeOf = (values = []) => {
   const priced = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
   if (!priced.length) return null;
   return { min: Math.min(...priced), max: Math.max(...priced) };
 };
 
-/** "185 – 7,000" under the store's symbol, or one figure when every size matches. */
+/** "185 – 7,000", or a single price when min equals max. */
 export const formatRange = (range) => {
   if (!range) return 'NA';
   if (range.min === range.max) return formatPrice(range.min);
   return `${formatPrice(range.min)} – ${formatPrice(range.max)}`;
 };
 
-/** The range a perfume sells at today. */
 export const currentRange = (rows) => rangeOf(rows.map((row) => row.currentMrp));
 
-/** The range it would sell at once the pending edits are applied. */
 export const newRange = (rows) => rangeOf(rows.map((row) => row.newMrp));
 
-/** Only the sizes that actually move — what gets sent to the server. */
+/** Only changed sizes are sent to the server. */
 export const changedPrices = (rows) =>
   rows.filter((row) => row.changed).map((row) => ({ sizeGrams: row.sizeGrams, mrp: row.newMrp }));

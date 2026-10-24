@@ -8,9 +8,9 @@ import { moneyFormatter } from '../../utils/money.js';
 import { resolveSizeGrams, gramsForQuantity, unitsFromGrams, formatGrams } from '../../utils/grams.js';
 import { toBranchId, toLocationId, isValidLocationId, HEAD_OFFICE_LABEL } from '../../utils/locations.js';
 
-// Bill numbers look like AP260900001 — the store's bill prefix from Settings, then YY + MM + a 5 digit serial.
+// Bill number format: prefix + YY + MM + 5-digit serial, e.g. AP260900001.
 const financialYearKey = (date = new Date()) => {
-  // getMonth() is 0-based, so 3 is April — the first month of the financial year.
+  // getMonth() is 0-based, so 3 = April, the start of the financial year.
   const startYear = date.getMonth() >= 3 ? date.getFullYear() : date.getFullYear() - 1;
   return `${startYear}-${String((startYear + 1) % 100).padStart(2, '0')}`;
 };
@@ -22,7 +22,7 @@ export const generateBillNumber = async ({ prefix = DEFAULT_BILL_PREFIX, at = ne
   return `${prefix}${stamp}${String(seq).padStart(5, '0')}`;
 };
 
-// Turns the thin client payload into fully priced, fully snapshotted lines.
+// Builds fully priced, snapshotted bill lines from the client payload.
 export const buildBillItems = async (items, { maxDiscountPercent = 100, canOverride = true } = {}) => {
   const discountCap = canOverride ? 100 : Math.max(0, Math.min(100, Number(maxDiscountPercent) || 0));
 
@@ -55,7 +55,7 @@ export const buildBillItems = async (items, { maxDiscountPercent = 100, canOverr
       }
     }
 
-    // Stock is held as bulk grams, so a quantity of 2 on a 100gm fill needs 200 g.
+    // Stock is in grams: 2 x 100gm uses 200 g.
     const sizeGrams = resolveSizeGrams(variant || perfume);
     const perfumeKey = String(perfume._id);
     const availableGrams = remaining.get(perfumeKey) ?? 0;
@@ -75,8 +75,7 @@ export const buildBillItems = async (items, { maxDiscountPercent = 100, canOverr
     consumed.set(perfumeKey, round2((consumed.get(perfumeKey) || 0) + gramsNeeded));
 
     const mrp = round2(variant ? variant.mrp : perfume.mrp);
-    // A catalogue discount is the store's own decision and always stands; only
-    // an override typed into the billing form is measured against the cap.
+    // The catalogue discount always applies; only a typed override is checked against the cap.
     const catalogueDiscount = Number(variant ? variant.discountPercent : perfume.discountPercent) || 0;
     const discountPercent =
       item.discountPercent !== undefined ? Number(item.discountPercent) : catalogueDiscount;
@@ -110,7 +109,7 @@ export const buildBillItems = async (items, { maxDiscountPercent = 100, canOverr
     });
   }
 
-  // One deduction per perfume, against its single stock field — a variant has no stock of its own to touch.
+  // One deduction per perfume; variants share the perfume's stock.
   const stockOps = [...consumed.entries()].map(([perfumeId, grams]) => ({
     updateOne: {
       filter: { _id: perfumeId, stock: { $gte: grams } },
@@ -121,7 +120,7 @@ export const buildBillItems = async (items, { maxDiscountPercent = 100, canOverr
   return { lines, stockOps };
 };
 
-// Applies the guarded deductions and refuses the whole bill if any of them was beaten to the stock.
+// Applies the stock deductions; fails the whole bill if any perfume ran out meanwhile.
 export const deductStock = async (stockOps, session = null) => {
   if (!stockOps.length) return;
 
@@ -156,7 +155,7 @@ export const deductStock = async (stockOps, session = null) => {
   );
 };
 
-/** Single place where money is added up, so preview and save can never disagree. */
+/** The only place totals are computed, so preview and save always agree. */
 export const calculateTotals = (
   lines,
   {
@@ -171,20 +170,17 @@ export const calculateTotals = (
   const afterLineDiscounts = round2(lines.reduce((sum, l) => sum + l.lineTotal, 0));
   const lineDiscount = round2(subtotal - afterLineDiscounts);
 
-  // The whole-bill discount was capped only at "free", which is the same theft
-  // the per-line cap closes. Staff get the store ceiling as a share of the bill.
+  // Staff are limited to the store discount cap as a share of the bill.
   const ceiling = canOverride
     ? afterLineDiscounts
     : round2((afterLineDiscounts * Math.max(0, Math.min(100, Number(maxDiscountPercent) || 0))) / 100);
 
   if (round2(extraDiscount) > ceiling) {
-    // Past the billable amount it is not a permission problem, it is arithmetic:
-    // no one, admin included, can discount more than the bill is worth.
+    // No one, admins included, can discount more than the bill amount.
     if (round2(extraDiscount) > afterLineDiscounts) {
       throw ApiError.badRequest('The bill discount cannot be more than the amount being billed.');
     }
-    // Named in money as well as percent: the field being refused is a cash
-    // figure, and "20%" alone leaves the cashier to work out 20% of what.
+    // Show the limit in money too, since the field is a cash amount.
     throw ApiError.forbidden(
       `A bill discount above ${formatMoney(ceiling)} (${maxDiscountPercent}% of this bill) ` +
         'needs a Branch Admin. Ask an admin to raise this bill, or lower the discount.'
@@ -207,7 +203,6 @@ export const calculateTotals = (
   };
 };
 
-// Resolves which location this bill belongs to.
 export const resolveBillBranch = async (user, requestedBranchId, { enabled = true } = {}) => {
   if (!enabled) return null;
 
@@ -248,7 +243,7 @@ export const resolveBillBranch = async (user, requestedBranchId, { enabled = tru
     phone: branch.phone || '',
     phoneCountryCode: branch.phoneCountryCode || '+91',
     gstin: branch.gstin || '',
-    // '' keeps the bill on the store logo; a branch logo is snapshotted like the rest.
+    // '' means the bill uses the store logo.
     logo: branch.hasOwnLogo ? branch.logo?.url || '' : '',
   };
 };

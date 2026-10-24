@@ -67,7 +67,7 @@ const ChartTooltip = ({ active, payload, metric }) => {
 const RevenueChart = ({ data, loading, error, onRetry, range, onRangeChange, growth }) => {
   const [metric, setMetric] = useState('revenue');
 
-  // Reset clears both of this card's filters: the metric and the range.
+  // Reset clears both the metric and the range.
   const canReset = metric !== 'revenue' || !isCurrentPeriod(range);
   const handleReset = () => {
     setMetric('revenue');

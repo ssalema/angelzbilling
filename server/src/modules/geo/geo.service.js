@@ -6,8 +6,6 @@ import { INDIA_STATES } from './geo.data.js';
 
 // Address directory: states, cities and postal-code lookup.
 
-// Base URLs and the timeout come from config so a deployment can point at a
-// mirror, an internal proxy or a stub without touching this module.
 const {
   countriesNowUrl: COUNTRIES_NOW,
   indiaPostUrl: INDIA_POST,
@@ -28,7 +26,7 @@ const readCache = (key) => {
     cache.delete(key);
     return undefined;
   }
-  // Refresh insertion order so the least recently used entry is evicted first.
+  // Re-insert so the least recently used entry is evicted first.
   cache.delete(key);
   cache.set(key, hit);
   return hit.value;
@@ -39,7 +37,7 @@ const writeCache = (key, value, ttl) => {
   while (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value);
 };
 
-/** Cache + single flight: ten admins opening the form make one upstream call. */
+/** Cache + single flight: concurrent requests for the same key share one upstream call. */
 const remember = async (key, ttl, loader) => {
   const cached = readCache(key);
   if (cached !== undefined) return cached;
@@ -74,14 +72,12 @@ const unique = (values) =>
     a.localeCompare(b, 'en')
   );
 
-/** Resolves whatever the form sent (a name or an ISO code) to a known country. */
+/** Accepts a country name or ISO code. */
 const resolveCountry = (value) => {
   const country = findCountry(value);
   if (!country) throw ApiError.badRequest('Choose a country from the list');
   return country;
 };
-
-/* ─────────────────────────────── States ─────────────────────────────── */
 
 export const listStates = async (countryValue) => {
   const country = resolveCountry(countryValue);
@@ -96,12 +92,10 @@ export const listStates = async (countryValue) => {
     }
   });
 
-  // A cached empty list must never leave India without its states.
+  // Fall back to the built-in list so India always has its states.
   if (!states.length && country.iso2 === 'IN') return unique(INDIA_STATES);
   return states;
 };
-
-/* ─────────────────────────────── Cities ─────────────────────────────── */
 
 export const listCities = async (countryValue, stateValue) => {
   const country = resolveCountry(countryValue);
@@ -122,8 +116,6 @@ export const listCities = async (countryValue, stateValue) => {
   });
 };
 
-/* ──────────────────────────── Postal lookup ──────────────────────────── */
-
 const lookupIndiaPincode = async (code) => {
   const payload = await request(`${INDIA_POST}/${code}`);
   const offices = payload?.[0]?.PostOffice;
@@ -132,7 +124,7 @@ const lookupIndiaPincode = async (code) => {
   const [first] = offices;
   return {
     state: first.State || '',
-    // "District" is what an Indian address calls the city.
+    // Indian addresses use the district as the city.
     city: first.District || first.Block || '',
     areas: unique(offices.map((office) => office.Name)).slice(0, 25),
   };
@@ -167,7 +159,7 @@ export const lookupPostalCode = async (countryValue, codeValue) => {
         country.iso2 === 'IN' ? await lookupIndiaPincode(code) : await lookupZippopotam(country.iso2, code);
     } catch (error) {
       logger.warn(`[geo] postal lookup failed for ${code} (${country.iso2}): ${error.message}`);
-      // An outage must not be cached as "no such code", so fail loudly instead.
+      // Throw so an outage isn't cached as "no such code".
       throw ApiError.badRequest(
         'The postal directory is not responding right now — please fill the address in manually'
       );

@@ -3,9 +3,35 @@ import Refresh from '@mui/icons-material/Refresh';
 import LockOutlined from '@mui/icons-material/LockOutlined';
 import SearchOff from '@mui/icons-material/SearchOff';
 import ErrorOutline from '@mui/icons-material/ErrorOutline';
+import WifiOffOutlined from '@mui/icons-material/WifiOffOutlined';
+import NetworkCheckOutlined from '@mui/icons-material/NetworkCheckOutlined';
+import CloudOffOutlined from '@mui/icons-material/CloudOffOutlined';
+import HourglassEmptyOutlined from '@mui/icons-material/HourglassEmptyOutlined';
 import { CARD_PAD, INSET_RADIUS, ICON, brand, surface } from '../../theme/index.js';
 
-/* Every screen shares these four states so the app never shows a blank panel. */
+// Internet problems are amber (user's side); server problems are red. See api/network.js.
+const CONNECTION_ICONS = {
+  offline: { Icon: WifiOffOutlined, color: 'warning.main' },
+  slow: { Icon: NetworkCheckOutlined, color: 'warning.main' },
+  serverSlow: { Icon: HourglassEmptyOutlined, color: 'error.main' },
+  serverDown: { Icon: CloudOffOutlined, color: 'error.main' },
+};
+
+export const ConnectionIcon = ({ kind, size = ICON.illustration }) => {
+  const { Icon, color } = CONNECTION_ICONS[kind] || { Icon: ErrorOutline, color: 'error.main' };
+  return <Icon sx={{ fontSize: size, color }} />;
+};
+
+/** Internet problems are a warning; everything else is an error. */
+export const severityOf = (error) => (['offline', 'slow'].includes(error?.kind) ? 'warning' : 'error');
+
+const titleOf = (error, fallback) => {
+  if (error?.title) return error.title;
+  if (error?.kind === 'server') return 'Something went wrong on our side';
+  return fallback;
+};
+
+// Shared states so no screen ever shows a blank panel.
 
 export const EmptyState = ({
   icon: Icon = SearchOff,
@@ -53,14 +79,16 @@ export const EmptyState = ({
 export const ErrorState = ({ error, onRetry, compact = false }) => {
   const message = typeof error === 'string' ? error : error?.message;
 
-  // A 403 is a permission problem, not a failure — say so plainly.
+  // A 403 is a permission problem, not a failure.
   if (error?.isPermission) return <PermissionDenied message={message} />;
 
   return (
     <Box sx={{ py: compact ? 3 : 6, px: 3, textAlign: 'center' }}>
-      <ErrorOutline sx={{ fontSize: ICON.illustration, color: 'error.main', mb: 1 }} />
+      <Box sx={{ mb: 1 }}>
+        <ConnectionIcon kind={error?.kind} />
+      </Box>
       <Typography variant="h6" sx={{ fontWeight: 700 }}>
-        We could not load this
+        {titleOf(error, 'We could not load this')}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, maxWidth: 460, mx: 'auto' }}>
         {message || 'Something went wrong while talking to the server.'}
@@ -102,7 +130,7 @@ export const PermissionDenied = ({ message, title = 'You do not have access to t
 export const InlineError = ({ error, onRetry }) =>
   error ? (
     <Alert
-      severity={error.isPermission ? 'warning' : 'error'}
+      severity={error.isPermission ? 'warning' : severityOf(error)}
       sx={{ mb: 2 }}
       action={
         onRetry && (
@@ -113,13 +141,11 @@ export const InlineError = ({ error, onRetry }) =>
       }
     >
       <AlertTitle sx={{ fontWeight: 700, mb: 0 }}>
-        {error.isPermission ? 'Not permitted' : 'Could not load'}
+        {error.isPermission ? 'Not permitted' : titleOf(error, 'Could not load')}
       </AlertTitle>
       {error.message}
     </Alert>
   ) : null;
-
-/* ───────────────────────────── Skeletons ───────────────────────────── */
 
 export const TableSkeleton = ({ rows = 6, columns = 5 }) => (
   <Box sx={{ p: 2 }}>

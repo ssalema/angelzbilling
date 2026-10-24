@@ -49,17 +49,16 @@ const buildSchema = (isEdit, branchesEnabled = true) =>
       phone: z.string().trim().default(''),
       phoneCountryCode: z.string().trim().default(DEFAULT_DIAL_CODE),
       role: z.enum(['superadmin', 'admin', 'staff']),
-      // A location id: a branch, or the Head Office. Never empty in the form —
-      // "all branches" is a filter word and is not assignable.
+      // A branch id or the Head Office; "all branches" is a filter, not assignable.
       branch: z.string().default(HEAD_OFFICE.id),
       isActive: z.boolean().default(true),
       password: isEdit ? z.string().optional() : passwordRule,
     })
     .superRefine((data, ctx) => {
-      // Every account sits somewhere — the Head Office counts — so this only catches a picker that was never answered.
+      // Head Office counts as a location, so this only catches an unanswered picker.
       if (branchesEnabled && data.role !== 'superadmin' && !data.branch) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: 'custom',
           path: ['branch'],
           message: 'Choose the location this account belongs to',
         });
@@ -75,8 +74,7 @@ const buildSchema = (isEdit, branchesEnabled = true) =>
 const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
   const snackbar = useSnackbar();
   const { branchesEnabled } = useSettings();
-  // A Super Admin assigned to a branch builds that branch's team: they cannot
-  // grant the Super Admin role, and cannot post anyone to another location.
+  // A branch-level Super Admin can't grant Super Admin or assign other locations.
   const { isMainSuperAdmin, myLocationId, branchName } = useAuth();
   const isEdit = Boolean(user);
 
@@ -128,7 +126,7 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
       phone: values.phone,
       phoneCountryCode: values.phoneCountryCode,
       role: values.role,
-      // The Head Office has no Branch record, so it goes over the wire as null.
+      // Head Office has no Branch record, so it is sent as null.
       branch: !values.branch || values.branch === HEAD_OFFICE.id ? null : values.branch,
       isActive: values.isActive,
     };
@@ -145,8 +143,7 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
     }
   };
 
-  // Head Office first, then the branches. A Super Admin assigned to a branch
-  // only gets that one: they staff their own location, nobody else's.
+  // Head Office first, then branches. A branch-level Super Admin only gets their own.
   const locations = locationOptions(
     branches.filter((b) => b.isActive || b.id === locationOf(user?.branch).id)
   ).filter((option) => isMainSuperAdmin || String(option.id) === String(myLocationId));
@@ -199,8 +196,7 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
                 />
               </Grid>
 
-              {/* Branches off: the field disappears entirely — an account simply
-                  has no branch, and nothing on screen mentions one. */}
+              {/* Hidden entirely when branches are turned off. */}
               {branchesEnabled && (
               <Grid item xs={12}>
                 <RHFSelect
@@ -227,8 +223,7 @@ const UserFormDialog = ({ open, user, branches = [], onClose, onSaved }) => {
                   <RHFPasswordField
                     name="password"
                     label="Temporary password *"
-                    /* Set for someone else and read back to hand over, so it
-                       starts legible — and can now be hidden again. */
+                    /* Visible by default so the admin can read it out to hand over. */
                     defaultVisible
                     helperText={`${PASSWORD_HINT}. Share it securely — they can change it from their profile.`}
                   />

@@ -23,10 +23,9 @@ import {
 
 const SORTABLE = ['createdAt', 'billNumber', 'grandTotal', 'status', 'amountDue'];
 
-/** The signed-in account, in the shape every audit entry is stamped with. */
 const actor = (req) => ({ id: req.user._id, name: req.user.name, email: req.user.email });
 
-// Money and stock have to move together, and only a replica set can promise that.
+// Transactions need a replica set; fall back when there isn't one.
 const noTransactionSupport = (error) =>
   /Transaction numbers are only allowed|replica set|Illegal state transition/i.test(error?.message || '');
 
@@ -46,30 +45,26 @@ const atomically = async (work, fallback) => {
   }
 };
 
-// Splits a grand total into what was taken now and what is still owed.
 const splitPayment = (grandTotal, requested) => {
   const total = round2(grandTotal);
   const paid = requested === undefined ? total : Math.min(round2(requested), total);
   return { amountPaid: paid, amountDue: round2(total - paid), status: paid >= total ? 'paid' : 'pending' };
 };
 
-// Turns the one search box into a predicate the database can actually seek on.
+// Builds a search filter that can use the database indexes.
 const buildBillSearch = (search) => {
   const term = String(search || '').trim();
   if (!term) return {};
 
-  // Mobile numbers are stored digits-only and the field is indexed. Anchored
-  // and case-sensitive (digits have no case), so this is a real index scan.
+  // Mobile numbers are digits-only and indexed; an anchored regex uses the index.
   if (/^\d+$/.test(term)) return { 'customer.mobile': new RegExp(`^${escapeRegex(term)}`) };
 
-  // Bill numbers look like AP260900001 and are stored uppercase behind a unique
-  // index. Uppercasing the term lets a lowercase search still seek the index.
+  // Bill numbers (e.g. AP260900001) are stored uppercase, so uppercase the term.
   if (/^[A-Za-z]{1,6}\d*$/.test(term)) {
     return { billNumber: new RegExp(`^${escapeRegex(term.toUpperCase())}`) };
   }
 
-  // A name, or something with punctuation in it. Still try the bill number as a
-  // prefix so a pasted "AP-2609" style term is not lost.
+  // Name search, but still try the bill number as a prefix.
   const rx = new RegExp(escapeRegex(term), 'i');
   return {
     $or: [{ 'customer.name': rx }, { billNumber: new RegExp(`^${escapeRegex(term.toUpperCase())}`) }],
@@ -82,7 +77,7 @@ export const listBills = asyncHandler(async (req, res) => {
 
   const filter = {};
 
-  // Branch scoping is applied here, on the server, and cannot be overridden.
+  // Branch scoping is enforced on the server and cannot be overridden.
   Object.assign(filter, locationFilter(resolveBranchScope(req), 'branch.id'));
 
   if (status !== 'all') filter.status = status;
@@ -108,8 +103,7 @@ export const listBills = asyncHandler(async (req, res) => {
       .lean(),
     Bill.countDocuments(filter),
     Bill.aggregate([
-      // Money actually collected across the whole filter — a part-paid bill
-      // contributes what was taken, not what it was worth.
+      // Money actually collected (amountPaid), not the bill value.
       { $match: { ...filter, status: { $ne: 'refunded' } } },
       { $group: { _id: null, amount: { $sum: '$amountPaid' }, due: { $sum: '$amountDue' } } },
     ]),
@@ -125,7 +119,7 @@ export const listBills = asyncHandler(async (req, res) => {
       totalPages: Math.ceil(total / limit),
       hasNextPage: page * limit < total,
       hasPrevPage: page > 1,
-      // Across everything matching the filter, not just this page.
+      // Totals cover the whole filter, not just this page.
       filteredAmount: round2(totals[0]?.amount || 0),
       filteredDue: round2(totals[0]?.due || 0),
     },
@@ -143,8 +137,7 @@ export const getBill = asyncHandler(async (req, res) => {
     bill.branch?.id ? Branch.findById(bill.branch.id).lean() : Promise.resolve(null),
   ]);
   const branchLogo = (branch?.hasOwnLogo ? branch.logo?.url : '') || bill.branch?.logo || '';
-  // The slip is headed by the favicon, so a branch with its own prints under
-  // its own mark rather than the store's.
+  // The slip prints the favicon; a branch with its own logo uses its own.
   const branchFavicon = branch?.hasOwnLogo ? branch.favicon?.url || '' : '';
 
   return sendSuccess(res, {
@@ -153,7 +146,6 @@ export const getBill = asyncHandler(async (req, res) => {
       ...bill,
       id: bill._id,
       branch: { ...bill.branch, logo: branchLogo },
-      // The print view needs the store identity alongside the bill itself.
       store: {
         siteName: settings.siteName,
         tagline: settings.tagline,
@@ -162,40 +154,33 @@ export const getBill = asyncHandler(async (req, res) => {
         contactNumberCountryCode: settings.contactNumberCountryCode || '+91',
         companyAddress: settings.companyAddress,
         gstin: settings.gstin,
-        // The slip prints the favicon; the logo stays for anything else reading a bill.
         favicon: branchFavicon || settings.branding?.favicon?.url || '',
-        // The branch logo wins when it has one; otherwise the store logo.
         logo: branchLogo || settings.branding?.logo?.url || '',
         invoiceFooter: settings.billing?.invoiceFooter || '',
         termsAndConditions: settings.billing?.termsAndConditions || '',
         currencySymbol: settings.billing?.currencySymbol || '₹',
-        // The slip names the location a bill was raised at, and a single-location
-        // store has none to name — so the switch has to travel with the bill.
+        // The slip only shows the bill's location when branches are on.
         features: { branches: settings.features?.branches !== false },
       },
     },
   });
 });
 
-// The discount ceiling this caller is billing under. The cached settings read is
-// lean, so no schema default is applied to it — a document written before this
-// field existed reads back undefined, and the fallback here is the only one there
-// is. It has to be the strict figure: "unset" must not quietly mean "unlimited".
+// Cached settings are lean (no schema defaults), so fall back to the strict default.
+// An unset limit must never mean "unlimited".
 const discountLimits = (req, settings) => ({
   maxDiscountPercent: settings.billing?.maxDiscountPercent ?? DEFAULT_MAX_DISCOUNT_PERCENT,
   canOverride: req.user.role === 'superadmin' || req.user.role === 'admin',
-  // The refusal names the ceiling in money, because the field it is about is money.
+  // Lets the error message show the limit in money.
   formatMoney: moneyFormatter(settings),
 });
 
-// The tax this bill is raised under. It is the store's rate alone — the form
-// shows it read-only, so a rate arriving in the request body is ignored.
+// Always the store's tax rate; any rate sent in the request body is ignored.
 const resolveTaxPercent = (_req, settings) => settings.billing?.defaultTaxPercent ?? 0;
 
-/** Prices and totals without persisting anything — powers the preview dialog. */
+/** Totals without saving anything — used by the preview dialog. */
 export const previewBill = asyncHandler(async (req, res) => {
-  // Read-only, and fired on every keystroke in the billing form — served from
-  // the in-process settings cache rather than a database round trip each time.
+  // Runs on every keystroke, so read settings from the cache.
   const settings = await Settings.getCached();
   const limits = discountLimits(req, settings);
 
@@ -213,8 +198,6 @@ export const previewBill = asyncHandler(async (req, res) => {
 });
 
 export const createBill = asyncHandler(async (req, res) => {
-  // Independent of each other, and settings is a cached read — so the pair
-  // costs one round trip rather than two.
   const [branch, settings] = await Promise.all([
     resolveBillBranch(req.user, req.body.branch, { enabled: branchesOn(req) }),
     Settings.getCached(),
@@ -230,7 +213,7 @@ export const createBill = asyncHandler(async (req, res) => {
 
   const billNumber = await generateBillNumber({ prefix: settings.billing?.billPrefix || DEFAULT_BILL_PREFIX });
 
-  // Full Paid or Partial Paid is settled here, once, from the total the server itself arrived at.
+  // Paid/pending is decided from the server's own total, never the client's.
   const settlement = splitPayment(totals.grandTotal, req.body.amountPaid);
   const by = actor(req);
   const now = new Date();
@@ -246,8 +229,7 @@ export const createBill = asyncHandler(async (req, res) => {
     grandTotal: totals.grandTotal,
     amountPaid: settlement.amountPaid,
     amountDue: settlement.amountDue,
-    // A bill can be raised with nothing paid yet, and "no money changed hands"
-    // is not a payment — the trail records receipts, not intentions.
+    // Only record a payment if money was actually taken.
     payments: settlement.amountPaid > 0
       ? [
           {
@@ -263,16 +245,14 @@ export const createBill = asyncHandler(async (req, res) => {
     statusHistory: [{ from: '', to: settlement.status, at: now, by, note: 'Bill created' }],
     paymentMethod: req.body.paymentMethod,
     status: settlement.status,
-    // Left off entirely when branches are switched off, so the slip and every
-    // report read as a single-location store.
+    // Omitted when branches are off, so the bill reads as single-location.
     ...(branch ? { branch } : {}),
-    // "Bill By" is always the signed-in admin — never taken from the request body.
+    // Always the signed-in admin, never taken from the request body.
     billedBy: by,
     notes: req.body.notes || '',
   };
 
-  // Stock comes off the shelf BEFORE the bill is written, in both paths.
-  // The customer roll-up is written with the bill, in the same transaction where there is one.
+  // Stock is deducted before the bill is written, in both paths.
   const bill = await atomically(
     async (session) => {
       await deductStock(stockOps, session);
@@ -281,11 +261,11 @@ export const createBill = asyncHandler(async (req, res) => {
       return created;
     },
     async () => {
-      // No transactions: stock is deducted first, and rolled back below if the bill fails to save.
+      // No transactions: deduct stock first, restore it below if the bill fails to save.
       await deductStock(stockOps);
       try {
         const created = await Bill.create(payload);
-        // Outside a transaction this is a separate write, so a failure here would leave the count one behind.
+        // Separate write here; a failure is only logged so the bill still stands.
         await Customer.recordBill(created).catch((error) =>
           logger.error(`Customer roll-up failed for ${created.billNumber}: ${error.message}`)
         );
@@ -315,14 +295,12 @@ export const createBill = asyncHandler(async (req, res) => {
   });
 });
 
-// Collects the balance on a pending bill — the customer coming back with the rest of the money.
 export const collectPayment = asyncHandler(async (req, res) => {
   const bill = await Bill.findById(req.params.id);
   if (!bill) throw ApiError.notFound('Bill not found');
 
   const formatMoney = moneyFormatter(await Settings.getCached());
 
-  // Money against a bill is a write, so this is the write guard.
   assertBranchWrite(req, bill.branch?.id);
 
   if (bill.status !== 'pending') {
@@ -357,8 +335,7 @@ export const collectPayment = asyncHandler(async (req, res) => {
   );
 
   if (!collected) {
-    // Something changed between the read and the write. Re-read so the message
-    // describes what actually happened rather than what we assumed.
+    // The bill changed since we read it; re-read to report what actually happened.
     const now = await Bill.findById(bill._id).lean();
     if (now?.status === 'refunded') {
       throw ApiError.conflict(
@@ -405,7 +382,6 @@ export const updateBillStatus = asyncHandler(async (req, res) => {
   const bill = await Bill.findById(req.params.id);
   if (!bill) throw ApiError.notFound('Bill not found');
 
-  // A refund moves money and stock, so this is the write guard, not the read one.
   assertBranchWrite(req, bill.branch?.id);
 
   const { status, reason } = req.body;
@@ -413,7 +389,7 @@ export const updateBillStatus = asyncHandler(async (req, res) => {
     throw ApiError.badRequest(`This bill is already marked as ${status}`);
   }
 
-  // Paid and pending bills both took weight off the shelf, so both have stock to give back.
+  // Paid and pending bills both deducted stock, so both can be refunded.
   if (!['paid', 'pending'].includes(bill.status)) {
     throw ApiError.badRequest(
       `Only a paid or pending bill can be refunded — bill ${bill.billNumber} is marked as "${bill.status}".`
@@ -430,7 +406,7 @@ export const updateBillStatus = asyncHandler(async (req, res) => {
   const restock = [...returned.entries()].map(([perfumeId, grams]) => ({
     updateOne: {
       filter: { _id: perfumeId },
-      // The margin follows the weight back onto the shelf — see the Perfume model.
+      // Margin is restored along with stock (see the Perfume model).
       update: { $inc: { stock: grams, stockMargin: grams } },
     },
   }));
@@ -438,7 +414,7 @@ export const updateBillStatus = asyncHandler(async (req, res) => {
   const at = new Date();
   const by = actor(req);
 
-  // Claiming the status IS the lock on the refund.
+  // Claiming the status acts as the lock, so a bill is refunded only once.
   const claim = () =>
     Bill.findOneAndUpdate(
       { _id: bill._id, status: { $in: ['paid', 'pending'] } },
@@ -462,7 +438,7 @@ export const updateBillStatus = asyncHandler(async (req, res) => {
       return claimed;
     },
     async () => {
-      // No transactions: the claim is still an atomic mutex, so at most one caller restocks.
+      // No transactions: the claim is still atomic, so only one caller restocks.
       const claimed = await claim();
       if (!claimed) return null;
       if (!restock.length) return claimed;
@@ -503,11 +479,10 @@ export const updateBillStatus = asyncHandler(async (req, res) => {
   });
 });
 
-/** Header strip on the Bill Records page: counts and money for the active filter. */
+/** Counts and money for the Bill Records header, for the active filter. */
 export const getBillStats = asyncHandler(async (req, res) => {
   const filter = {};
-  // Head Office bills are the ones with no branch, so this has to go through
-  // locationFilter rather than a truthy test on the scope.
+  // Head Office bills have no branch, so use locationFilter, not a truthy check.
   Object.assign(filter, locationFilter(resolveBranchScope(req), 'branch.id'));
 
   const window = resolveDateRange({ range: req.query.range || 'month', from: req.query.from, to: req.query.to });
@@ -519,17 +494,15 @@ export const getBillStats = asyncHandler(async (req, res) => {
       $group: {
         _id: null,
         totalBills: { $sum: 1 },
-        // What the shop actually took: `amountPaid` on every bill it still holds the money for.
+        // Money actually taken, excluding refunded bills.
         revenue: { $sum: { $cond: [{ $ne: ['$status', 'refunded'] }, '$amountPaid', 0] } },
-        // …and the other half of that bill, still owed.
         outstanding: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, '$amountDue', 0] } },
-        // The face value of everything raised, refunds aside — useful next to
-        // revenue, because the gap between them IS the outstanding book.
+        // Face value of non-refunded bills; the gap to revenue is what's outstanding.
         billedAmount: { $sum: { $cond: [{ $ne: ['$status', 'refunded'] }, '$grandTotal', 0] } },
         paidCount: { $sum: { $cond: [{ $eq: ['$status', 'paid'] }, 1, 0] } },
         pendingCount: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
         refundedCount: { $sum: { $cond: [{ $eq: ['$status', 'refunded'] }, 1, 0] } },
-        // A refund hands back what was received, so that is what it is worth.
+        // A refund returns what was actually received.
         refundedAmount: { $sum: { $cond: [{ $eq: ['$status', 'refunded'] }, '$amountPaid', 0] } },
       },
     },
@@ -560,27 +533,23 @@ export const getBillStats = asyncHandler(async (req, res) => {
   });
 });
 
-/* ───────────────────────── Customer recall ───────────────────────── */
-
-/** The newest bill wins, but a field left blank on it falls back to an older one. */
+/** Newest bill wins; a blank field falls back to an older bill. */
 const firstFilled = (rows, key) => rows.find((row) => row?.[key])?.[key] || '';
 
-// Type-ahead over past customers so a returning buyer is not re-typed.
+// Customer type-ahead, plus exact recall by mobile number.
 export const lookupCustomers = asyncHandler(async (req, res) => {
   const { mobile, mobileCountryCode, q, limit } = req.query;
 
   const filter = {};
-  // Same branch scoping as the bill list — a branch cannot read another's book.
+  // Same branch scoping as the bill list.
   Object.assign(filter, locationFilter(resolveBranchScope(req), 'branch.id'));
 
   const exactRecall = Boolean(mobile);
 
   if (exactRecall) {
-    // Exact recall: the biller has finished typing the number.
     filter['customer.mobile'] = mobile;
     if (mobileCountryCode) {
-      // Bills raised before country codes were stored carry no code at all, and
-      // those are still this customer's bills.
+      // Older bills have no country code but still belong to this customer.
       filter.$or = [
         { 'customer.mobileCountryCode': mobileCountryCode },
         { 'customer.mobileCountryCode': { $in: [null, ''] } },
@@ -597,16 +566,13 @@ export const lookupCustomers = asyncHandler(async (req, res) => {
     {
       $group: {
         _id: { mobile: '$customer.mobile', code: '$customer.mobileCountryCode' },
-        // Newest first, capped — a customer's details never need more history.
         details: { $push: { $mergeObjects: ['$customer', { createdAt: '$createdAt' }] } },
         lastVisit: { $first: '$createdAt' },
         lastBillNumber: { $first: '$billNumber' },
         visits: { $sum: 1 },
-        // What this customer has actually handed over, so a part-paid bill does
-        // not flatter their history with money they still owe.
+        // Only money actually paid, not what is still owed.
         totalSpent: { $sum: { $cond: [{ $ne: ['$status', 'refunded'] }, '$amountPaid', 0] } },
         totalDue: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, '$amountDue', 0] } },
-        // The bills this customer still owes on.
         pending: {
           $push: {
             $cond: [
@@ -628,7 +594,7 @@ export const lookupCustomers = asyncHandler(async (req, res) => {
     {
       $project: {
         details: { $slice: ['$details', 20] },
-        // `$push` had to emit a null for every settled bill to keep the $cond total, so strip those.
+        // Drop the nulls $push added for non-pending bills.
         pending: {
           $slice: [{ $filter: { input: '$pending', as: 'row', cond: { $ne: ['$$row', null] } } }, 10],
         },
@@ -656,8 +622,7 @@ export const lookupCustomers = asyncHandler(async (req, res) => {
           gstin: firstFilled(group.details, 'gstin'),
           totalSpent: round2(group.totalSpent),
           totalDue: round2(group.totalDue),
-          // Only on an exact recall: the type-ahead must not broadcast who in
-          // the branch owes money to anyone guessing at names.
+          // Exact recall only, so the type-ahead never reveals who owes money.
           pendingBills: (group.pending || []).map((row) => ({
             ...row,
             id: String(row.id),

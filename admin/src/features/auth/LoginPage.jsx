@@ -22,6 +22,8 @@ import { RHFTextField } from '../../components/form/RHFControls.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { useSettings } from '../../context/SettingsContext.jsx';
 import { applyServerErrors } from '../../api/client.js';
+import NetworkBanner from '../../components/common/NetworkBanner.jsx';
+import { severityOf } from '../../components/common/StateViews.jsx';
 import { FONT, ICON, brand, onPlum } from '../../theme/index.js';
 import { IMG } from '../../utils/image.js';
 
@@ -57,8 +59,8 @@ const LoginPage = () => {
       navigate(location.state?.from?.pathname || '/dashboard', { replace: true });
     } catch (error) {
       // Field-level errors go on the fields; everything else on the banner.
-      if (!applyServerErrors(error, setError)) setFormError(error.message);
-      else setFormError(error.message);
+      applyServerErrors(error, setError);
+      setFormError(error);
     }
   };
 
@@ -71,7 +73,7 @@ const LoginPage = () => {
         bgcolor: 'background.default',
       }}
     >
-      {/* Brand panel — hidden on small screens where the form is what matters */}
+      {/* Brand panel (hidden on small screens) */}
       <Box
         sx={{
           display: { xs: 'none', md: 'flex' },
@@ -163,9 +165,12 @@ const LoginPage = () => {
             </Alert>
           )}
 
+          {/* The form's own error already says what the connection is doing. */}
+          {!formError?.isNetwork && <NetworkBanner sx={{ mb: 2.5 }} />}
+
           {formError && (
-            <Alert severity="error" sx={{ mb: 2.5 }}>
-              {formError}
+            <Alert severity={severityOf(formError)} sx={{ mb: 2.5 }}>
+              {formError.message}
             </Alert>
           )}
 

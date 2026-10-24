@@ -1,14 +1,9 @@
-/**
- * The dashboard's period model: a calendar month, a financial year (April to
- * March, written 2026-27) or all time. Every period resolves to a concrete
- * from/to window, so the server keeps its existing `custom` range contract and
- * only the wording of the control changes.
- */
+// Dashboard periods: month, financial year (April-March, e.g. 2026-27), all time or custom.
+// Each resolves to a from/to window sent to the server as a `custom` range.
 
 const pad = (value) => String(value).padStart(2, '0');
 
-// Local wall-clock stamps: a bare `2026-09-01` is read as UTC and slips a day
-// west of Greenwich, which would drop the first bill of every month.
+// Local-time stamps: a bare `2026-09-01` is parsed as UTC and can shift a day.
 const startStamp = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T00:00:00`;
 const endStamp = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T23:59:59`;
 
@@ -21,10 +16,10 @@ export const PERIOD_MODES = [
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/** The financial year a date falls in, named by the April it started. */
+// Financial year of a date, named by the year of its April.
 export const financialYearOf = (date) => (date.getMonth() >= 3 ? date.getFullYear() : date.getFullYear() - 1);
 
-/** `month` is 0-11, matching Date. */
+// `month` is 0-11, matching Date.
 export const monthPeriod = (year, month) => {
   const start = new Date(year, month, 1);
   const end = new Date(year, month + 1, 0);
@@ -38,7 +33,7 @@ export const monthPeriod = (year, month) => {
   };
 };
 
-/** `startYear` is the April the financial year opened — 2026 is "2026-27". */
+// `startYear` 2026 means financial year "2026-27".
 export const yearPeriod = (startYear) => ({
   mode: 'year',
   year: startYear,
@@ -50,11 +45,7 @@ export const yearPeriod = (startYear) => ({
 
 export const allTimePeriod = () => ({ mode: 'all', range: 'all', from: undefined, to: undefined });
 
-/**
- * A hand-picked window. Both arguments are plain `YYYY-MM-DD` days as the date
- * inputs give them; the month either side is carried so that switching back to
- * Monthly or Yearly lands where the reader was rather than on today.
- */
+// Args are `YYYY-MM-DD`. Year/month are kept so switching back to Monthly/Yearly stays nearby.
 export const customPeriod = (fromDay, toDay) => {
   const start = new Date(`${fromDay}T00:00:00`);
   return {
@@ -67,19 +58,17 @@ export const customPeriod = (fromDay, toDay) => {
   };
 };
 
-/** The `YYYY-MM-DD` halves of a period, for filling the date inputs back in. */
 export const periodDays = (value) => ({
   from: value?.from ? value.from.slice(0, 10) : '',
   to: value?.to ? value.to.slice(0, 10) : '',
 });
 
-/** Every period control opens here, and every reset returns here. */
+// Default period, also used on reset.
 export const currentPeriod = () => {
   const now = new Date();
   return monthPeriod(now.getFullYear(), now.getMonth());
 };
 
-/** True while a control is still on the running month — nothing to reset. */
 export const isCurrentPeriod = (value) => {
   const now = currentPeriod();
   return value?.mode === 'month' && value.year === now.year && value.month === now.month;
@@ -100,14 +89,14 @@ export const periodLabel = (value) => {
   return `${MONTHS[value.month]} ${value.year}`;
 };
 
-/** Step one month or one financial year at a time; the open-ended modes stay put. */
+// Steps a month or a year; 'all' and 'custom' don't move.
 export const shiftPeriod = (value, step) => {
   if (value?.mode === 'year') return yearPeriod(value.year + step);
   if (value?.mode === 'month') return monthPeriod(value.year, value.month + step);
   return value;
 };
 
-/** The future holds no bills, so the forward arrow stops at the running period. */
+// No stepping into the future.
 export const canStepForward = (value) => {
   if (!value || value.mode === 'all' || value.mode === 'custom') return false;
   const now = new Date();
@@ -115,10 +104,7 @@ export const canStepForward = (value) => {
   return value.year * 12 + value.month < now.getFullYear() * 12 + now.getMonth();
 };
 
-/**
- * Switching mode keeps the reader where they were: a month opens the financial
- * year around it, and a year drops back to a month inside itself.
- */
+// Switching mode keeps the user near the same date.
 export const withPeriodMode = (value, mode) => {
   if (mode === 'all') return allTimePeriod();
   const now = new Date();
@@ -126,8 +112,7 @@ export const withPeriodMode = (value, mode) => {
 
   if (mode === 'year') return yearPeriod(financialYearOf(new Date(anchor.year, anchor.month, 1)));
 
-  // Coming back from a financial year, stay on today's month when it belongs to
-  // that year; otherwise open the April it started with.
+  // From a year: use today's month if it's in that year, else its April.
   if (value?.mode === 'year') {
     return financialYearOf(now) === value.year ? monthPeriod(now.getFullYear(), now.getMonth()) : monthPeriod(value.year, 3);
   }

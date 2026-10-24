@@ -9,15 +9,13 @@ const imageSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// The bill/SKU prefix a fresh install starts on, and the one fallback every reader defers to.
+// Default bill/SKU prefix.
 export const DEFAULT_BILL_PREFIX = 'AP';
 
-// How much of a bill staff may discount on their own. Every reader falls back to
-// this rather than to "no ceiling": a settings document written before the field
-// existed reads back undefined, and a missing cap has to be read the strict way.
+// Staff discount cap. Used when the field is missing (older documents), never "no cap".
 export const DEFAULT_MAX_DISCOUNT_PERCENT = 20;
 
-/** Singleton document — there is exactly one settings row, keyed 'general'. */
+// Singleton: exactly one settings document, keyed 'general'.
 const settingsSchema = new mongoose.Schema(
   {
     key: { type: String, default: 'general', unique: true, immutable: true },
@@ -42,7 +40,7 @@ const settingsSchema = new mongoose.Schema(
       linkedin: { type: String, trim: true, default: '' },
     },
 
-    // A single-location store turns branches off; every branch-aware screen then hides.
+    // Off for single-location stores; hides branch screens.
     features: {
       branches: { type: Boolean, default: true },
     },
@@ -73,7 +71,7 @@ const upsertSingleton = async (model, { lean = false } = {}) => {
   } catch (error) {
     if (error?.code !== 11000) throw error;
   }
-  // Lost the insert to a simultaneous caller: their document is the singleton.
+  // Another request created it at the same time; read theirs.
   return model.findOne(query).lean(lean);
 };
 
@@ -81,7 +79,7 @@ settingsSchema.statics.getSingleton = function getSingleton() {
   return upsertSingleton(this);
 };
 
-// The same singleton, as a plain read-only object, cached in process.
+// In-process cache of the singleton as a plain object.
 let cachedSettings = null;
 let cachedAt = 0;
 const SETTINGS_TTL_MS = 60_000;
@@ -89,8 +87,7 @@ const SETTINGS_TTL_MS = 60_000;
 settingsSchema.statics.getCached = async function getCached() {
   if (cachedSettings && Date.now() - cachedAt < SETTINGS_TTL_MS) return cachedSettings;
 
-  // Same upsert as `getSingleton`, and lean for the same reason as before: the
-  // readers served from here must not be handed a document they can mutate.
+  // Lean so callers can't mutate a shared document.
   cachedSettings = await upsertSingleton(this, { lean: true });
   cachedAt = Date.now();
   return cachedSettings;
@@ -105,5 +102,5 @@ settingsSchema.statics.invalidateCache = function invalidateCache({ local = fals
 export const Settings = mongoose.model('Settings', settingsSchema);
 export default Settings;
 
-// Relayed from another worker: clear locally without telling anyone back.
+// From another worker: clear locally without re-broadcasting.
 onBroadcast('settings', () => Settings.invalidateCache({ local: true }));

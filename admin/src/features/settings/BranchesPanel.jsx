@@ -71,7 +71,7 @@ const schema = z
       pincode: z.string().trim().max(12).default(''),
       country: z.string().trim().max(80).default(DEFAULT_COUNTRY),
     })
-    // A pincode means six digits in India and something else everywhere else.
+    // Pincode rules depend on the country (six digits in India).
     .superRefine((address, ctx) =>
       addPostalCodeIssue(ctx, { country: address.country, value: address.pincode, path: ['pincode'] })
     ),
@@ -113,20 +113,19 @@ const emptyBranch = {
   hasOwnLogo: false,
 };
 
-// `canEdit` says the viewer is a Super Admin, so they see every branch here.
+// `canEdit` means the viewer is a Super Admin and sees every branch.
 const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
   const snackbar = useSnackbar();
   const { isMainSuperAdmin, canEditBranch, branchName } = useAuth();
   const [formBranch, setFormBranch] = useState(undefined);
   const [confirm, setConfirm] = useState(null);
-  // A branch being created has no id yet, so its artwork waits here until it does.
+  // A new branch has no id yet, so its artwork is held here until it is saved.
   const [pendingAssets, setPendingAssets] = useState({ logo: null, favicon: null });
   const [dialogAssets, setDialogAssets] = useState({ logo: '', favicon: '' });
-  // Percentage per slot while the save uploads the artwork it held back, so the
-  // frames report the same "Uploading… 42%" the field shows on its own uploads.
+  // Upload percentage per slot for the held-back artwork.
   const [assetProgress, setAssetProgress] = useState({ logo: null, favicon: null });
   const [togglingFeature, setTogglingFeature] = useState(false);
-  // Branches come back in one call; the bar keeps a long list navigable.
+  // All branches load in one call; paging is client-side.
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
 
@@ -166,10 +165,8 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
         ? await branchApi.update(formBranch.id, values)
         : await branchApi.create(values);
 
-      // Artwork picked while creating could only be uploaded once an id existed.
-      // The branch itself is already saved by now, so a failed mark is reported
-      // on its own and never sends the form back to "Create branch" — retrying
-      // there would try to create the same branch a second time.
+      // Upload held-back artwork now that the branch has an id. The branch is already
+      // saved, so an upload error is reported separately to avoid creating it twice.
       let artworkError = null;
       if (values.hasOwnLogo) {
         const branchId = formBranch?.id || result.data?.id || result.data?._id;
@@ -225,13 +222,10 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
 
   const items = branches.data?.items || [];
 
-  // Single-location stores switch branches off entirely.
   const branchesEnabled = settings?.features?.branches !== false;
-  // With nothing to switch on, the toggle would flip straight back off — adding a
-  // branch is what turns branch management on again.
+  // With no branches, adding one is what turns branch management back on.
   const noBranches = !branches.loading && !branches.error && !items.length;
-  // The empty state already explains the off switch, so the notice is for stores
-  // that still have branches sitting deactivated.
+  // The empty state already explains it, so this notice is only for stores with deactivated branches.
   const showOffNotice = !branchesEnabled && !noBranches;
 
   const healedRef = useRef(false);
@@ -259,7 +253,6 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
     }
   };
 
-  // The status pill is the toggle, so activation lives with the state it changes.
   const statusConfirm = (row) => ({
     title: row.isActive ? `Deactivate ${row.name}?` : `Activate ${row.name}?`,
     message: row.isActive
@@ -276,8 +269,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
       label: 'Branch',
       render: (row) => (
         <Stack direction="row" spacing={1.25} alignItems="center">
-          {/* The favicon is the branch's mark — the same square that heads its
-              printed slip — so the row shows that rather than the wide logo. */}
+          {/* Show the favicon (what the printed slip uses), not the wide logo. */}
           {row.effectiveFavicon && (
             <Box
               component="img"
@@ -362,8 +354,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
         );
       },
     },
-    // Same rule as the perfumes list: an account that cannot act on a row does
-    // not get an empty column where the buttons would be.
+    // Hide the actions column for accounts that cannot edit.
     ...(canEdit
       ? [
           actionsColumn((row) => (
@@ -517,7 +508,6 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
         }
       />
 
-      {/* Add / edit */}
       <Dialog
         open={formBranch !== undefined}
         onClose={isSubmitting ? undefined : () => setFormBranch(undefined)}
@@ -575,8 +565,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
                 </Grid>
                 {hasOwnLogo &&
                   BRANDING_SLOTS.map((slot) => (
-                    // Stacked rather than side by side, in the same order and at
-                    // the same full width the store's own Branding panel gives them.
+                    // Stacked full width, same as the store's Branding panel.
                     <Grid item xs={12} key={slot.kind}>
                       <BranchBrandingField
                         kind={slot.kind}
@@ -596,7 +585,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
                             logo: branch?.logo?.url || '',
                             favicon: branch?.favicon?.url || '',
                           });
-                          // Removing the last mark puts the branch back on the store's.
+                          // Removing the last mark makes the branch use the store's branding again.
                           if (branch && !branch.hasOwnLogo) setValue('hasOwnLogo', false);
                           branches.reload();
                         }}

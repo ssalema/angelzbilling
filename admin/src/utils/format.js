@@ -1,5 +1,3 @@
-/** Formatting helpers shared by every screen — one place to change the locale. */
-
 const CURRENCY_LOCALES = { INR: 'en-IN' };
 const DEFAULT_LOCALE = 'en-IN';
 const FOREIGN_LOCALE = 'en-US';
@@ -24,7 +22,7 @@ const buildFormatters = () => {
 };
 buildFormatters();
 
-/** Applied once at boot, and again whenever Settings > Billing is saved. */
+/** Called at boot and whenever Settings > Billing is saved. */
 export const configureCurrency = ({ currency, currencySymbol: nextSymbolRaw } = {}) => {
   const nextSymbol = nextSymbolRaw || DEFAULT_SYMBOL;
   const nextLocale = localeFor(currency);
@@ -36,35 +34,22 @@ export const configureCurrency = ({ currency, currencySymbol: nextSymbolRaw } = 
 
 export const currencySymbol = () => symbol;
 
-/**
- * Three ways to show money, one per job:
- *
- * `precise` keeps both paise always — bill lines and totals, where a column of
- * figures has to line up and add up.
- * `trim` keeps paise only when they carry something: ₹50, but ₹50.50. This is
- * formatPrice below, for what one product costs.
- * Neither rounds to whole rupees — revenue, spend and chart axes, where paise
- * are noise and would crowd a tick label.
- *
- * Paise are all-or-nothing, never the ₹50.5 that a plain 0-to-2 digit range
- * would give: half a rupee is written ₹50.50 everywhere money is read.
- */
+// `precise`: always 2 decimals (bill lines, totals). `trim`: decimals only when
+// non-zero (₹50, ₹50.50). Neither: whole rupees (revenue, charts).
+// Never one decimal like ₹50.5.
 export const formatCurrency = (value, { precise = false, trim = false } = {}) => {
   const number = Number(value || 0);
   if (trim) return `${symbol}${(Number.isInteger(number) ? whole : precise2).format(number)}`;
   return `${symbol}${(precise ? precise2 : whole).format(number)}`;
 };
 
-/**
- * A single product's price — an MRP, a selling price, one end of a range.
- * Exact to the paise when there are any, and no trailing .00 when there are not.
- */
+/** A single product price: no trailing .00 when there are no paise. */
 export const formatPrice = (value) => formatCurrency(value, { trim: true });
 
-/** A grouped amount with no symbol, for a layout whose heading already carries one. */
+/** Amount without the currency symbol. */
 export const formatAmount = (value) => precise2.format(Number(value || 0));
 
-/** Compact axis labels: 8293 -> ₹8.3K. Lakh and crore only where they are read. */
+/** Compact axis labels: 8293 -> ₹8.3K. Lakh/crore only for the en-IN locale. */
 export const formatCompactCurrency = (value) => {
   const n = Number(value || 0);
   const size = Math.abs(n);
@@ -82,7 +67,7 @@ export const formatCompactCurrency = (value) => {
 export const formatNumber = (value) => plain.format(Number(value || 0));
 
 
-// Perfume stock is held as bulk weight, so every stock figure on screen is grams.
+// Stock is stored as bulk weight in grams.
 export const formatGrams = (value) => {
   const grams = Math.max(0, Number(value || 0));
   const rounded = Math.round((grams + Number.EPSILON) * 1000) / 1000;
@@ -149,7 +134,6 @@ export const formatChartKey = (key, granularity) => {
   return `${day} ${new Date(2000, Number(month) - 1).toLocaleString('en-IN', { month: 'short' })}`;
 };
 
-// The one place stock level becomes a status.
 export const stockStatus = (perfume = {}) => {
   if (perfume.isOutOfStock) return 'out_of_stock';
   if (perfume.isLowStock) return 'low_stock';

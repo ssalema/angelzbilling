@@ -10,9 +10,8 @@ const baseUser = {
   email: z.string().trim().toLowerCase().email('Enter a valid email address'),
   phone: z.string().trim().optional().default(''),
   phoneCountryCode: z.string().trim().optional().default(DEFAULT_DIAL_CODE),
-  role: z.enum(['superadmin', 'admin', 'staff'], { errorMap: () => ({ message: 'Choose a valid role' }) }),
-  // A branch id, or the Head Office — the main business is a location too, and
-  // null on the wire means exactly that.
+  role: z.enum(['superadmin', 'admin', 'staff'], { error: 'Choose a valid role' }),
+  // A branch id or the Head Office; null also means the Head Office.
   branch: z.union([objectId, z.literal(HEAD_OFFICE_ID)]).nullable().optional(),
   isActive: z.boolean().optional().default(true),
 };
@@ -20,7 +19,7 @@ const baseUser = {
 const requireBranchForScopedRoles = (data, ctx) => {
   if (data.role && data.role !== 'superadmin' && data.branch === undefined) {
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       path: ['branch'],
       message: 'Choose a location for Branch Admin and Billing Staff accounts',
     });

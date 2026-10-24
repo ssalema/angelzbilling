@@ -5,16 +5,14 @@ import xss from 'xss';
 import env from '../config/env.js';
 import ApiError from '../utils/ApiError.js';
 
-// Where the request counters live.
-
-// How many processes are sharing these counters, and therefore dividing them.
+// Counters are per process, so in a cluster each worker gets its share of the limit.
 const SHARING_WORKERS = cluster.isWorker
   ? env.workers > 0
     ? env.workers
     : os.availableParallelism?.() || os.cpus().length
   : 1;
 
-/** Never below one, or a well-provisioned box would refuse every request. */
+// At least 1, or many workers would refuse every request.
 const perWorker = (limit) => Math.max(1, Math.ceil(limit / SHARING_WORKERS));
 
 export const apiLimiter = rateLimit({
@@ -25,7 +23,7 @@ export const apiLimiter = rateLimit({
   message: { success: false, message: 'Too many requests. Please slow down and try again shortly.' },
 });
 
-/** Brute-force protection on the credential endpoints specifically. */
+// Brute-force protection for sign-in.
 export const authLimiter = rateLimit({
   windowMs: env.rateLimit.windowMs,
   max: perWorker(env.rateLimit.authMax),
@@ -49,7 +47,7 @@ export const refreshLimiter = rateLimit({
   },
 });
 
-// Reading the customer directory.
+// Customer lookups, keyed per user.
 export const lookupLimiter = rateLimit({
   windowMs: env.rateLimit.windowMs,
   max: perWorker(env.rateLimit.lookupMax),
@@ -62,15 +60,14 @@ export const lookupLimiter = rateLimit({
   },
 });
 
-// Cross-site request forgery cover for anything the browser authenticates with a cookie.
+// CSRF protection for cookie-authenticated requests.
 export const verifyOrigin = (allowedOrigins = []) => {
   const permitted = new Set(allowedOrigins);
 
   const isAcceptable = (value) => {
     if (!value) return true; // non-browser caller; a browser cannot fake this
     if (permitted.has(value)) return true;
-    // The same allowance the CORS layer makes, and for the same reason: the
-    // Vite dev server picks whatever port is free. Never granted in production.
+    // Dev only: allow any localhost port (Vite may pick a different one).
     return !env.isProd && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(value);
   };
 
@@ -87,8 +84,7 @@ export const verifyOrigin = (allowedOrigins = []) => {
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
 
     const origin = req.headers.origin;
-    // Referer is the fallback for the handful of browsers that omit Origin on
-    // same-origin posts; only its origin component is compared.
+    // Fall back to Referer for browsers that omit Origin on same-origin posts.
     const source = origin || originOf(req.headers.referer);
 
     if (isAcceptable(source)) return next();
@@ -101,10 +97,10 @@ export const verifyOrigin = (allowedOrigins = []) => {
 
 const XSS_OPTIONS = { whiteList: {}, stripIgnoreTag: true };
 
-// The only characters this configuration can change.
+// Strings without these characters are skipped, since xss() would not change them.
 const COULD_CARRY_MARKUP = /[<>&"']/;
 
-// Bounds on how much structure one request may ask this to walk.
+// Limits to stop huge or deeply nested payloads.
 const MAX_DEPTH = 12;
 const MAX_NODES = 200_000;
 

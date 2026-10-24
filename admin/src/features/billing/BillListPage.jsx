@@ -64,18 +64,15 @@ const BillListPage = () => {
   const { branchesEnabled } = useSettings();
   const snackbar = useSnackbar();
 
-  // Printing from the row stays on the list: the slip is fetched, rendered
-  // off-screen and sent straight to the printer.
+  // Print from the row: the slip is rendered off-screen and sent to the printer.
   const [printBill, setPrintBill] = useState(null);
   const [printingId, setPrintingId] = useState(null);
 
-  // Downloading works the same way, only the mounted slip is serialised to a
-  // file instead of being handed to the printer.
+  // Download works the same way, but saves the slip to a file.
   const [downloadBill, setDownloadBill] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
   const downloadRef = useRef(null);
 
-  // The pending row whose balance is being collected, if any.
   const [paymentBill, setPaymentBill] = useState(null);
 
   const [range, setRange] = useState(currentPeriod);
@@ -118,7 +115,7 @@ const BillListPage = () => {
       range.from,
       range.to,
     ],
-    // Opening a bill and coming back is the commonest navigation on this screen.
+    // Cached: opening a bill and coming back is the most common navigation here.
     { cacheKey: 'bills:list', watch: 'bills' }
   );
 
@@ -139,7 +136,7 @@ const BillListPage = () => {
     setFilters((prev) => ({ ...prev, ...changes, page: changes.page ?? 1 }));
   }, []);
 
-  // The slip needs one paint before the print dialog can capture it.
+  // Wait for the slip to paint before opening the print dialog.
   useEffect(() => {
     if (!printBill) return undefined;
     const timer = setTimeout(() => {
@@ -149,7 +146,7 @@ const BillListPage = () => {
     return () => clearTimeout(timer);
   }, [printBill]);
 
-  // The slip must be painted before it can be rasterised into the PDF.
+  // Wait for the slip to paint before turning it into a PDF.
   useEffect(() => {
     if (!downloadBill) return undefined;
     let cancelled = false;
@@ -251,8 +248,6 @@ const BillListPage = () => {
       label: 'Amount',
       align: 'right',
       sortable: true,
-      // The amount owed is what makes a pending row actionable, so it sits under
-      // the total rather than hiding behind the status pill.
       render: (row) => (
         <Box>
           <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
@@ -277,8 +272,7 @@ const BillListPage = () => {
       key: 'branch',
       label: 'Branch',
       hideBelow: 'lg',
-      // A bill with no branch was raised at the Head Office — the main business
-      // is a location too, so this is never blank.
+      // No branch means the bill was raised at the Head Office.
       render: (row) => {
         const location = locationOf(row.branch);
         return (
@@ -323,14 +317,12 @@ const BillListPage = () => {
     },
     actionsColumn((row) => (
         <Stack direction="row" spacing={0.25} justifyContent="center">
-          {/* Pending only. A paid or refunded bill has nothing left to collect,
-              so it never carries this button. */}
+          {/* Pending bills only; paid or refunded bills have nothing to collect. */}
           {row.status === 'pending' && row.amountDue > 0 && (
             <Tooltip title={`Update payment — ${formatCurrency(row.amountDue)} due`}>
               <IconButton
                 size="small"
                 onClick={(event) => {
-                  // The row itself opens the bill; this opens the dialog over it.
                   event.stopPropagation();
                   setPaymentBill(row);
                 }}
@@ -382,11 +374,9 @@ const BillListPage = () => {
           title="Bill records"
           subtitle={`${formatNumber(meta.total || 0)} bill${meta.total === 1 ? '' : 's'} in the selected period`}
           breadcrumbs={[{ label: 'Dashboard', to: '/dashboard' }, { label: 'Bill records' }]}
-          // The topbar already carries Create bill on every screen, so the
-          // header does not repeat it here.
+          // No Create bill button: the topbar already has one.
         />
 
-        {/* Period summary */}
         <Grid container spacing={GUTTER.cards} sx={{ mb: 2.5 }}>
           <Grid item xs={12} sm={6} lg={3}>
             <StatCard
@@ -408,7 +398,7 @@ const BillListPage = () => {
               color={brand.gold}
             />
           </Grid>
-          {/* The other half of the revenue card: money billed but not yet in. */}
+          {/* Money billed but not yet received. */}
           <Grid item xs={12} sm={6} lg={3}>
             <StatCard
               label="Total pending"
@@ -430,9 +420,7 @@ const BillListPage = () => {
         </Grid>
 
         <Card>
-          {/* The period governs the summary cards as well as the list, so it
-              leads the card on a line of its own rather than queueing up with
-              the row filters. Reset lives once, at the end of the filter bar. */}
+          {/* The period applies to the summary cards too, so it gets its own row. */}
           <Box sx={{ px: 1.75, py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
             <PeriodControl value={range} onChange={setRange} />
           </Box>
@@ -540,8 +528,7 @@ const BillListPage = () => {
         </Card>
       </Box>
 
-      {/* Collecting a balance changes both the row and the period totals, so the
-          list and its summary strip are refetched together. */}
+      {/* Collecting a payment changes the row and the totals, so both are refetched. */}
       <CollectPaymentDialog
         open={Boolean(paymentBill)}
         bill={paymentBill}
@@ -549,14 +536,14 @@ const BillListPage = () => {
         onCollected={refreshAll}
       />
 
-      {/* Off-screen slip — mounted only while a row is being printed. */}
+      {/* Off-screen slip, mounted only while a row is being printed. */}
       {printBill && (
         <Box sx={{ display: 'none', '@media print': { display: 'block' } }}>
           <BillPrintView bill={printBill} store={printBill.store} />
         </Box>
       )}
 
-      {/* Off-screen slip — mounted only long enough to serialise it to a file. */}
+      {/* Off-screen slip, mounted only while it is saved to a file. */}
       {downloadBill && (
         <Box
           className="no-print"

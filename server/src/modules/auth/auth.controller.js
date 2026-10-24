@@ -17,7 +17,7 @@ const storeProfile = (settings) => ({
   features: { branches: settings.features?.branches !== false },
 });
 
-// The branch fields every controller here populates before calling `publicUser`.
+// Branch fields to populate before calling `publicUser`.
 const BRANCH_FIELDS = 'name code address phone phoneCountryCode gstin isActive hasOwnLogo logo favicon';
 
 const publicUser = (user) => ({
@@ -28,13 +28,12 @@ const publicUser = (user) => ({
   phoneCountryCode: user.phoneCountryCode || '+91',
   role: user.role,
   roleLabel: user.roleLabel || roleLabelFor(user.role),
-  // A Super Admin with no branch is the main one and may change anything. With
-  // a branch they still see everything, but only edit inside that branch.
+  // Super Admin with no branch can edit everything; with a branch, only that branch.
   isMainSuperAdmin: user.role === 'superadmin' && !user.branch,
   avatar: user.avatar,
   isActive: user.isActive,
   lastLoginAt: user.lastLoginAt,
-  // No branch means the Head Office — the main business, which is a location in its own right.
+  // No branch means Head Office.
   branch: user.branch
     ? {
         id: user.branch._id,
@@ -45,8 +44,7 @@ const publicUser = (user) => ({
         phoneCountryCode: user.branch.phoneCountryCode || '+91',
         gstin: user.branch.gstin,
         hasOwnLogo: Boolean(user.branch.hasOwnLogo),
-        // Resolved the same way the branch endpoints resolve it: '' means the
-        // branch inherits the store's mark.
+        // '' means the branch uses the store's logo.
         effectiveLogo: user.branch.hasOwnLogo ? user.branch.logo?.url || '' : '',
         effectiveFavicon: user.branch.hasOwnLogo ? user.branch.favicon?.url || '' : '',
         logo: user.branch.logo,
@@ -112,14 +110,12 @@ export const updateProfileController = asyncHandler(async (req, res) => {
     { new: true, runValidators: true }
   ).populate('branch', BRANCH_FIELDS);
 
-  // The same account may be open in another tab — it should not keep showing
-  // the old name in the sidebar.
+  // Update the user's other open tabs.
   emit('user:profile', { user: publicUser(user) }, { rooms: [userRoom(user._id)] });
 
   return sendSuccess(res, { message: 'Profile updated', data: { user: publicUser(user) } });
 });
 
-// Writes the account's new photo, tells the other tabs, and answers the caller.
 const saveAvatar = async (req, res, { avatar, message }) => {
   const user = await User.findByIdAndUpdate(
     req.user._id,
@@ -127,7 +123,7 @@ const saveAvatar = async (req, res, { avatar, message }) => {
     { new: true, runValidators: true }
   ).populate('branch', BRANCH_FIELDS);
 
-  // The sidebar and topbar of every other open tab show this photo too.
+  // Update the user's other open tabs.
   emit('user:profile', { user: publicUser(user) }, { rooms: [userRoom(user._id)] });
 
   return sendSuccess(res, { message, data: { user: publicUser(user) } });
@@ -144,8 +140,7 @@ export const uploadAvatarController = asyncHandler(async (req, res) => {
     message: 'Profile photo updated',
   });
 
-  // The replaced photo belongs to nobody now — clearing it is housekeeping, and
-  // a failure there must not turn a saved photo into an error the user sees.
+  // Clean up the old photo; a failure here must not fail the request.
   if (previous && previous !== asset.publicId) await destroyAsset(previous, 'image');
 
   return response;
@@ -168,8 +163,7 @@ export const changePasswordController = asyncHandler(async (req, res) => {
   await authService.changePassword(req.user._id, req.body);
   res.clearCookie(REFRESH_COOKIE, { ...refreshCookieOptions(), maxAge: undefined });
 
-  // Every other device this account is signed in on is now holding a password
-  // that no longer works, so tell them rather than let them find out on a write.
+  // Sign out the account's other devices.
   revokeSession(req.user._id, 'Your password was changed. Please sign in again.');
 
   return sendSuccess(res, {

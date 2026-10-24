@@ -2,7 +2,7 @@ import { Box, Typography, Stack, Tooltip } from '@mui/material';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import { ICON } from '../../theme/index.js';
 
-// The heading that opens a card or panel — one rank, one face, everywhere.
+// Standard heading for a card or panel.
 const SectionTitle = ({ title, description, descriptionAs = 'below', action, children, sx, ...rest }) => {
   const asTooltip = Boolean(description) && descriptionAs === 'tooltip';
 

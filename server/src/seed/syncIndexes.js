@@ -10,8 +10,9 @@ import Bill from '../models/Bill.js';
 import Customer from '../models/Customer.js';
 import Counter from '../models/Counter.js';
 import Settings from '../models/Settings.js';
+import IdempotencyKey from '../models/IdempotencyKey.js';
 
-const MODELS = [User, Branch, Perfume, Bill, Customer, Counter, Settings];
+const MODELS = [User, Branch, Perfume, Bill, Customer, Counter, Settings, IdempotencyKey];
 
 const syncAllIndexes = async () => {
   const report = [];
@@ -19,7 +20,7 @@ const syncAllIndexes = async () => {
   for (const Model of MODELS) {
     const startedAt = Date.now();
     try {
-      // Resolves to the list of index names that were dropped, if any.
+      // Returns the names of dropped indexes, if any.
       const dropped = await Model.syncIndexes();
       const indexes = await Model.collection.indexes();
 
@@ -31,8 +32,7 @@ const syncAllIndexes = async () => {
         ms: Date.now() - startedAt,
       });
     } catch (error) {
-      // One model failing must not hide the rest — collect and carry on, then
-      // exit non-zero at the end so a deploy pipeline actually notices.
+      // Keep going; the script exits non-zero at the end if any model failed.
       report.push({
         model: Model.modelName,
         collection: Model.collection.name,
@@ -74,8 +74,7 @@ const run = async () => {
   process.exit(failed.length ? 1 : 0);
 };
 
-// Only self-execute when invoked directly, so the export stays importable
-// from a test or a combined migration runner.
+// Only run when executed directly, not when imported.
 const invokedDirectly = process.argv[1] && process.argv[1].endsWith('syncIndexes.js');
 if (invokedDirectly) {
   run().catch((error) => {

@@ -25,8 +25,7 @@ export const SettingsProvider = ({ children }) => {
   }, [isAuthenticated]);
 
   useEffect(() => {
-    // Wait for the auth attempt to resolve; acting on the interim state would
-    // fire the public request and then immediately supersede it.
+    // Wait for auth to resolve, or the public request fires and is immediately replaced.
     if (booting) return;
 
     if (bootSettings) {
@@ -38,12 +37,10 @@ export const SettingsProvider = ({ children }) => {
     load();
   }, [booting, bootSettings, load]);
 
-  // Reflect the configured branding in the browser tab.
   useEffect(() => {
     if (settings?.siteName) {
       document.title = documentTitle(settings.siteName);
-      // Brands the next load's tab title and splash, both of which paint long
-      // before this response could arrive.
+      // Cached so the next load shows the right title and splash before settings arrive.
       cacheSiteName(settings.siteName);
     }
     const favicon = settings?.branding?.favicon?.url || settings?.favicon;
@@ -69,13 +66,10 @@ export const SettingsProvider = ({ children }) => {
       logo: settings?.branding?.logo?.url || settings?.logo || '',
       currencySymbol: configuredSymbol(),
       defaultTaxPercent: settings?.billing?.defaultTaxPercent ?? 0,
-      // How much of a bill staff may discount before a Branch Admin is needed.
-      // The server refuses anything past this regardless; carrying it here is
-      // what lets the billing form say so while the figure is being typed.
-      // Absent — an unsaved settings row, or a failed load — falls back to the
-      // strict figure rather than to none, matching the server.
+      // Max discount staff may give without a Branch Admin (the server enforces it too).
+      // Falls back to the strict default when settings are missing, matching the server.
       maxDiscountPercent: settings?.billing?.maxDiscountPercent ?? DEFAULT_MAX_DISCOUNT_PERCENT,
-      // Off for single-location stores: every branch column, filter and chip hides.
+      // Off for single-location stores: all branch columns, filters and chips are hidden.
       branchesEnabled: settings?.features?.branches !== false,
     }),
     [settings, loading, load]

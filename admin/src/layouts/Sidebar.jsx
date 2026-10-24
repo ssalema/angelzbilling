@@ -25,14 +25,12 @@ const SidebarContent = ({ onNavigate }) => {
   const { user } = useAuth();
   const { siteName, logo: storeLogo, branchesEnabled } = useSettings();
   const branch = branchesEnabled ? user?.branch : null;
-  // The server resolves 'its own, or none' into effectiveLogo — same rule the
-  // branch table and the bill header read.
+  // effectiveLogo is resolved by the server (branch logo or none).
   const logo = branch?.effectiveLogo || storeLogo;
   const location = useLocation();
   const sections = visibleSections(user?.role || 'staff');
 
-  // A section owns everything below it, so creating a bill still highlights
-  // Bill records — exactly as adding a perfume highlights Perfumes.
+  // Prefix match, so sub-pages (e.g. creating a bill) highlight their section.
   const isActive = (item) => location.pathname.startsWith(item.to);
 
   return (
@@ -45,7 +43,6 @@ const SidebarContent = ({ onNavigate }) => {
         color: onPlum.text,
       }}
     >
-      {/* Brand */}
       <Box sx={{ px: 1, py: 1, display: 'flex', alignItems: 'center', justifyContent: logo ? 'center' : 'flex-start', gap: 1.5 }}>
         {logo ? (
           <Box component="img" src={IMG.logo(logo)} alt={siteName} sx={{ display: 'block', width: '100%', maxWidth: '100%', height: 'auto', maxHeight: 'auto', objectFit: 'contain' }} />
@@ -95,7 +92,6 @@ const SidebarContent = ({ onNavigate }) => {
 
       <Divider sx={{ borderColor: onPlum.divider }} />
 
-      {/* Navigation */}
       <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5, py: 2 }}>
         {sections.map((section) => (
           <Box key={section.heading} sx={{ mb: 2 }}>
@@ -141,7 +137,6 @@ const SidebarContent = ({ onNavigate }) => {
         ))}
       </Box>
 
-      {/* Signed-in identity + branch scope */}
       <Divider sx={{ borderColor: onPlum.divider }} />
       <Box sx={{ p: 2 }}>
         <Stack direction="row" spacing={1.25} alignItems="center">
@@ -161,7 +156,6 @@ const SidebarContent = ({ onNavigate }) => {
           </Box>
         </Stack>
 
-        {/* A single-location store has no branch scope to report. */}
         {branchesEnabled && (
           <Chip
             size="small"
@@ -184,7 +178,6 @@ const SidebarContent = ({ onNavigate }) => {
 
 const Sidebar = ({ mobileOpen, onClose }) => (
   <>
-    {/* Permanent on desktop */}
     <Drawer
       variant="permanent"
       sx={{
@@ -198,7 +191,7 @@ const Sidebar = ({ mobileOpen, onClose }) => (
       <SidebarContent />
     </Drawer>
 
-    {/* Temporary on mobile — keepMounted keeps navigation instant */}
+    {/* keepMounted keeps mobile navigation instant */}
     <Drawer
       variant="temporary"
       open={mobileOpen}

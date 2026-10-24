@@ -1,7 +1,5 @@
 import { createTheme, alpha } from '@mui/material/styles';
 
-// Angelz Desire brand system.
-
 export const brand = {
   plum: '#3E2545',
   plumLight: '#5C3D64',
@@ -17,7 +15,7 @@ export const brand = {
   line: '#E8DFD2',
 };
 
-// Surface tints — the faint washes used for hover rows, avatar wells, icon halos and selected states.
+// Faint tints for hover rows, avatar wells, icon halos and selected states.
 export const surface = {
   plumFaint: alpha(brand.plum, 0.04),
   plumSoft: alpha(brand.plum, 0.06),
@@ -28,26 +26,23 @@ export const surface = {
   errorSoft: alpha('#9B2C2C', 0.1),
   // Ivory wash for inset panels; ink overlay for badges laid over an image.
   ivoryWash: alpha(brand.ivory, 0.7),
-  // The topbar frosts over the page, so it needs a heavier ivory than a panel.
+  // The frosted topbar needs a heavier ivory than a panel.
   ivoryBar: alpha(brand.ivory, 0.92),
   inkOverlay: alpha(brand.ink, 0.78),
 };
 
-// A field that reports a value rather than takes one — Bill by, Branch, the tax
-// rate. Tinted on the input itself, since the outlined field paints its own
-// white, so it reads as locked beside the fields that do accept typing.
+// Read-only fields (Bill by, Branch, tax rate), tinted so they look locked.
 export const readOnlyField = {
   '& .MuiOutlinedInput-root': { backgroundColor: surface.plumFaint },
   '& .MuiOutlinedInput-input': { cursor: 'default' },
 };
 
-// The corner a Card turns, in px.
+// Card corner radius, in px.
 export const CARD_RADIUS = 14;
 
-// The corner a *small* block inside a card turns — a tinted totals well, a collapsed row, a summary strip.
+// Radius for small blocks inside a card (totals well, summary strip).
 export const INSET_RADIUS = 10;
 
-// Grid gutters.
 export const GUTTER = {
   /** Top-level page grid: panels laid side by side. */
   page: 2.5,
@@ -57,16 +52,16 @@ export const GUTTER = {
   fields: 2,
 };
 
-// The bar that sticks to the bottom of a long form carrying its save actions.
+// Sticky bottom bar holding a long form's save actions.
 export const STICKY_BAR = {
-  /** Clear of the viewport edge on a desktop, flush to it on a phone. */
+  /** Inset from the edge on desktop, flush on phones. */
   bottom: { xs: 0, sm: 12 },
-  /** Above page content and the sticky summary cards, below the topbar menu. */
+  /** Above page content and sticky cards, below the topbar menu. */
   zIndex: 3,
   padding: 2,
 };
 
-/** Elevation is a token too, so a toast and a sticky bar cast the same light. */
+/** Shared shadows so toasts and sticky bars match. */
 export const SHADOW = {
   card: `0 1px 2px ${alpha(brand.ink, 0.04)}`,
   toast: `0 8px 24px ${alpha(brand.ink, 0.18)}`,
@@ -83,21 +78,21 @@ export const onPlum = {
   selected: alpha(brand.gold, 0.2),
 };
 
-// One padding scale for cards, so a panel body sits the same distance from its edge on every screen.
+// Card padding, shared so panels look the same on every screen.
 export const CARD_PAD = { xs: 2, sm: 2.5 };
 
-/** The corner every input wears, shared with the controls built to match one. */
+/** Input corner radius, also used by controls styled to match inputs. */
 export const FIELD_RADIUS = '10px';
 export const CARD_HEAD_PAD = { px: { xs: 2, sm: 2.5 }, pt: { xs: 2, sm: 2.25 }, pb: 1.75 };
 
-// The single-image frame — store logo, favicon, branch logo.
+// Single-image upload frame (store logo, favicon, branch logo).
 export const LOGO_FRAME = {
   height: 176,
-  // The frame for a square mark.
+  // Height for a square mark.
   squareHeight: 260,
-  /** Breathing room between the dashed drop target and the well inside it. */
+  /** Gap between the dashed drop target and the inner well. */
   gap: 1.25,
-  /** The well's corner, a touch tighter than the dashed frame around it. */
+  /** Slightly tighter than the dashed frame. */
   radius: '6px',
   preview: {
     position: 'absolute',
@@ -109,7 +104,7 @@ export const LOGO_FRAME = {
   },
 };
 
-// The five type sizes available outside the Typography variants.
+// Font sizes for use outside the Typography variants.
 export const FONT = {
   micro: '0.68rem', // eyebrows, dense chips
   tiny: '0.72rem', // chart tooltips, secondary metadata
@@ -157,8 +152,7 @@ export const chartPalette = [
 
 export const statusColors = {
   paid: { color: '#1E6B4F', bg: '#E3F3EB' },
-  // Money still owed is a "come back to this", not a fault — the same amber
-  // low stock wears, rather than error red.
+  // Pending money uses the low-stock amber, not error red.
   pending: { color: '#B4801A', bg: '#FBF1DE' },
   refunded: { color: '#5C4B8A', bg: '#EDE9F7' },
   published: { color: '#1E6B4F', bg: '#E3F3EB' },
@@ -167,13 +161,11 @@ export const statusColors = {
   active: { color: '#1E6B4F', bg: '#E3F3EB' },
   inactive: { color: '#9B2C2C', bg: '#FBE6E6' },
   cancelled: { color: '#9B2C2C', bg: '#FBE6E6' },
-  // Stock level is a status like any other, so it wears the same pill.
   in_stock: { color: '#1E6B4F', bg: '#E3F3EB' },
   low_stock: { color: '#B4801A', bg: '#FBF1DE' },
   out_of_stock: { color: '#9B2C2C', bg: '#FBE6E6' },
 };
 
-// Money coming off a price is good news.
 export const DISCOUNT_COLOR = '#1E6B4F';
 
 const theme = createTheme({
@@ -221,14 +213,14 @@ const theme = createTheme({
     MuiCssBaseline: {
       styleOverrides: {
         body: { backgroundColor: brand.ivory },
-        // Slim, on-brand scrollbars — the default grey ones break the palette.
+        // Slim scrollbars that match the palette.
         '*::-webkit-scrollbar': { width: 9, height: 9 },
         '*::-webkit-scrollbar-thumb': {
           backgroundColor: alpha(brand.plum, 0.22),
           borderRadius: 8,
           '&:hover': { backgroundColor: alpha(brand.plum, 0.38) },
         },
-        // The bill prints as an 80mm thermal slip, so the page is the roll.
+        // Bills print on an 80mm thermal roll.
         '@page': { size: '80mm auto', margin: '4mm' },
         '@media print': {
           'body *': { visibility: 'hidden' },
@@ -280,8 +272,7 @@ const theme = createTheme({
         containedSuccess: {
           '&.Mui-disabled': { color: '#fff', backgroundColor: alpha('#1E6B4F', 0.55) },
         },
-        // Outlined and text buttons sit on ivory, so white would vanish there —
-        // they get a dimmed plum instead, which their spinners inherit.
+        // These sit on ivory, so disabled ones use dimmed plum instead of white.
         outlined: {
           borderColor: brand.line,
           '&:hover': { borderColor: brand.plum },

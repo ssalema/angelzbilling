@@ -1,15 +1,13 @@
 import mongoose from 'mongoose';
 import logger from '../config/logger.js';
 
-// What the server is actually doing, as opposed to what it was designed to do.
-
-// Latency per route, held as a histogram rather than a mean.
+// Per-route latency histogram bucket edges, in ms.
 const BUCKET_EDGES_MS = [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000];
 
-/** Keyed by method plus route PATTERN, never the URL — ids would unbound this. */
+/** Keyed by method + route pattern (not URL), so ids can't grow it without bound. */
 const routes = new Map();
 
-/** A hard ceiling, so an unmatched path cannot grow the map without limit. */
+/** Hard cap so unmatched paths can't grow the map forever. */
 const MAX_ROUTES = 300;
 
 const emptyRoute = () => ({
@@ -33,7 +31,7 @@ const routeKey = (req) => {
   return `${req.method} ${base}${pattern === '/' ? '' : pattern}`;
 };
 
-// How long a request may take before it is worth a log line of its own.
+// Requests slower than this get their own log line.
 const SLOW_REQUEST_MS = 500;
 
 export const collectMetrics = (req, res, next) => {
@@ -75,7 +73,7 @@ const percentile = (row, fraction) => {
   return 0;
 };
 
-// Event loop lag, sampled rather than measured per request.
+// Event loop lag is sampled on a timer, not measured per request.
 const LAG_SAMPLE_MS = 500;
 let lagMs = 0;
 let lagMaxMs = 0;
@@ -94,7 +92,7 @@ export const startLagSampler = () => {
     if (lagMs > lagMaxMs) lagMaxMs = lagMs;
   }, LAG_SAMPLE_MS);
 
-  // Must not be the reason the process refuses to exit.
+  // Don't keep the process alive just for this timer.
   lagTimer.unref();
   return lagTimer;
 };
@@ -112,7 +110,7 @@ export const snapshot = ({ caches = {} } = {}) => {
       p99Ms: percentile(row, 0.99),
       maxMs: Math.round(row.maxMs),
     }))
-    // Slowest first on p95, because that is the list anyone opening this wants.
+    // Sort by total time spent (count x average), largest first.
     .sort((a, b) => b.count * b.averageMs - a.count * a.averageMs);
 
   const memory = process.memoryUsage();

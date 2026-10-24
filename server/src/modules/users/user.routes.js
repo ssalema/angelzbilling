@@ -23,13 +23,12 @@ import {
 
 const router = Router();
 
-// Account management is a Super Admin only module, end to end.
+// Super Admin only.
 router.use(authenticate, authorize('superadmin'));
-// The summary card counts active staff, so account writes invalidate it too.
+// The dashboard counts active staff, so account writes clear its cache.
 router.use(invalidateDashboardOnWrite());
 router.use(invalidateAccountOnWrite());
-// Deactivating, deleting or resetting an account also ends its open sessions —
-// the tabs it is signed in on are told to sign in again.
+// Deactivating, deleting or resetting an account signs out its open tabs.
 router.use(
   announceOnWrite({
     resource: 'users',

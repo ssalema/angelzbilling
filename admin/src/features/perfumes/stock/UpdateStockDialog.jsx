@@ -14,7 +14,7 @@ const TABS = [
   { value: 'bulk', label: 'Bulk update', icon: <UploadFileOutlined sx={{ fontSize: ICON.action }} /> },
 ];
 
-// The two ways stock goes up: one perfume by hand, or a whole delivery from a spreadsheet.
+// Stock update: one perfume by hand, or many from a spreadsheet.
 const UpdateStockDialog = ({ open, onClose, onUpdated }) => {
   const [tab, setTab] = useState('single');
 
@@ -50,9 +50,7 @@ const UpdateStockDialog = ({ open, onClose, onUpdated }) => {
         ))}
       </Tabs>
 
-      {/* No minimum height: the panel is the height of what is in it. Holding a
-          floor kept the dialog from resizing between tabs, but it bought that
-          with a band of empty white under every panel shorter than the floor. */}
+      {/* No min height on purpose: it left empty space under shorter panels. */}
       <DialogContent sx={{ pt: 2.5, pb: 3 }}>
         {tab === 'single' ? (
           <SingleStockUpdate onUpdated={onUpdated} />
