@@ -7,14 +7,18 @@ import WifiOffOutlined from '@mui/icons-material/WifiOffOutlined';
 import NetworkCheckOutlined from '@mui/icons-material/NetworkCheckOutlined';
 import CloudOffOutlined from '@mui/icons-material/CloudOffOutlined';
 import HourglassEmptyOutlined from '@mui/icons-material/HourglassEmptyOutlined';
+import SyncProblemOutlined from '@mui/icons-material/SyncProblemOutlined';
+import StorageOutlined from '@mui/icons-material/StorageOutlined';
 import { CARD_PAD, INSET_RADIUS, ICON, brand, surface } from '../../theme/index.js';
 
 // Internet problems are amber (user's side); server problems are red. See api/network.js.
 const CONNECTION_ICONS = {
   offline: { Icon: WifiOffOutlined, color: 'warning.main' },
   slow: { Icon: NetworkCheckOutlined, color: 'warning.main' },
+  interrupted: { Icon: SyncProblemOutlined, color: 'warning.main' },
   serverSlow: { Icon: HourglassEmptyOutlined, color: 'error.main' },
   serverDown: { Icon: CloudOffOutlined, color: 'error.main' },
+  database: { Icon: StorageOutlined, color: 'error.main' },
 };
 
 export const ConnectionIcon = ({ kind, size = ICON.illustration }) => {
@@ -23,7 +27,8 @@ export const ConnectionIcon = ({ kind, size = ICON.illustration }) => {
 };
 
 /** Internet problems are a warning; everything else is an error. */
-export const severityOf = (error) => (['offline', 'slow'].includes(error?.kind) ? 'warning' : 'error');
+export const severityOf = (error) =>
+  ['offline', 'slow', 'interrupted'].includes(error?.kind) ? 'warning' : 'error';
 
 const titleOf = (error, fallback) => {
   if (error?.title) return error.title;

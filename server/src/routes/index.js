@@ -22,13 +22,35 @@ const router = Router();
 // Liveness and readiness in one.
 const DB_STATES = ['disconnected', 'connected', 'connecting', 'disconnecting'];
 
-router.get('/health', (_req, res) => {
-  const healthy = DB_STATES[mongoose.connection.readyState] === 'connected';
+// A connection can read 'connected' while every query on it stalls, so the
+// database is actually asked — briefly — rather than its flag being trusted.
+// The panel reads `database` to tell a down server from a down database.
+const DB_PING_TIMEOUT_MS = 3000;
 
+const pingDatabase = async () => {
+  if (DB_STATES[mongoose.connection.readyState] !== 'connected') return 'unreachable';
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve('slow'), DB_PING_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([mongoose.connection.db.admin().ping().then(() => 'ok'), timeout]);
+  } catch {
+    return 'unreachable';
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+router.get('/health', async (_req, res) => {
+  const database = await pingDatabase();
+  const healthy = database === 'ok';
+
+  res.set('Cache-Control', 'no-store');
   return res.status(healthy ? 200 : 503).json({
     success: healthy,
     message: healthy ? 'Server is Working' : 'The database is not reachable',
-    data: { status: healthy ? 'ok' : 'degraded', timestamp: new Date().toISOString() },
+    data: { status: healthy ? 'ok' : 'degraded', database, timestamp: new Date().toISOString() },
   });
 });
 

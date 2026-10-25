@@ -10,10 +10,15 @@ import { cachedSiteName } from '../utils/branding.js';
 // After this long, the boot screen explains the wait.
 const SLOW_BOOT_MS = 6000;
 
+// A restarting server is usually back within a minute, so the boot screen keeps
+// trying on its own. Offline is left to the browser's 'online' event instead.
+const AUTO_RETRY_SECONDS = 10;
+
 /** Shown while the refresh cookie is being exchanged on a hard reload. */
 const BootScreen = () => {
   const { bootError, retryBoot } = useAuth();
   const [slow, setSlow] = useState(false);
+  const [countdown, setCountdown] = useState(null);
 
   useEffect(() => {
     if (bootError) return undefined;
@@ -21,6 +26,22 @@ const BootScreen = () => {
     const timer = setTimeout(() => setSlow(true), SLOW_BOOT_MS);
     return () => clearTimeout(timer);
   }, [bootError]);
+
+  useEffect(() => {
+    if (!bootError || bootError.kind === 'offline') {
+      setCountdown(null);
+      return undefined;
+    }
+    let left = AUTO_RETRY_SECONDS;
+    setCountdown(left);
+    const timer = setInterval(() => {
+      left -= 1;
+      if (left > 0) return setCountdown(left);
+      clearInterval(timer);
+      return retryBoot();
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [bootError, retryBoot]);
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', bgcolor: 'background.default', px: 3 }}>
@@ -49,13 +70,18 @@ const BootScreen = () => {
             <Button startIcon={<Refresh />} onClick={retryBoot} variant="outlined">
               Try again
             </Button>
+            {countdown !== null && (
+              <Typography variant="caption" color="text.secondary">
+                Trying again automatically in {countdown}s…
+              </Typography>
+            )}
           </>
         ) : (
           <>
             <CircularProgress size={24} sx={{ color: brand.gold }} />
             {slow && (
               <Typography variant="body2" color="text.secondary">
-                Still connecting — this is taking longer than usual. Your connection may be slow.
+                Still connecting — this is taking longer than usual.
               </Typography>
             )}
           </>

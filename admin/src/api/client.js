@@ -2,6 +2,8 @@ import axios from 'axios';
 import { clearResourceCache } from './resourceCache.js';
 import {
   NETWORK,
+  configureNetwork,
+  databaseProblem,
   diagnose,
   isConnectionKind,
   isOffline,
@@ -14,6 +16,7 @@ const trimSlash = (value) => String(value ?? '').trim().replace(/\/+$/, '');
 
 const API_PREFIX = trimSlash(import.meta.env.VITE_API_PREFIX) || '/api/v1';
 const BASE_URL = trimSlash(import.meta.env.VITE_API_URL) || API_PREFIX;
+configureNetwork({ apiBase: BASE_URL });
 
 // The access token lives in module memory, never in localStorage.
 let accessToken = null;
@@ -187,10 +190,17 @@ const normaliseError = async (error) => {
   if (!error.response) return connectionError(await diagnose({ timedOut: isTimeout(error) }));
 
   const { status, data } = error.response;
-  // A 5xx without our JSON envelope came from a proxy, i.e. the server is down.
+  // A 5xx without our JSON envelope came from a proxy standing in for the
+  // server; the probes say whether it is down, slow, or missing its database.
   const fromApi = data && typeof data === 'object' && data.message;
-  if (status === 504) return { ...connectionError(NETWORK.serverSlow), status };
-  if (status >= 500 && (!fromApi || status === 502)) return { ...connectionError(NETWORK.serverDown), status };
+  if (status >= 500 && (!fromApi || status === 502 || status === 504)) {
+    return { ...connectionError(await diagnose({ timedOut: status === 504 })), status };
+  }
+  // The API's own 500 is often a database it cannot reach; that is worth naming.
+  if (status >= 500) {
+    const database = await databaseProblem();
+    if (database) return { ...connectionError(database), status };
+  }
 
   return {
     message: data?.message || 'Something went wrong. Please try again.',

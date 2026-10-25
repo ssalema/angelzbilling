@@ -2,7 +2,8 @@
  * Super admin CLI. The password is typed at a hidden prompt; only its hash is stored.
  *   npm run admin:create                        first super admin (refuses if one exists)
  *   npm run admin:reset-password [-- <email>]   new password, signs out all sessions, clears lockout
- * Non-interactive: set ADMIN_NAME, ADMIN_EMAIL, ADMIN_PASSWORD for that one command only.
+ * Non-interactive: set ADMIN_NAME, ADMIN_EMAIL, ADMIN_PHONE (optional), ADMIN_PASSWORD for that
+ * one command only.
  */
 import readline from 'node:readline';
 import mongoose from 'mongoose';
@@ -10,6 +11,7 @@ import { z } from 'zod';
 import connectDB, { disconnectDB } from '../config/db.js';
 import User from '../models/User.js';
 import { loginSchema, passwordRule } from '../modules/auth/auth.validation.js';
+import { DEFAULT_DIAL_CODE, addContactNumberIssue } from '../utils/countries.js';
 
 const [command, emailArg] = process.argv.slice(2);
 
@@ -19,6 +21,13 @@ const nameRule = z
   .trim()
   .min(2, 'Name must be at least 2 characters')
   .max(80, 'Name cannot exceed 80 characters');
+// Same check as the profile form: optional, digits only, length for the default dial code.
+const phoneRule = z
+  .string()
+  .trim()
+  .superRefine((number, ctx) =>
+    addContactNumberIssue(ctx, { dial: DEFAULT_DIAL_CODE, number, path: [], required: false })
+  );
 
 class CliError extends Error {}
 
@@ -58,10 +67,10 @@ const readPassword = async () => {
 };
 
 // Use the argument or env value if given; otherwise prompt with the fallback as default.
-const readField = async (label, rule, given, fallback = '') => {
+const readField = async (label, rule, given, fallback = '', { optional = false } = {}) => {
   if (given) return check(rule, given);
   if (!process.stdin.isTTY) {
-    if (fallback) return check(rule, fallback);
+    if (fallback || optional) return check(rule, fallback);
     throw new CliError(`${label} is required. Set it in the environment for this one command.`);
   }
   const answer = await ask(fallback ? `${label} [${fallback}]: ` : `${label}: `);
@@ -79,9 +88,20 @@ const createAdmin = async () => {
   const name = await readField('Name', nameRule, process.env.ADMIN_NAME, 'Super Admin');
   const email = await readField('Email', emailRule, emailArg ?? process.env.ADMIN_EMAIL);
   if (await User.exists({ email })) throw new CliError(`An account with ${email} already exists`);
+  const phone = await readField(`Phone (${DEFAULT_DIAL_CODE}, optional)`, phoneRule, process.env.ADMIN_PHONE, '', {
+    optional: true,
+  });
   const password = await readPassword();
 
-  await User.create({ name, email, password, role: 'superadmin', branch: null });
+  await User.create({
+    name,
+    email,
+    phone,
+    phoneCountryCode: DEFAULT_DIAL_CODE,
+    password,
+    role: 'superadmin',
+    branch: null,
+  });
   console.log(`✅ Super admin ${email} created. Sign in to the admin panel with it.`);
 };
 

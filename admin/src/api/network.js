@@ -13,18 +13,33 @@ export const NETWORK = {
     message:
       "Your internet connection is too slow right now, so the server's reply didn't arrive in time. Try again once the signal improves.",
   },
+  interrupted: {
+    kind: 'interrupted',
+    title: 'Connection interrupted',
+    message: 'The connection dropped before the server could reply. Your internet and the server are both working — please try again.',
+  },
   serverSlow: {
     kind: 'serverSlow',
     title: 'Server is slow to respond',
-    message: 'The server is taking too long to respond. Your internet is working — please try again in a moment.',
+    message:
+      'Your internet is working and the server is up, but it took too long to answer this request. Please try again in a moment.',
   },
   serverDown: {
     kind: 'serverDown',
-    title: 'Server unavailable',
+    title: 'Server not responding',
     message:
-      "The server can't be reached right now. Your internet is working, so the problem is on our side — please try again in a few minutes.",
+      "Your internet is working, but the server isn't responding — it may be restarting or temporarily down. Please try again in a minute.",
+  },
+  database: {
+    kind: 'database',
+    title: 'Database unavailable',
+    message:
+      "The server is running but can't reach its database right now, so nothing can be loaded or saved. Please try again in a few minutes.",
   },
 };
+
+/** The kinds where the fault is on the server's side, not this device's. */
+export const SERVER_KINDS = ['serverSlow', 'serverDown', 'database'];
 
 export const isConnectionKind = (kind) => Boolean(kind && NETWORK[kind]);
 
@@ -41,33 +56,67 @@ export const isOffline = () => typeof navigator !== 'undefined' && navigator.onL
 const SLOW_PROBE_MS = 1500;
 const PROBE_TIMEOUT_MS = 6000;
 
-// Pings a tiny file on our own origin (not the API) to test the internet link.
-const probe = async () => {
+// The API base, set by api/client.js so the health check hits the same server.
+let apiBase = '/api/v1';
+export const configureNetwork = ({ apiBase: base }) => {
+  if (base) apiBase = base;
+};
+
+const timedFetch = async (url, options) => {
   const started = Date.now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
   try {
-    await fetch(`${window.location.origin}/favicon.png?probe=${started}`, {
-      method: 'HEAD',
-      cache: 'no-store',
-      signal: controller.signal,
-    });
-    return { reachable: true, ms: Date.now() - started };
+    const response = await fetch(url, { cache: 'no-store', ...options, signal: controller.signal });
+    return { response, ms: Date.now() - started };
   } catch {
-    return { reachable: false, ms: Date.now() - started };
+    return { response: null, ms: Date.now() - started };
   } finally {
     clearTimeout(timer);
   }
 };
 
+// Pings a tiny file on our own origin (not the API) to test the internet link.
+const probeLink = async () => {
+  const { response, ms } = await timedFetch(`${window.location.origin}/favicon.png?probe=${Date.now()}`, {
+    method: 'HEAD',
+  });
+  return { reachable: Boolean(response), ms };
+};
+
+// Asks the API itself whether it is up and whether its database answers. A 503
+// in the API's own envelope means the server is up but the database is not; a
+// 502/504 or a non-JSON page came from a proxy standing in for a server that is down.
+const probeServer = async () => {
+  const { response } = await timedFetch(`${apiBase}/health`, { credentials: 'omit' });
+  if (!response) return { up: false };
+  if (response.ok) return { up: true, database: 'ok' };
+  const body = await response.json().catch(() => null);
+  if (response.status === 503 && body?.data?.database) return { up: true, database: body.data.database };
+  return { up: false };
+};
+
 // `timedOut`: true if the request hit its timeout, false if it failed outright.
+// Every message is backed by what the two probes actually saw.
 export const diagnose = async ({ timedOut }) => {
   if (isOffline()) return NETWORK.offline;
 
-  const { reachable, ms } = await probe();
-  if (!reachable) return timedOut ? NETWORK.slow : NETWORK.offline;
-  if (ms > SLOW_PROBE_MS || linkLooksSlow()) return NETWORK.slow;
-  return timedOut ? NETWORK.serverSlow : NETWORK.serverDown;
+  const [link, server] = await Promise.all([probeLink(), probeServer()]);
+  if (!link.reachable && !server.up) return timedOut ? NETWORK.slow : NETWORK.offline;
+
+  const linkSlow = (link.reachable && link.ms > SLOW_PROBE_MS) || linkLooksSlow();
+  if (server.up) {
+    if (server.database !== 'ok') return NETWORK.database;
+    if (linkSlow) return NETWORK.slow;
+    return timedOut ? NETWORK.serverSlow : NETWORK.interrupted;
+  }
+  return linkSlow ? NETWORK.slow : NETWORK.serverDown;
+};
+
+/** For an API 500: whether the database is the reason, or null when it is not. */
+export const databaseProblem = async () => {
+  const server = await probeServer();
+  return server.up && server.database !== 'ok' ? NETWORK.database : null;
 };
 
 // Current network condition, shown by the banner.
