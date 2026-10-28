@@ -8,6 +8,18 @@ import User, { roleLabelFor } from '../../models/User.js';
 import Settings from '../../models/Settings.js';
 import { HEAD_OFFICE_ID, HEAD_OFFICE_LABEL, HEAD_OFFICE_CODE } from '../../utils/locations.js';
 import { emit, revokeSession, userRoom } from '../../config/socket.js';
+import { syncBranchesFeature } from '../../utils/featureFlags.js';
+
+// Settings sent with the session. The branch flag is reconciled first, so a
+// database changed by hand cannot sign someone into a stale branch mode.
+const sessionSettings = async () => {
+  try {
+    await syncBranchesFeature();
+  } catch {
+    /* sign-in must not fail over this; the cached flag is still returned */
+  }
+  return storeProfile(await Settings.getCached());
+};
 
 const storeProfile = (settings) => ({
   siteName: settings.siteName,
@@ -66,7 +78,7 @@ export const loginController = asyncHandler(async (req, res) => {
 
   return sendSuccess(res, {
     message: `Welcome back, ${user.name.split(' ')[0]}`,
-    data: { user: publicUser(user), accessToken, settings: storeProfile(await Settings.getCached()) },
+    data: { user: publicUser(user), accessToken, settings: await sessionSettings() },
   });
 });
 
@@ -81,7 +93,7 @@ export const refreshController = asyncHandler(async (req, res) => {
 
   return sendSuccess(res, {
     message: 'Session refreshed',
-    data: { user: publicUser(user), accessToken, settings: storeProfile(await Settings.getCached()) },
+    data: { user: publicUser(user), accessToken, settings: await sessionSettings() },
   });
 });
 

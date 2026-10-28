@@ -13,6 +13,7 @@ import { apiLimiter, xssSanitizer, verifyOrigin } from './middlewares/security.j
 import { collectMetrics, startLagSampler } from './middlewares/metrics.js';
 import { notFound, errorHandler } from './middlewares/error.js';
 import ApiError from './utils/ApiError.js';
+import { rejectUntilReady } from './utils/readiness.js';
 import routes from './routes/index.js';
 
 const app = express();
@@ -88,6 +89,7 @@ app.use(morgan(ACCESS_LOG_FORMAT, { stream: httpLogStream }));
 app.use(env.apiPrefix, collectMetrics);
 startLagSampler();
 
+app.use(env.apiPrefix, rejectUntilReady);
 app.use(env.apiPrefix, apiLimiter);
 
 app.get('/', (_req, res) => res.type('text/plain').send('Server is Working'));

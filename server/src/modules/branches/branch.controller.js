@@ -1,5 +1,4 @@
 import Branch from '../../models/Branch.js';
-import Settings from '../../models/Settings.js';
 import User from '../../models/User.js';
 import Bill from '../../models/Bill.js';
 import ApiError from '../../utils/ApiError.js';
@@ -8,28 +7,10 @@ import { sendSuccess, sendCreated, sendPaginated } from '../../utils/ApiResponse
 import { getPagination, getSort, escapeRegex } from '../../utils/query.js';
 import { assertBranchAccess, assertBranchWrite, isGlobalSuperAdmin } from '../../middlewares/authorize.js';
 import { uploadBuffer, destroyAsset } from '../../config/cloudinary.js';
-import { refreshFeatures } from '../../utils/featureFlags.js';
+import { syncBranchesFeature } from '../../utils/featureFlags.js';
 import { signOutBranchUsers } from './branch.sessions.js';
 
 const SORTABLE = ['createdAt', 'name', 'code'];
-
-const syncBranchesFeature = async () => {
-  // Branch mode is on only while at least one branch is active.
-  const active = await Branch.countDocuments({ isActive: true });
-
-  const settings = await Settings.getSingleton();
-  const current = settings.features?.branches !== false;
-  const next = active > 0;
-  if (current === next) return;
-
-  settings.set('features.branches', next);
-  // Mongoose Map keys can't contain dots, so use ':' (same as the settings controller).
-  settings.updatedFields.set('features:branches', new Date());
-  await settings.save();
-
-  refreshFeatures();
-  Settings.invalidateCache();
-};
 
 const BRANDING = { logo: 'Logo', favicon: 'Favicon' };
 

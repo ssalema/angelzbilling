@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import Bill from '../../models/Bill.js';
 import Perfume from '../../models/Perfume.js';
 import Customer from '../../models/Customer.js';
-import Settings, { DEFAULT_BILL_PREFIX, DEFAULT_MAX_DISCOUNT_PERCENT } from '../../models/Settings.js';
+import Settings, { DEFAULT_MAX_DISCOUNT_PERCENT } from '../../models/Settings.js';
 import { moneyFormatter } from '../../utils/money.js';
 import Branch from '../../models/Branch.js';
 import ApiError from '../../utils/ApiError.js';
@@ -158,7 +158,7 @@ export const getBill = asyncHandler(async (req, res) => {
         logo: branchLogo || settings.branding?.logo?.url || '',
         invoiceFooter: settings.billing?.invoiceFooter || '',
         termsAndConditions: settings.billing?.termsAndConditions || '',
-        currencySymbol: settings.billing?.currencySymbol || '₹',
+        currencySymbol: settings.billing?.currencySymbol || '',
         // The slip only shows the bill's location when branches are on.
         features: { branches: settings.features?.branches !== false },
       },
@@ -211,7 +211,7 @@ export const createBill = asyncHandler(async (req, res) => {
     ...limits,
   });
 
-  const billNumber = await generateBillNumber({ prefix: settings.billing?.billPrefix || DEFAULT_BILL_PREFIX });
+  const billNumber = await generateBillNumber({ prefix: settings.billing?.billPrefix || '' });
 
   // Paid/pending is decided from the server's own total, never the client's.
   const settlement = splitPayment(totals.grandTotal, req.body.amountPaid);

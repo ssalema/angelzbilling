@@ -71,18 +71,21 @@ const schema = z
       .toUpperCase()
       .max(8)
       .regex(/^[A-Z]*$/, 'Use the 3-letter code, e.g. INR')
-      .default('INR'),
-    currencySymbol: z.string().trim().max(4).default('₹'),
+      .default(''),
+    currencySymbol: z.string().trim().max(4).default(''),
     billPrefix: z
       .string()
       .trim()
       .toUpperCase()
-      .min(1, 'Required')
       .max(6)
-      .regex(/^[A-Z0-9]+$/, 'Letters and numbers only')
-      .default('AP'),
+      .regex(/^[A-Z0-9]*$/, 'Letters and numbers only')
+      .default(''),
     defaultTaxPercent: z.coerce.number().min(0).max(100).default(0),
-    maxDiscountPercent: z.coerce.number().min(0).max(100).default(20),
+    // Blank stays blank (no limit set) instead of coercing to 0.
+    maxDiscountPercent: z.preprocess(
+      (value) => (value === '' || value === undefined ? null : value),
+      z.coerce.number().min(0).max(100).nullable()
+    ),
     invoiceFooter: z.string().trim().max(300).default(''),
     termsAndConditions: z.string().trim().max(2000).default(''),
   }),
@@ -205,11 +208,11 @@ const SettingsPage = () => {
         linkedin: data.social?.linkedin || '',
       },
       billing: {
-        currency: data.billing?.currency || 'INR',
-        currencySymbol: data.billing?.currencySymbol || '₹',
-        billPrefix: data.billing?.billPrefix || 'AP',
+        currency: data.billing?.currency || '',
+        currencySymbol: data.billing?.currencySymbol || '',
+        billPrefix: data.billing?.billPrefix || '',
         defaultTaxPercent: data.billing?.defaultTaxPercent ?? 0,
-        maxDiscountPercent: data.billing?.maxDiscountPercent ?? 20,
+        maxDiscountPercent: data.billing?.maxDiscountPercent ?? '',
         invoiceFooter: data.billing?.invoiceFooter || '',
         termsAndConditions: data.billing?.termsAndConditions || '',
       },
@@ -485,14 +488,13 @@ const SettingsPage = () => {
                           suffix="%"
                           disabled={!isMainSuperAdmin}
                           inputProps={{ min: 0, max: 100, step: '1' }}
-                          helperText="Most of a bill staff can discount — admins bill without a limit"
+                          helperText="Most of a bill staff can discount — blank means none; admins bill without a limit"
                         />
                       </Grid>
                       <Grid item xs={12} sm={8}>
                         <RHFTextField
                           name="billing.invoiceFooter"
                           label="Invoice footer"
-                          placeholder="Thank you for shopping with us."
                           disabled={!isMainSuperAdmin}
                         />
                       </Grid>

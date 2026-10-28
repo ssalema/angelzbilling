@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { settingsApi } from '../api/endpoints.js';
 import { useAuth } from './AuthContext.jsx';
+import { useRealtime } from './RealtimeContext.jsx';
 import { configureCurrency, currencySymbol as configuredSymbol } from '../utils/format.js';
 import { cacheSiteName, cachedSiteName, documentTitle } from '../utils/branding.js';
 import { DEFAULT_MAX_DISCOUNT_PERCENT } from '../utils/constants.js';
@@ -37,6 +38,25 @@ export const SettingsProvider = ({ children }) => {
     load();
   }, [booting, bootSettings, load]);
 
+  // Settings change from other tabs, other admins, and branch writes (the server
+  // turns branch mode off when the last active branch goes), so re-read quietly
+  // on those events instead of keeping the sign-in copy until the next reload.
+  const { revisions } = useRealtime();
+  const revision = (revisions?.settings || 0) + (revisions?.branches || 0);
+  const seenRevision = useRef(revision);
+
+  useEffect(() => {
+    if (revision === seenRevision.current) return;
+    seenRevision.current = revision;
+    if (!isAuthenticated) return;
+    settingsApi
+      .get()
+      .then(setSettings)
+      .catch(() => {
+        /* keep the current copy */
+      });
+  }, [revision, isAuthenticated]);
+
   useEffect(() => {
     if (settings?.siteName) {
       document.title = documentTitle(settings.siteName);
@@ -70,7 +90,8 @@ export const SettingsProvider = ({ children }) => {
       // Falls back to the strict default when settings are missing, matching the server.
       maxDiscountPercent: settings?.billing?.maxDiscountPercent ?? DEFAULT_MAX_DISCOUNT_PERCENT,
       // Off for single-location stores: all branch columns, filters and chips are hidden.
-      branchesEnabled: settings?.features?.branches !== false,
+      // The server always sends this flag, so missing settings mean "not known yet": stay off.
+      branchesEnabled: settings?.features?.branches === true,
     }),
     [settings, loading, load]
   );

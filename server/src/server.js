@@ -7,6 +7,8 @@ import connectDB, { disconnectDB } from './config/db.js';
 import { listenForBroadcasts } from './config/broadcast.js';
 import { initSocket, closeSocket } from './config/socket.js';
 import { runBackfill } from './seed/backfill.js';
+import { syncBranchesFeature } from './utils/featureFlags.js';
+import { markReady } from './utils/readiness.js';
 import app from './app.js';
 
 // Logs a warning at boot for any security control that is switched off.
@@ -24,18 +26,26 @@ const start = async () => {
 
   listenForBroadcasts();
 
-  await connectDB();
-
-  // Fill in derived fields for old data. Only one worker runs it to avoid races.
-  if (!cluster.isWorker || cluster.worker.id === 1) await runBackfill();
-
   // Socket.IO shares the HTTP server: one port, one origin, one set of CORS rules.
+  // Listening comes first, so requests during boot get a fast "starting up"
+  // (see utils/readiness.js) rather than hanging or being refused.
   const server = http.createServer(app);
   initSocket(server);
 
   server.listen(env.port, () => {
     console.log(`🚀 Server running on port ${env.port}`);
   });
+
+  await connectDB();
+
+  // Fill in derived fields for old data. Only one worker runs it to avoid races.
+  if (!cluster.isWorker || cluster.worker.id === 1) {
+    await runBackfill();
+    // Older stores were created with branch mode on and no branches.
+    await syncBranchesFeature().catch((error) => logger.error(`Branch flag sync failed: ${error.message}`));
+  }
+
+  markReady();
 
   const shutdown = async (signal) => {
     logger.info(`${signal} received — shutting down gracefully`);

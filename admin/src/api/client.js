@@ -193,6 +193,8 @@ const normaliseError = async (error) => {
   // A 5xx without our JSON envelope came from a proxy standing in for the
   // server; the probes say whether it is down, slow, or missing its database.
   const fromApi = data && typeof data === 'object' && data.message;
+  // Booting: the server said so itself, no probing needed.
+  if (data?.code === 'SERVER_STARTING') return { ...connectionError(NETWORK.starting), status };
   if (status >= 500 && (!fromApi || status === 502 || status === 504)) {
     return { ...connectionError(await diagnose({ timedOut: status === 504 })), status };
   }

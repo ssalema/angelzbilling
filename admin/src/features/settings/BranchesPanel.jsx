@@ -222,7 +222,7 @@ const BranchesPanel = ({ canEdit, settings, onSettingsChange }) => {
 
   const items = branches.data?.items || [];
 
-  const branchesEnabled = settings?.features?.branches !== false;
+  const branchesEnabled = settings?.features?.branches === true;
   // With no branches, adding one is what turns branch management back on.
   const noBranches = !branches.loading && !branches.error && !items.length;
   // The empty state already explains it, so this notice is only for stores with deactivated branches.

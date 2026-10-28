@@ -46,12 +46,15 @@ export const updateSettingsSchema = z.object({
         .string()
         .trim()
         .toUpperCase()
-        .min(1)
         .max(6)
-        .regex(/^[A-Z0-9]+$/, 'Use letters and numbers only')
+        .regex(/^[A-Z0-9]*$/, 'Use letters and numbers only')
         .optional(),
       defaultTaxPercent: z.coerce.number().min(0).max(100).optional(),
-      maxDiscountPercent: z.coerce.number().min(0).max(100).optional(),
+      // Blank clears the limit, which leaves staff unable to discount.
+      maxDiscountPercent: z.preprocess(
+        (value) => (value === '' ? null : value),
+        z.coerce.number().min(0).max(100).nullable().optional()
+      ),
       invoiceFooter: z.string().trim().max(300).optional(),
       termsAndConditions: z.string().trim().max(2000).optional(),
     })
@@ -106,8 +109,8 @@ export const getPublicSettings = asyncHandler(async (_req, res) => {
       tagline: settings.tagline,
       logo: settings.branding?.logo?.url || '',
       favicon: settings.branding?.favicon?.url || '',
-      currency: settings.billing?.currency || 'INR',
-      currencySymbol: settings.billing?.currencySymbol || '₹',
+      currency: settings.billing?.currency || '',
+      currencySymbol: settings.billing?.currencySymbol || '',
       features: { branches: settings.features?.branches !== false },
     },
   });

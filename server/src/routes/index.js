@@ -16,6 +16,7 @@ import { snapshot } from '../middlewares/metrics.js';
 import { dashboardCacheStats, lifetimeCache, catalogueCache, lookupCache } from '../middlewares/cache.js';
 import { userCacheStats } from '../utils/userCache.js';
 import { socketStats } from '../config/socket.js';
+import { isReady } from '../utils/readiness.js';
 
 const router = Router();
 
@@ -43,13 +44,18 @@ const pingDatabase = async () => {
 };
 
 router.get('/health', async (_req, res) => {
-  const database = await pingDatabase();
+  // Still connecting at boot: say so, rather than calling the database down.
+  const database = isReady() ? await pingDatabase() : 'starting';
   const healthy = database === 'ok';
 
   res.set('Cache-Control', 'no-store');
   return res.status(healthy ? 200 : 503).json({
     success: healthy,
-    message: healthy ? 'Server is Working' : 'The database is not reachable',
+    message: healthy
+      ? 'Server is Working'
+      : database === 'starting'
+        ? 'The server is starting up'
+        : 'The database is not reachable',
     data: { status: healthy ? 'ok' : 'degraded', database, timestamp: new Date().toISOString() },
   });
 });

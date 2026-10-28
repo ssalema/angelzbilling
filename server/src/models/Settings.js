@@ -9,11 +9,8 @@ const imageSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// Default bill/SKU prefix.
-export const DEFAULT_BILL_PREFIX = 'AP';
-
-// Staff discount cap. Used when the field is missing (older documents), never "no cap".
-export const DEFAULT_MAX_DISCOUNT_PERCENT = 20;
+// Staff discount cap while the admin has not set one: staff cannot discount, never "no cap".
+export const DEFAULT_MAX_DISCOUNT_PERCENT = 0;
 
 // Singleton: exactly one settings document, keyed 'general'.
 const settingsSchema = new mongoose.Schema(
@@ -40,18 +37,19 @@ const settingsSchema = new mongoose.Schema(
       linkedin: { type: String, trim: true, default: '' },
     },
 
-    // Off for single-location stores; hides branch screens.
+    // Off for single-location stores; hides branch screens. A fresh store has
+    // no branches, so it starts off; adding the first branch turns it on.
     features: {
-      branches: { type: Boolean, default: true },
+      branches: { type: Boolean, default: false },
     },
 
     billing: {
-      currency: { type: String, default: 'INR' },
-      currencySymbol: { type: String, default: '₹' },
-      billPrefix: { type: String, default: DEFAULT_BILL_PREFIX, uppercase: true, trim: true, maxlength: 6 },
+      currency: { type: String, default: '' },
+      currencySymbol: { type: String, default: '' },
+      billPrefix: { type: String, default: '', uppercase: true, trim: true, maxlength: 6 },
       defaultTaxPercent: { type: Number, default: 0, min: 0, max: 100 },
-      maxDiscountPercent: { type: Number, default: DEFAULT_MAX_DISCOUNT_PERCENT, min: 0, max: 100 },
-      invoiceFooter: { type: String, default: 'Thank you for shopping with us.', maxlength: 300 },
+      maxDiscountPercent: { type: Number, default: null, min: 0, max: 100 },
+      invoiceFooter: { type: String, default: '', maxlength: 300 },
       termsAndConditions: { type: String, default: '', maxlength: 2000 },
     },
 

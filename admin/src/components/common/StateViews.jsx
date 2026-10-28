@@ -9,6 +9,7 @@ import CloudOffOutlined from '@mui/icons-material/CloudOffOutlined';
 import HourglassEmptyOutlined from '@mui/icons-material/HourglassEmptyOutlined';
 import SyncProblemOutlined from '@mui/icons-material/SyncProblemOutlined';
 import StorageOutlined from '@mui/icons-material/StorageOutlined';
+import RestartAltOutlined from '@mui/icons-material/RestartAltOutlined';
 import { CARD_PAD, INSET_RADIUS, ICON, brand, surface } from '../../theme/index.js';
 
 // Internet problems are amber (user's side); server problems are red. See api/network.js.
@@ -19,6 +20,8 @@ const CONNECTION_ICONS = {
   serverSlow: { Icon: HourglassEmptyOutlined, color: 'error.main' },
   serverDown: { Icon: CloudOffOutlined, color: 'error.main' },
   database: { Icon: StorageOutlined, color: 'error.main' },
+  // Not a fault: it fixes itself in seconds.
+  starting: { Icon: RestartAltOutlined, color: 'warning.main' },
 };
 
 export const ConnectionIcon = ({ kind, size = ICON.illustration }) => {
@@ -28,7 +31,7 @@ export const ConnectionIcon = ({ kind, size = ICON.illustration }) => {
 
 /** Internet problems are a warning; everything else is an error. */
 export const severityOf = (error) =>
-  ['offline', 'slow', 'interrupted'].includes(error?.kind) ? 'warning' : 'error';
+  ['offline', 'slow', 'interrupted', 'starting'].includes(error?.kind) ? 'warning' : 'error';
 
 const titleOf = (error, fallback) => {
   if (error?.title) return error.title;

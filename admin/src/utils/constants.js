@@ -1,5 +1,5 @@
 // Fallback staff discount cap. Must match DEFAULT_MAX_DISCOUNT_PERCENT on the server.
-export const DEFAULT_MAX_DISCOUNT_PERCENT = 20;
+export const DEFAULT_MAX_DISCOUNT_PERCENT = 0;
 
 export const HEAD_OFFICE = { id: 'head-office', name: 'Head Office', code: 'HO', isHeadOffice: true };
 

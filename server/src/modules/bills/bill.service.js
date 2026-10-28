@@ -1,21 +1,20 @@
 import Perfume from '../../models/Perfume.js';
 import Branch from '../../models/Branch.js';
 import Counter from '../../models/Counter.js';
-import { DEFAULT_BILL_PREFIX } from '../../models/Settings.js';
 import ApiError from '../../utils/ApiError.js';
 import { round2 } from '../../utils/query.js';
 import { moneyFormatter } from '../../utils/money.js';
 import { resolveSizeGrams, gramsForQuantity, unitsFromGrams, formatGrams } from '../../utils/grams.js';
 import { toBranchId, toLocationId, isValidLocationId, HEAD_OFFICE_LABEL } from '../../utils/locations.js';
 
-// Bill number format: prefix + YY + MM + 5-digit serial, e.g. AP260900001.
+// Bill number format: optional prefix + YY + MM + 5-digit serial, e.g. AP260900001.
 const financialYearKey = (date = new Date()) => {
   // getMonth() is 0-based, so 3 = April, the start of the financial year.
   const startYear = date.getMonth() >= 3 ? date.getFullYear() : date.getFullYear() - 1;
   return `${startYear}-${String((startYear + 1) % 100).padStart(2, '0')}`;
 };
 
-export const generateBillNumber = async ({ prefix = DEFAULT_BILL_PREFIX, at = new Date() } = {}) => {
+export const generateBillNumber = async ({ prefix = '', at = new Date() } = {}) => {
   const stamp = `${String(at.getFullYear()).slice(-2)}${String(at.getMonth() + 1).padStart(2, '0')}`;
   const key = `BILL-FY${financialYearKey(at)}`;
   const seq = await Counter.next(key);

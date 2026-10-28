@@ -28,7 +28,12 @@ export const NETWORK = {
     kind: 'serverDown',
     title: 'Server not responding',
     message:
-      "Your internet is working, but the server isn't responding — it may be restarting or temporarily down. Please try again in a minute.",
+      "Your internet is working, but the server isn't answering. If it has been idle it may be waking up, which can take up to a minute; otherwise it may be down.",
+  },
+  starting: {
+    kind: 'starting',
+    title: 'Server is starting up',
+    message: 'The server is restarting and will be ready in a few seconds.',
   },
   database: {
     kind: 'database',
@@ -39,7 +44,7 @@ export const NETWORK = {
 };
 
 /** The kinds where the fault is on the server's side, not this device's. */
-export const SERVER_KINDS = ['serverSlow', 'serverDown', 'database'];
+export const SERVER_KINDS = ['serverSlow', 'serverDown', 'database', 'starting'];
 
 export const isConnectionKind = (kind) => Boolean(kind && NETWORK[kind]);
 
@@ -106,6 +111,7 @@ export const diagnose = async ({ timedOut }) => {
 
   const linkSlow = (link.reachable && link.ms > SLOW_PROBE_MS) || linkLooksSlow();
   if (server.up) {
+    if (server.database === 'starting') return NETWORK.starting;
     if (server.database !== 'ok') return NETWORK.database;
     if (linkSlow) return NETWORK.slow;
     return timedOut ? NETWORK.serverSlow : NETWORK.interrupted;
@@ -116,7 +122,19 @@ export const diagnose = async ({ timedOut }) => {
 /** For an API 500: whether the database is the reason, or null when it is not. */
 export const databaseProblem = async () => {
   const server = await probeServer();
-  return server.up && server.database !== 'ok' ? NETWORK.database : null;
+  if (!server.up || server.database === 'ok') return null;
+  return server.database === 'starting' ? NETWORK.starting : NETWORK.database;
+};
+
+/**
+ * What the server is doing right now, for a screen that is still waiting on a
+ * request: 'ready', 'starting', 'database', or 'silent' when nothing answered.
+ */
+export const checkServer = async () => {
+  const server = await probeServer();
+  if (!server.up) return 'silent';
+  if (server.database === 'ok') return 'ready';
+  return server.database === 'starting' ? 'starting' : 'database';
 };
 
 // Current network condition, shown by the banner.
