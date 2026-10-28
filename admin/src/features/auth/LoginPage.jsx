@@ -120,7 +120,7 @@ const LoginPage = () => {
             {siteName}
           </Typography>
           <Typography sx={{ color: brand.goldLight, letterSpacing: '0.22em', fontSize: FONT.micro, textTransform: 'uppercase', mt: 0.5 }}>
-            Billing & Inventory
+            Billing and Inventory
           </Typography>
         </Box>
 

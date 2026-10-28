@@ -12,7 +12,7 @@ const FALLBACK_SITE_NAME = (() => {
 })();
 
 /** Browser tab title. Mirrored inline in index.html. */
-export const documentTitle = (name) => `${name || FALLBACK_SITE_NAME} — Billing & Inventory`;
+export const documentTitle = (name) => `${name || FALLBACK_SITE_NAME} — Billing and Inventory`;
 
 export const cachedSiteName = () => {
   try {

@@ -83,7 +83,7 @@ const SidebarContent = ({ onNavigate }) => {
               <Typography
                 sx={{ fontSize: FONT.micro, letterSpacing: '0.18em', color: brand.goldLight, textTransform: 'uppercase' }}
               >
-                Billing &amp; Inventory
+                Billing and Inventory
               </Typography>
             </Box>
           </>
