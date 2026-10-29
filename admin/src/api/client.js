@@ -176,18 +176,30 @@ api.interceptors.response.use(
 // Normalises the error and tells the network banner about connection problems.
 const rejectWith = async (error) => {
   const normalised = await normaliseError(error);
-  if (isConnectionKind(normalised.kind)) reportConnectionProblem(NETWORK[normalised.kind]);
+  if (isConnectionKind(normalised.kind)) {
+    // The diagnosed wording, not the stock one: a setup mistake names the address.
+    const { kind, title, message, details } = normalised;
+    reportConnectionProblem({ kind, title, message, details });
+  }
   return Promise.reject(normalised);
 };
 
-const connectionError = ({ kind, title, message }) => ({ message, title, kind, errors: [], status: 0, isNetwork: true });
+const connectionError = ({ kind, title, message, details }) => ({
+  message,
+  title,
+  kind,
+  details,
+  errors: [],
+  status: 0,
+  isNetwork: true,
+});
 
 // Every failure reaches the UI in the same shape.
 const normaliseError = async (error) => {
   if (isCancel(error)) {
     return { message: 'Request cancelled', errors: [], status: 0, aborted: true };
   }
-  if (!error.response) return connectionError(await diagnose({ timedOut: isTimeout(error) }));
+  if (!error.response) return connectionError(await diagnose({ timedOut: isTimeout(error), code: error.code }));
 
   const { status, data } = error.response;
   // A 5xx without our JSON envelope came from a proxy standing in for the
@@ -196,7 +208,7 @@ const normaliseError = async (error) => {
   // Booting: the server said so itself, no probing needed.
   if (data?.code === 'SERVER_STARTING') return { ...connectionError(NETWORK.starting), status };
   if (status >= 500 && (!fromApi || status === 502 || status === 504)) {
-    return { ...connectionError(await diagnose({ timedOut: status === 504 })), status };
+    return { ...connectionError(await diagnose({ timedOut: status === 504, code: `HTTP ${status}` })), status };
   }
   // The API's own 500 is often a database it cannot reach; that is worth naming.
   if (status >= 500) {

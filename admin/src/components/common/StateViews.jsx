@@ -1,4 +1,5 @@
-import { Box, Typography, Button, Stack, Skeleton, Card, Grid, Divider, Alert, AlertTitle } from '@mui/material';
+import { useState } from 'react';
+import { Box, Typography, Button, Stack, Skeleton, Card, Grid, Divider, Alert, AlertTitle, Collapse } from '@mui/material';
 import Refresh from '@mui/icons-material/Refresh';
 import LockOutlined from '@mui/icons-material/LockOutlined';
 import SearchOff from '@mui/icons-material/SearchOff';
@@ -10,7 +11,8 @@ import HourglassEmptyOutlined from '@mui/icons-material/HourglassEmptyOutlined';
 import SyncProblemOutlined from '@mui/icons-material/SyncProblemOutlined';
 import StorageOutlined from '@mui/icons-material/StorageOutlined';
 import RestartAltOutlined from '@mui/icons-material/RestartAltOutlined';
-import { CARD_PAD, INSET_RADIUS, ICON, brand, surface } from '../../theme/index.js';
+import LinkOffOutlined from '@mui/icons-material/LinkOffOutlined';
+import { CARD_PAD, FONT, INSET_RADIUS, ICON, brand, surface } from '../../theme/index.js';
 
 // Internet problems are amber (user's side); server problems are red. See api/network.js.
 const CONNECTION_ICONS = {
@@ -22,6 +24,46 @@ const CONNECTION_ICONS = {
   database: { Icon: StorageOutlined, color: 'error.main' },
   // Not a fault: it fixes itself in seconds.
   starting: { Icon: RestartAltOutlined, color: 'warning.main' },
+  // A build or hosting mistake: it fails every time until someone fixes it.
+  misconfigured: { Icon: LinkOffOutlined, color: 'error.main' },
+};
+
+/**
+ * What the connection checks actually saw, behind a toggle. Staff can ignore it;
+ * whoever looks after the panel gets the exact cause rather than a summary.
+ */
+export const ErrorDetails = ({ details }) => {
+  const [open, setOpen] = useState(false);
+  if (!details?.length) return null;
+
+  return (
+    <Box sx={{ mt: 1, width: '100%', maxWidth: 460, mx: 'auto' }}>
+      <Button size="small" variant="text" onClick={() => setOpen((value) => !value)} sx={{ color: 'text.secondary' }}>
+        {open ? 'Hide details' : 'Show details'}
+      </Button>
+      <Collapse in={open}>
+        <Box
+          component="pre"
+          sx={{
+            m: 0,
+            mt: 1,
+            p: 1.5,
+            textAlign: 'left',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+            fontSize: FONT.micro,
+            lineHeight: 1.6,
+            color: 'text.secondary',
+            bgcolor: surface.plumSoft,
+            borderRadius: `${INSET_RADIUS}px`,
+          }}
+        >
+          {details.join('\n')}
+        </Box>
+      </Collapse>
+    </Box>
+  );
 };
 
 export const ConnectionIcon = ({ kind, size = ICON.illustration }) => {
@@ -106,6 +148,7 @@ export const ErrorState = ({ error, onRetry, compact = false }) => {
           Try again
         </Button>
       )}
+      <ErrorDetails details={error?.details} />
     </Box>
   );
 };

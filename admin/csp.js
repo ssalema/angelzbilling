@@ -64,6 +64,9 @@ export const contentSecurityPolicy = ({ html, apiUrl }) => {
     .join('; ');
 };
 
+// transformIndexHtml runs without a plugin context, so `this.warn` is not there.
+const warn = (message) => console.warn(`\n\x1b[33m[inject-csp] ${message}\x1b[0m\n`);
+
 // Runs last so the script hashes cover the final index.html.
 export const cspPlugin = ({ apiUrl } = {}) => ({
   name: 'inject-csp',
@@ -74,15 +77,23 @@ export const cspPlugin = ({ apiUrl } = {}) => ({
     handler(html) {
       // connect-src is baked into the build; a wrong API URL blocks every call.
       if (!apiUrl) {
-        this.warn(
+        warn(
           'VITE_API_URL is not set, so the CSP will only allow API calls to the panel\'s own ' +
             'origin. That is correct when the API is served from the same domain (or behind a ' +
             'path rewrite) and wrong otherwise — set VITE_API_URL to the full API base URL.'
         );
       } else if (!apiOrigin(apiUrl).length) {
-        this.warn(
+        warn(
           `VITE_API_URL ("${apiUrl}") is not a URL with an origin, so it was left out of the ` +
             'CSP. API calls to it will be blocked in the built panel.'
+        );
+      } else if (/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:|\/|$)/i.test(apiUrl)) {
+        // Fine on this computer, and nowhere else: every other device reads
+        // "localhost" as itself and never reaches the server.
+        warn(
+          `VITE_API_URL is "${apiUrl}". This build only works in a browser on the same computer ` +
+            'as the API — phones and other devices will never reach the server. Set VITE_API_URL ' +
+            "to the server's public address before building for deployment."
         );
       }
 

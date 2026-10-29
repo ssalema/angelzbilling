@@ -135,7 +135,7 @@ const LoginPage = () => {
         </Box>
 
         <Typography sx={{ fontSize: FONT.small, color: onPlum.textGhost }}>
-          © {new Date().getFullYear()} {siteName}. Admin & Staff access only.
+          © {new Date().getFullYear()} {siteName}. Admin and Staff access only.
         </Typography>
       </Box>
 

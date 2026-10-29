@@ -3,7 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { Box, CircularProgress, Typography, Button, Stack } from '@mui/material';
 import Refresh from '@mui/icons-material/Refresh';
 import { useAuth } from '../context/AuthContext.jsx';
-import { PermissionDenied, ConnectionIcon } from '../components/common/StateViews.jsx';
+import { PermissionDenied, ConnectionIcon, ErrorDetails } from '../components/common/StateViews.jsx';
 import { ICON, brand } from '../theme/index.js';
 import { cachedSiteName } from '../utils/branding.js';
 import { checkServer } from '../api/network.js';
@@ -27,6 +27,7 @@ const WAIT_MESSAGES = {
   starting: 'The server is starting up — almost ready…',
   database: 'The server is up but waiting on its database…',
   silent: "The server isn't answering yet. If it has been idle it can take up to a minute to wake up.",
+  misconfigured: "This panel is set up to reach a server address this device can't reach.",
 };
 
 /** Shown while the refresh cookie is being exchanged on a hard reload. */
@@ -58,7 +59,8 @@ const BootScreen = () => {
   }, [bootError]);
 
   useEffect(() => {
-    if (!bootError || bootError.kind === 'offline') {
+    // A setup mistake fails identically every time, so retrying would only hide it.
+    if (!bootError || bootError.kind === 'offline' || bootError.kind === 'misconfigured') {
       setCountdown(null);
       return undefined;
     }
@@ -105,6 +107,7 @@ const BootScreen = () => {
                 Trying again automatically in {countdown}s…
               </Typography>
             )}
+            <ErrorDetails details={bootError.details} />
           </>
         ) : (
           <>
