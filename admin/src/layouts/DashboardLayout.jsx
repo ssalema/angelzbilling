@@ -8,6 +8,7 @@ import ScrollManager from '../components/common/ScrollManager.jsx';
 import NetworkBanner from '../components/common/NetworkBanner.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useRealtime } from '../context/RealtimeContext.jsx';
+import { keepServerWarm } from '../api/network.js';
 
 const DashboardLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -28,6 +29,9 @@ const DashboardLayout = () => {
       /* the branch change itself already succeeded */
     });
   }, [branchRevision, branchId, refreshUser]);
+
+  // While anyone has the panel open, the server is kept from falling asleep.
+  useEffect(() => keepServerWarm(), []);
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>

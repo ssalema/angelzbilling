@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { Box, CircularProgress, Typography, Button, Stack } from '@mui/material';
+import { Box, CircularProgress, LinearProgress, Typography, Button, Stack } from '@mui/material';
 import Refresh from '@mui/icons-material/Refresh';
 import { useAuth } from '../context/AuthContext.jsx';
 import { PermissionDenied, ConnectionIcon, ErrorDetails } from '../components/common/StateViews.jsx';
-import { ICON, brand } from '../theme/index.js';
+import { ICON, brand, surface } from '../theme/index.js';
 import { cachedSiteName } from '../utils/branding.js';
 import { checkServer } from '../api/network.js';
 
@@ -22,26 +22,35 @@ const WAIT_CHECK_MS = 4000;
 
 /** What the wait is, worded from what the server answered. See api/network.js. */
 const WAIT_MESSAGES = {
-  pending: 'Still connecting — this is taking longer than usual.',
+  pending: 'Connecting to the server…',
   ready: 'The server is up — finishing signing you in…',
   starting: 'The server is starting up — almost ready…',
   database: 'The server is up but waiting on its database…',
-  silent: "The server isn't answering yet. If it has been idle it can take up to a minute to wake up.",
+  silent: 'Waking up the server — after a quiet spell this can take up to a minute.',
   misconfigured: "This panel is set up to reach a server address this device can't reach.",
 };
+
+// The states where the server is on its way up, shown with a progress bar.
+const WAKING_STATES = ['pending', 'silent', 'starting'];
+// What a full wake-up usually takes, which the bar is measured against.
+const EXPECTED_WAKE_MS = 60_000;
 
 /** Shown while the refresh cookie is being exchanged on a hard reload. */
 const BootScreen = () => {
   const { bootError, retryBoot } = useAuth();
   const [wait, setWait] = useState(null);
+  const [elapsed, setElapsed] = useState(0);
   const [countdown, setCountdown] = useState(null);
 
   // A long wait is explained by asking the server what it is doing, not guessed.
   useEffect(() => {
     if (bootError) return undefined;
     setWait(null);
+    setElapsed(0);
+    const startedAt = Date.now();
     let cancelled = false;
     let poll;
+    const tick = setInterval(() => setElapsed(Date.now() - startedAt), 1000);
     const check = () =>
       checkServer().then((state) => {
         if (!cancelled) setWait(state);
@@ -55,8 +64,13 @@ const BootScreen = () => {
       cancelled = true;
       clearTimeout(start);
       clearInterval(poll);
+      clearInterval(tick);
     };
   }, [bootError]);
+
+  const waking = WAKING_STATES.includes(wait);
+  // Never reaches the end on its own: it fills toward a typical wake-up, not a promise.
+  const progress = Math.min(95, (elapsed / EXPECTED_WAKE_MS) * 100);
 
   useEffect(() => {
     // A setup mistake fails identically every time, so retrying would only hide it.
@@ -111,10 +125,30 @@ const BootScreen = () => {
           </>
         ) : (
           <>
-            <CircularProgress size={24} sx={{ color: brand.gold }} />
+            {waking ? (
+              <LinearProgress
+                variant="determinate"
+                value={progress}
+                aria-label="Waking up the server"
+                sx={{
+                  width: 220,
+                  height: 4,
+                  borderRadius: 2,
+                  bgcolor: surface.goldSoft,
+                  '& .MuiLinearProgress-bar': { bgcolor: brand.gold, borderRadius: 2 },
+                }}
+              />
+            ) : (
+              <CircularProgress size={24} sx={{ color: brand.gold }} />
+            )}
             {wait && (
               <Typography variant="body2" color="text.secondary">
                 {WAIT_MESSAGES[wait]}
+              </Typography>
+            )}
+            {waking && (
+              <Typography variant="caption" color="text.secondary">
+                {Math.round(elapsed / 1000)}s — you can leave this open; it signs you in once the server is up.
               </Typography>
             )}
           </>

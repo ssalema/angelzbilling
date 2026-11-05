@@ -232,6 +232,19 @@ export const databaseProblem = async () => {
   return server.database === 'starting' ? NETWORK.starting : NETWORK.database;
 };
 
+// Hosts that sleep when idle (Render's free tier, after 15 minutes without a
+// request) make the next person wait about a minute for a wake-up. While the
+// panel is open, a tiny health check well inside that window keeps it awake.
+const KEEP_WARM_MS = 10 * 60_000;
+
+/** Starts the keep-awake check; returns the function that stops it. */
+export const keepServerWarm = () => {
+  const timer = setInterval(() => {
+    if (!isOffline()) probeServer();
+  }, KEEP_WARM_MS);
+  return () => clearInterval(timer);
+};
+
 /**
  * What the server is doing right now, for a screen that is still waiting on a
  * request: 'ready', 'starting', 'database', or 'silent' when nothing answered.
