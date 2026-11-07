@@ -1,15 +1,6 @@
 const SITE_NAME_KEY = 'ab:siteName';
 
-// The fallback name is read from index.html's #boot, so it doesn't change when React mounts.
-const DEFAULT_SITE_NAME = 'Angelz Desire';
-
-const FALLBACK_SITE_NAME = (() => {
-  try {
-    return document.getElementById('boot')?.dataset.siteName || DEFAULT_SITE_NAME;
-  } catch {
-    return DEFAULT_SITE_NAME;
-  }
-})();
+const FALLBACK_SITE_NAME = 'Angelz Desire';
 
 /** Browser tab title. Mirrored inline in index.html. */
 export const documentTitle = (name) => `${name || FALLBACK_SITE_NAME} — Billing and Inventory`;

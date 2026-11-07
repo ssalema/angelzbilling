@@ -43,23 +43,10 @@
     <style>
       /* Painted before React mounts so there is no white flash on the ivory app. */
       html, body, #root { height: 100%; margin: 0; background: #FAF7F2; }
-      #boot {
-        position: fixed; inset: 0; display: grid; place-items: center;
-        font-family: 'Cormorant Garamond', Georgia, serif; color: #3E2545;
-        letter-spacing: .22em; font-size: 20px; text-transform: uppercase;
-      }
     </style>
   </head>
   <body>
-    <!-- Static store name for a cold first paint; the cached name below wins.
-         data-site-name is the app's fallback name too (src/utils/branding.js). -->
-    <div id="root"><div id="boot" data-site-name="Angelz Desire">Angelz Desire</div></div>
-    <script>
-      try {
-        var cached = localStorage.getItem('ab:siteName');
-        if (cached) document.getElementById('boot').textContent = cached;
-      } catch (e) {}
-    </script>
+    <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

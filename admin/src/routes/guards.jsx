@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { Box, CircularProgress, LinearProgress, Typography, Button, Stack } from '@mui/material';
+import { Box, LinearProgress, Typography, Button, Stack } from '@mui/material';
 import Refresh from '@mui/icons-material/Refresh';
 import { useAuth } from '../context/AuthContext.jsx';
 import { PermissionDenied, ConnectionIcon, ErrorDetails } from '../components/common/StateViews.jsx';
-import { ICON, brand, surface } from '../theme/index.js';
-import { cachedSiteName } from '../utils/branding.js';
+import { brand, surface } from '../theme/index.js';
 import { checkServer } from '../api/network.js';
 
 // After this long, the boot screen explains the wait.
@@ -89,21 +88,12 @@ const BootScreen = () => {
     return () => clearInterval(timer);
   }, [bootError, retryBoot]);
 
+  // A normal load shows nothing; a notice appears only when the wait runs long or fails.
+  if (!bootError && !wait) return <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }} />;
+
   return (
     <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', bgcolor: 'background.default', px: 3 }}>
       <Stack alignItems="center" spacing={2} sx={{ textAlign: 'center', maxWidth: 460 }}>
-        <Typography
-          sx={{
-            fontFamily: "'Cormorant Garamond', serif",
-            letterSpacing: '0.22em',
-            textTransform: 'uppercase',
-            color: brand.plum,
-            fontSize: ICON.nav,
-          }}
-        >
-          {cachedSiteName()}
-        </Typography>
-
         {bootError ? (
           <>
             <ConnectionIcon kind={bootError.kind} />
@@ -125,7 +115,7 @@ const BootScreen = () => {
           </>
         ) : (
           <>
-            {waking ? (
+            {waking && (
               <LinearProgress
                 variant="determinate"
                 value={progress}
@@ -138,14 +128,10 @@ const BootScreen = () => {
                   '& .MuiLinearProgress-bar': { bgcolor: brand.gold, borderRadius: 2 },
                 }}
               />
-            ) : (
-              <CircularProgress size={24} sx={{ color: brand.gold }} />
             )}
-            {wait && (
-              <Typography variant="body2" color="text.secondary">
-                {WAIT_MESSAGES[wait]}
-              </Typography>
-            )}
+            <Typography variant="body2" color="text.secondary">
+              {WAIT_MESSAGES[wait]}
+            </Typography>
             {waking && (
               <Typography variant="caption" color="text.secondary">
                 {Math.round(elapsed / 1000)}s — you can leave this open; it signs you in once the server is up.
